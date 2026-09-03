@@ -2,7 +2,7 @@
 
 ## Active
 
-- Dashboard React page parity implementation against the current EJS template.
+- Customers API parity implementation against the current EJS routes.
 - Ownership is limited to `server/src/api/dashboard.js`, `server/src/api/customers.js`, and Dashboard/Customers client files.
 
 ## Coordination
@@ -17,17 +17,19 @@
 ## Findings
 
 - The copied legacy JSON dashboard route is not parity-safe: it uses `company` rather than the current `clientCompany` workspace boundary and omits current permission/work-module behavior.
-- The API server must authenticate bearer tokens before applying copied EJS permission middleware; otherwise `req.user` is unavailable.
-- `server/src/server.ts` currently fails strict TypeScript compilation (`express-session` declarations, `MongoStore.on`, and untyped error middleware). These shared-entry fixes remain owned by OpenCode.
+- OpenCode resolved the earlier auth mount-order and obsolete `server.ts` issues in the committed CommonJS foundation.
+- The React bundle currently contains only the small scaffold stylesheet; the original dashboard class rules remain in `D:\VandeAgencyCRM\public\css\app.css`. OpenCode should coordinate the shared CSS/assets copy before visual parity can be signed off.
 
 ## Completed
 
 - Replaced the Dashboard boot stub with the current workspace-scoped JSON implementation.
 - Preserved restricted-user scoping, work-type permissions, inactive populated stages, dashboard/sidebar preferences, and audited pipeline movement.
 - `node --check server/src/api/dashboard.js` passes.
+- Replaced the Dashboard placeholder with metrics, weekly progress, deadlines, work-module summaries, attention/recent leads, campaign filtering, and drag-and-drop pipeline movement.
+- Dashboard client passes `npx tsc --noEmit` and the Vite production build.
 
 ## Next
 
 1. Add a focused Dashboard route regression check.
-2. Implement and type-check the Dashboard React page.
-3. Repeat the same API-first sequence for Customers.
+2. Implement Customers API parity, then complete its React pages.
+3. Perform browser parity checks after OpenCode lands the shared CSS/assets.
