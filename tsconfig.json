@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "outDir": "./server/dist",
+    "rootDir": "./server/src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@models/*": ["server/src/models/*"],
+      "@services/*": ["server/src/services/*"],
+      "@utils/*": ["server/src/utils/*"],
+      "@config/*": ["server/src/config/*"],
+      "@middleware/*": ["server/src/middleware/*"]
+    }
+  },
+  "include": ["server/src/**/*"],
+  "exclude": ["node_modules", "client", "server/dist"]
+}
