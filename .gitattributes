@@ -1,0 +1,9 @@
+# Normalize line endings for consistency across all three developers
+* text=auto eol=lf
+
+# Binary files stay as-is
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
