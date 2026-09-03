@@ -2,7 +2,7 @@
 
 ## Active
 
-- Customers API parity implementation against the current EJS routes.
+- Customers React page parity and remaining CSV import/export API work.
 - Ownership is limited to `server/src/api/dashboard.js`, `server/src/api/customers.js`, and Dashboard/Customers client files.
 
 ## Coordination
@@ -27,9 +27,13 @@
 - `node --check server/src/api/dashboard.js` passes.
 - Replaced the Dashboard placeholder with metrics, weekly progress, deadlines, work-module summaries, attention/recent leads, campaign filtering, and drag-and-drop pipeline movement.
 - Dashboard client passes `npx tsc --noEmit` and the Vite production build.
+- Replaced the Customers boot stub with current workspace-scoped list, detail, create, update, delete, and manager-only bulk APIs.
+- Preserved current lead filtering/stats, field permissions, relation validation, work visibility, automations, notifications, activities, and audit logging.
+- `node --check server/src/api/customers.js`, module loading, diff validation, and client `npx tsc --noEmit` pass.
 
 ## Next
 
-1. Add a focused Dashboard route regression check.
-2. Implement Customers API parity, then complete its React pages.
-3. Perform browser parity checks after OpenCode lands the shared CSS/assets.
+1. Complete Customers list/detail/form page parity against the current EJS templates.
+2. Add CSV preview/import/export without weakening the existing validation path.
+3. Add focused Dashboard and Customers API regression checks.
+4. Perform browser parity checks after OpenCode lands the shared CSS/assets.
