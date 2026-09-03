@@ -10,12 +10,14 @@ const CustomRecord = require('../models/CustomRecord');
 const Customer = require('../models/Customer');
 const Notification = require('../models/Notification');
 const SavedView = require('../models/SavedView');
+const SyncLog = require('../models/SyncLog');
 const User = require('../models/User');
 const WorkType = require('../models/WorkType');
 const { hasPermission, hasWorkPermission, isRestrictedUser, canAccessLeadField } = require('../config/roles');
 const { runLeadAutomation } = require('../services/automation');
 const { getWonStageIds } = require('../services/crmStages');
 const { logAudit } = require('../utils/audit');
+const { parseCsv, rowsToObjects, normalizeCustomerCsv, toCsv } = require('../utils/csv');
 const { potentialFilter } = require('../utils/leadPotential');
 const { requireApiAuth } = require('./middleware/auth');
 
@@ -26,6 +28,8 @@ router.use((req, res, next) => hasPermission(req.user, 'businesses.view') ? next
 const isManager = user => ['admin', 'manager'].includes(user.role);
 const selectedIds = value => (Array.isArray(value) ? value : value ? [value] : []).map(String).filter(id => /^[a-f\d]{24}$/i.test(id));
 const labels = value => Array.isArray(value) ? value : value ? [value] : [];
+const csvHeaders = ['name', 'company', 'email', 'phone', 'source', 'value', 'priority', 'leadScore', 'stage', 'labels', 'notes', 'campaign', 'nextFollowUpAt'];
+const normalizePhone = value => { const clean = String(value || '').replace(/\D/g, ''); return clean.length >= 10 ? clean.slice(-10) : clean; };
 
 function workspace(req, res) {
   if (req.activeCompanyId) return String(req.activeCompanyId);
@@ -97,6 +101,128 @@ function input(body, fields, user, existing = null) {
     customData: currentCustomData
   };
 }
+
+function csvBody(req) {
+  return typeof req.body === 'string' ? req.body : String(req.body?.csvData || '');
+}
+
+async function csvContext(req) {
+  const organization = req.user.organization._id;
+  const [stages, availableLabels, campaigns, existingCustomers, fields] = await Promise.all([
+    CrmStage.find({ organization, clientCompany: req.activeCompanyId, isActive: true }).sort({ order: 1, createdAt: 1 }),
+    CrmLabel.find({ organization, clientCompany: req.activeCompanyId, isActive: true }),
+    Campaign.find({ organization, clientCompany: req.activeCompanyId, status: 'active' }),
+    Customer.find(scope(req)).select('name email phone phoneNormalized labels customData'),
+    CustomField.find({ organization, clientCompany: req.activeCompanyId, entity: 'customer', isActive: true })
+  ]);
+  return {
+    stages,
+    fields,
+    stageByName: new Map(stages.map(item => [item.name.toLowerCase(), item])),
+    labelByName: new Map(availableLabels.map(item => [item.name.toLowerCase(), item])),
+    campaignByName: new Map(campaigns.map(item => [item.name.toLowerCase(), item])),
+    customerByEmail: new Map(existingCustomers.filter(item => item.email).map(item => [item.email.toLowerCase(), item])),
+    customerByPhone: new Map(existingCustomers.filter(item => item.phoneNormalized || item.phone).map(item => [item.phoneNormalized || normalizePhone(item.phone), item]))
+  };
+}
+
+router.get('/export/csv', async (req, res, next) => {
+  try {
+    if (!workspace(req, res)) return;
+    const organization = req.user.organization._id;
+    const wonStageIds = await getWonStageIds(organization, req.activeCompanyId);
+    const createdAt = {};
+    const from = new Date(req.query.dateFrom); const to = new Date(req.query.dateTo);
+    if (req.query.dateFrom && !Number.isNaN(from.getTime())) createdAt.$gte = from;
+    if (req.query.dateTo && !Number.isNaN(to.getTime())) { to.setHours(23, 59, 59, 999); createdAt.$lte = to; }
+    const customers = await Customer.find(scope(req, {
+      stage: req.query.scope === 'clients' ? { $in: wonStageIds } : { $nin: wonStageIds },
+      ...(Object.keys(createdAt).length ? { createdAt } : {})
+    })).populate('stage labels clientCompany campaign').sort({ updatedAt: -1 });
+    const fields = await CustomField.find({ organization, clientCompany: req.activeCompanyId, entity: 'customer', isActive: true }).sort({ order: 1, createdAt: 1 });
+    const headers = [...csvHeaders, ...fields.map(field => `custom_${field.key}`)];
+    const rows = customers.map(customer => {
+      const row = {
+        name: customer.name, company: customer.company, email: customer.email, phone: customer.phone,
+        source: customer.source, value: customer.value, priority: customer.priority, leadScore: customer.leadScore,
+        stage: customer.stage?.name || '', labels: customer.labels.map(label => label.name).join('|'), notes: customer.notes,
+        campaign: customer.campaign?.name || '', nextFollowUpAt: customer.nextFollowUpAt?.toISOString() || ''
+      };
+      fields.forEach(field => { row[`custom_${field.key}`] = customer.customData?.get(field.key) ?? ''; });
+      return row;
+    });
+    const name = req.query.scope === 'clients' ? 'clients.csv' : 'leads.csv';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    res.send(toCsv(headers, rows));
+  } catch (error) { next(error); }
+});
+
+router.post('/import/preview', permits('businesses.create'), express.text({ type: ['text/csv', 'text/plain', 'application/octet-stream'], limit: '4mb' }), async (req, res, next) => {
+  try {
+    if (!isManager(req.user)) return res.status(403).json({ ok: false, error: 'Access denied' });
+    if (!workspace(req, res)) return;
+    const text = csvBody(req);
+    if (!text.trim()) return res.status(400).json({ ok: false, error: 'CSV data is required.' });
+    const rows = rowsToObjects(normalizeCustomerCsv(parseCsv(text)));
+    const context = await csvContext(req);
+    const duplicateRule = ['update', 'skip', 'create'].includes(req.body?.duplicateRule) ? req.body.duplicateRule : 'update';
+    const previewRows = rows.map((row, index) => {
+      const email = String(row.email || '').trim().toLowerCase();
+      const phone = normalizePhone(row.phone);
+      const existing = (email && context.customerByEmail.get(email)) || (phone && context.customerByPhone.get(phone));
+      const messages = [];
+      if (!row.name && !row.phone && !row.email) messages.push('Name, phone, or email is required.');
+      if (row.stage && !context.stageByName.has(String(row.stage).toLowerCase())) messages.push(`Unknown stage "${row.stage}"; the default stage will be used.`);
+      if (row.campaign && !context.campaignByName.has(String(row.campaign).toLowerCase())) messages.push(`Unknown campaign "${row.campaign}"; it will be left empty.`);
+      const status = messages[0]?.startsWith('Name') || (existing && duplicateRule === 'skip') ? 'skip' : existing && duplicateRule === 'update' ? 'update' : 'create';
+      return { rowNumber: index + 2, status, name: row.name || row.company || row.phone || row.email, email, phone: row.phone || '', messages };
+    });
+    res.json({ ok: true, preview: { headers: normalizeCustomerCsv(parseCsv(text))[0] || [], totalRows: rows.length, createCount: previewRows.filter(row => row.status === 'create').length, updateCount: previewRows.filter(row => row.status === 'update').length, skipCount: previewRows.filter(row => row.status === 'skip').length, rows: previewRows } });
+  } catch (error) { next(error); }
+});
+
+router.post('/import', permits('businesses.create'), express.text({ type: ['text/csv', 'text/plain', 'application/octet-stream'], limit: '4mb' }), async (req, res, next) => {
+  try {
+    if (!isManager(req.user)) return res.status(403).json({ ok: false, error: 'Access denied' });
+    if (!workspace(req, res)) return;
+    const text = csvBody(req);
+    if (!text.trim()) return res.status(400).json({ ok: false, error: 'CSV data is required.' });
+    const rows = rowsToObjects(normalizeCustomerCsv(parseCsv(text)));
+    const context = await csvContext(req);
+    const defaultStage = context.stages.find(stage => String(stage._id) === String(req.body?.defaultStageId)) || context.stages.find(stage => stage.isDefault) || context.stages[0];
+    if (!defaultStage) return res.status(400).json({ ok: false, error: 'Create an active CRM stage before importing leads.' });
+    const duplicateRule = ['update', 'skip', 'create'].includes(req.body?.duplicateRule) ? req.body.duplicateRule : 'update';
+    let imported = 0; let updated = 0; let skipped = 0;
+    for (const row of rows) {
+      if (!row.name && !row.phone && !row.email) { skipped += 1; continue; }
+      const email = String(row.email || '').trim().toLowerCase();
+      const phone = normalizePhone(row.phone);
+      const existing = duplicateRule === 'create' ? null : (email && context.customerByEmail.get(email)) || (phone && context.customerByPhone.get(phone));
+      if (existing && duplicateRule === 'skip') { skipped += 1; continue; }
+      const stage = context.stageByName.get(String(row.stage || '').toLowerCase()) || defaultStage;
+      const campaign = context.campaignByName.get(String(row.campaign || '').toLowerCase()) || null;
+      const selectedLabels = String(row.labels || '').split('|').map(name => context.labelByName.get(name.trim().toLowerCase())?._id).filter(Boolean);
+      const customData = {};
+      context.fields.filter(field => canAccessLeadField(req.user, field.key, 'edit')).forEach(field => {
+        const value = row[`custom_${field.key}`];
+        if (value !== undefined) customData[field.key] = field.type === 'number' ? (value === '' ? null : Number(value)) : field.type === 'checkbox' ? ['true', 'yes', '1', 'on'].includes(String(value).toLowerCase()) : value;
+      });
+      if (existing) {
+        existing.set({ name: row.name || existing.name, company: row.company || existing.company, email: email || existing.email, phone: row.phone || existing.phone, source: row.source || existing.source, value: row.value === '' ? existing.value : Math.max(0, Number(row.value) || 0), priority: ['low', 'medium', 'high'].includes(String(row.priority).toLowerCase()) ? String(row.priority).toLowerCase() : existing.priority, leadScore: row.leadScore === '' ? existing.leadScore : Math.max(0, Math.min(100, Number(row.leadScore) || 0)), stage, labels: [...new Set([...(existing.labels || []).map(String), ...selectedLabels.map(String)])], campaign: campaign?._id || existing.campaign, notes: row.notes ? [existing.notes, row.notes].filter(Boolean).join('\n---\nImported note: ') : existing.notes, customData: { ...(existing.customData?.toObject?.() || Object.fromEntries(existing.customData || [])), ...customData } });
+        await existing.save(); updated += 1;
+      } else {
+        const customer = await Customer.create({ organization: req.user.organization._id, clientCompany: req.activeCompanyId, name: row.name || row.company || row.phone || row.email, company: row.company || '', email, phone: row.phone || '', source: row.source || 'CSV Import', value: Math.max(0, Number(row.value) || 0), priority: ['low', 'medium', 'high'].includes(String(row.priority).toLowerCase()) ? String(row.priority).toLowerCase() : 'medium', leadScore: Math.max(0, Math.min(100, Number(row.leadScore) || 0)), stage, labels: selectedLabels, assignedTo: req.body?.defaultAssignedToId || req.user._id, campaign: campaign?._id || null, notes: row.notes || '', customData });
+        if (customer.email) context.customerByEmail.set(customer.email, customer);
+        if (customer.phoneNormalized) context.customerByPhone.set(customer.phoneNormalized, customer);
+        imported += 1;
+      }
+    }
+    await SyncLog.create({ organization: req.user.organization._id, source: 'CSV Import', status: 'success', recordsProcessed: rows.length, recordsCreated: imported, recordsUpdated: updated });
+    await logAudit(req, { action: 'import', entityType: 'customer', message: `CSV import completed. Created ${imported}, updated ${updated}, skipped ${skipped}.`, metadata: { imported, updated, skipped, rows: rows.length } });
+    res.json({ ok: true, imported, updated, skipped });
+  } catch (error) { next(error); }
+});
 
 router.post('/bulk', permits('businesses.update'), async (req, res, next) => {
   try {

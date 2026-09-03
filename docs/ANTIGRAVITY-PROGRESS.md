@@ -20,8 +20,8 @@
 |---|---|---|---|---|
 | **Notifications** | `notifications.js` | `notifications.ts` | (TopBar bell integration) | 🟢 Complete (Verified) |
 | **Companies** | `companies.js` | `companies.ts` | `companies/CompaniesPage.tsx`, `CompanyDetailPage.tsx` | 🟢 Complete (Verified) |
-| **Campaigns** | `campaigns.js` | `campaigns.ts` | `campaigns/CampaignsPage.tsx`, `CampaignDetailPage.tsx` | 🟡 In Progress (Step 3) |
-| **Work** | `work.js` | `work.ts` | `work/WorkCenterPage.tsx`, `WorkListPage.tsx`, `WorkDetailPage.tsx` | ⚪ Pending |
+| **Campaigns** | `campaigns.js` | `campaigns.ts` | `campaigns/CampaignsPage.tsx`, `CampaignDetailPage.tsx` | 🟢 Complete (Verified) |
+| **Work** | `work.js` | `work.ts` | `work/WorkCenterPage.tsx`, `WorkListPage.tsx`, `WorkDetailPage.tsx` | 🟡 In Progress (Step 4) |
 | **Tasks** | `tasks.js` | `tasks.ts` | `tasks/TasksPage.tsx` | ⚪ Pending |
 | **Team** | `team.js` | `team.ts` | `team/TeamPage.tsx` | ⚪ Pending |
 | **Settings** | `settings.js` | `settings.ts` | `settings/SettingsPage.tsx` | ⚪ Pending |
@@ -47,4 +47,11 @@
   - Built `client/src/pages/companies/CompaniesPage.tsx` and `CompanyDetailPage.tsx`.
   - Registered routes `/companies` and `/companies/:id` in `client/src/App.tsx`.
   - Verified `npm run build` (exit 0) and `node --check` (exit 0).
-- **Next:** Step 3 — Campaigns API (`campaigns.js`), client API (`campaigns.ts`), `CampaignsPage.tsx`, `CampaignDetailPage.tsx`.
+- **Step 3 (Campaigns) Complete:**
+  - Built `server/src/api/campaigns.js` (`GET /`, `GET /:id`, `POST /`, `PUT /:id`, `POST /:id/status`, `DELETE /:id`) using `Campaign`, `ClientCompany`, `Customer`, `CrmStage`, `User` models with `requireApiAuth` self-guarding.
+  - Registered route in `server/src/server.js` (`node --check` passes).
+  - Built `client/src/api/campaigns.ts` API client.
+  - Built `client/src/pages/campaigns/CampaignsPage.tsx` and `CampaignDetailPage.tsx`.
+  - Registered routes `/campaigns` and `/campaigns/:id` in `client/src/App.tsx`.
+  - Verified `npm run build` (exit 0) and `node --check` (exit 0).
+- **Next:** Step 4 — Work API (`work.js`), client API (`work.ts`), `WorkCenterPage.tsx`, `WorkListPage.tsx`, `WorkDetailPage.tsx`.

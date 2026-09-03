@@ -43,13 +43,22 @@ I am the **lead architect/guide**. I do NOT implement feature pages — I build 
     - **Added parity rule to `docs/REACT-PATTERNS.md`:** all pages must use ORIGINAL EJS class names (`page-head`, `dashboard-head`, `btn`, `leads-table-top-bar`, etc.) — NOT invented `.page-header`/`.stats-bar`/`.form-card`. Open the matching EJS view and mirror its exact class names.
 
 ## What Codex Has DONE (verified)
-- Dashboard API `server/src/api/dashboard.js` — FULL implementation (workspace-scoped, permissions, preferences, pipeline move). Verified boots; returns 401 JSON without token.
-- Dashboard React page — in progress.
-- Customers API still boot stub.
-- Maintains `docs/CODEX-PROGRESS.md`.
+- Dashboard API `server/src/api/dashboard.js` — FULL implementation (workspace-scoped, permissions, preferences, pipeline move). COMMITTED `cc9e0e6`.
+- Dashboard React page — full metrics/weeks/deadlines/drag-drop pipeline. COMMITTED.
+- Customers API — core list/detail/create/update/delete/bulk. COMMITTED `f85222f`, `829f694`, `02cb561`.
+- Customer Detail rebuilt with original lead-detail tabs (overview/activity/related/folders/custom fields) + editing. COMMITTED.
 
 ## What Antigravity Has DONE (verified)
-- Plan laid out; not started implementation. Maintains `docs/ANTIGRAVITY-PROGRESS.md`. Starting Step 1 (Notifications).
+- Notifications — API + TopBar bell. COMMITTED `d73c19d`.
+- Companies — API + pages. COMMITTED `bbbfe08`.
+- Campaigns — in progress (Step 3).
+- Maintains `docs/ANTIGRAVITY-PROGRESS.md`.
+
+## Reality-Check 2026-09-03: coordination fixes applied
+- SYNC.md was stale: updated Codex status to reflect all committed milestones; recorded Companies commit; listed Codex/Antigravity/OpenCode next steps accurately.
+- **Clients ownership gap closed:** `/clients` = "won clients" sub-view of the Customer domain (same Customer model, `isClientView` in original customers/index.ejs). **Assigned to Codex**, NOT a separate Antigravity domain. `/clients` and `/api/clients` still placeholders in App.tsx/server.js → register when Codex lands it.
+- **Signup gap:** `/api/auth/signup` exists in auth.js BUT React `SignupPage` is a placeholder `<div>`. **OpenCode owns it** — build it in `client/src/pages/auth/SignupPage.tsx`.
+- **No git remote `origin`** — commits are local-only. Recommend adding a remote for backup once user provides one.
 
 ## Verification Commands
 - Server boot: `node server/src/server.js` (from `server/`), check `/health`.
@@ -58,10 +67,11 @@ I am the **lead architect/guide**. I do NOT implement feature pages — I build 
 - Original reference routes: `D:\VandeAgencyCRM\src\routes\*.js`; EJS views: `D:\VandeAgencyCRM\src\views\`.
 
 ## Current Next Steps FOR ME (OpenCode)
-1. **Commit the styling foundation** + the in-flight Codex/Antigravity working tree as a clean checkpoint (git add/commit).
-2. Chore coordination: make sure Codex (Dashboard/Customers) and Antigravity (all other domains) adopt the EJS-class-name parity rule from REACT-PATTERNS.md so their pages render with the real design system.
-3. As domains land, merge route registration into `server.js` and add client `<Route>`s.
-4. Keep `SYNC.md` and this file updated as the migration progresses.
+1. **Commit the coordination/ownership fixes** (SYNC.md, OWNERSHIP.md, this file).
+2. **Build the Signup page** — `client/src/pages/auth/SignupPage.tsx`, backed by the existing `/api/auth/signup`; wire the `/auth/signup` route in `App.tsx` to replace the `<div>` placeholder. Style via `auth.css` (login-shell).
+3. **Register routes** for what's landed (Companies already) and as Codex lands Clients (`/api/clients`, `/clients`) and Antigravity lands Campaigns etc. — merge into `server.js` + `App.tsx`.
+4. Keep nudging Codex/Antigravity to adopt the EJS-class-name parity rule from REACT-PATTERNS.md.
+5. Keep `SYNC.md` and this file updated as the migration progresses.
 
 ## Coordination Rules to Never Forget
 - Always read `docs/package/SYNC.md` (the live tracker) at session start.

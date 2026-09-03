@@ -7,7 +7,7 @@
 | Developer | Role |
 |---|---|
 | **OpenCode** | Lead architect — shared infra, auth, routing, types, coordination docs |
-| **Codex** | Dashboard + Customers/Leads |
+| **Codex** | Dashboard + Customers/Leads + Clients (won-customer sub-view) |
 | **Antigravity** | All other 11 functional domains |
 
 ## Ownership Tables
@@ -20,6 +20,7 @@
 - `client/src/api/auth.ts` — auth client
 - `client/src/types/index.ts` — shared TS types
 - `client/src/App.tsx` — route architecture
+- `client/src/pages/auth/LoginPage.tsx`, `client/src/pages/auth/SignupPage.tsx` — auth pages (Signup API exists; Signup page is OpenCode's to build)
 - `client/src/contexts/AuthContext.tsx` — global auth context
 - `client/src/layouts/*`, `client/src/components/Sidebar.tsx`, `TopBar.tsx` — app shell
 - `package.json`, `tsconfig.json`, `.gitignore`, `.nvmrc`
@@ -29,9 +30,11 @@
 ### Codex
 - `server/src/api/dashboard.js`
 - `server/src/api/customers.js`
+- `server/src/api/clients.js` **(Clients = won-customer sub-view of the Customer domain, same Customer model; owned by Codex with Customers)**
 - `client/src/pages/dashboard/DashboardPage.tsx`
 - `client/src/pages/customers/CustomersPage.tsx`, `CustomerDetailPage.tsx`, `CustomerFormPage.tsx`
-- `client/src/api/customers.ts` (domain client)
+- `client/src/pages/clients/ClientsPage.tsx` (won-customer view)
+- `client/src/api/customers.ts`, `client/src/api/clients.ts` (domain clients)
 - `docs/CODEX-PROGRESS.md`
 
 ### Antigravity

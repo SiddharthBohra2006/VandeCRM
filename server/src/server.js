@@ -17,7 +17,7 @@ const apiDashboard = require('./api/dashboard'); // OWNER: Codex (currently boot
 const apiCustomers = require('./api/customers'); // OWNER: Codex (currently boot stub)
 // Antigravity will add & register more here (see ANTIGRAVITY-TASKS.md):
 // const apiClients      = require('./api/clients');
-// const apiCampaigns    = require('./api/campaigns');
+const apiCampaigns = require('./api/campaigns');
 // const apiWork         = require('./api/work');
 // const apiTeam         = require('./api/team');
 // const apiSettings     = require('./api/settings');
@@ -88,7 +88,7 @@ app.use('/api/dashboard', apiDashboard); // OWNER: Codex (implemented)
 app.use('/api/customers', apiCustomers); // OWNER: Codex (in progress)
 // Antigravity registers their routes here (see ANTIGRAVITY-TASKS.md):
 // app.use('/api/clients',       apiClients);
-// app.use('/api/campaigns',     apiCampaigns);
+app.use('/api/campaigns', apiCampaigns);
 // app.use('/api/work',          apiWork);
 // app.use('/api/team',          apiTeam);
 // app.use('/api/settings',      apiSettings);

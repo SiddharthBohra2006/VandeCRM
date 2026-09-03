@@ -10,7 +10,7 @@
 | **Codex** | Domain dev | Dashboard + Customers (API + React pages) |
 | **Antigravity** | Domain dev | Notifications, Companies, Campaigns, Work, Tasks, Team, Settings, Mail, Integrations, Audit, Search |
 
-## Current Status (last updated: styling foundation merged)
+## Current Status (last updated: reality-check + ownership fixes)
 
 ### ✅ Green Foundation (OpenCode) — CONFIRMED
 - Git repo initialized + **clean initial commit** (node_modules excluded via `.gitignore`, line endings normalized via `.gitattributes`).
@@ -27,18 +27,25 @@
 - Org theme applied at runtime: `AuthContext` sets CSS vars (`--gold/--teal/--bg/--panel/--text/...`) + `data-theme`/`dark-theme` on `<html>` from `user.organization.theme` (exposed via `/auth/me`, typed in `User`).
 - **Parity rule added to REACT-PATTERNS.md:** all pages must use ORIGINAL EJS class names (`page-head`, `dashboard-head`, `btn`, `leads-table-top-bar`, etc.), NOT invented `.page-header`/`.stats-bar`/`.form-card`. Agents must mirror the EJS class names for the true look.
 
+### ✅ Committed & Functional
+- **Codex:** Dashboard API `server/src/api/dashboard.js` COMPLETE; Dashboard React page in progress; Customers API (`server/src/api/customers.js`) in progress.
+- **Antigravity:** Notifications, Companies, & Campaigns complete (API + pages); Work domain in progress (Step 4).
+
 ### 🔶 In Progress
 - **Codex:** Dashboard API `server/src/api/dashboard.js` COMPLETE; Dashboard React page in progress; Customers API (`server/src/api/customers.js`) in progress.
-- **Antigravity:** Notifications & Companies complete (API + pages); Campaigns domain in progress (Step 3).
+- **Antigravity:** Notifications, Companies, & Campaigns complete (API + pages); Work domain in progress (Step 4).
 
 ### ⚪ Pending Domains (Antigravity Queue)
-- Work → Tasks → Team → Settings → Mail → Integrations → Audit → Search.
+- Tasks → Team → Settings → Mail → Integrations → Audit → Search.
+
+### 📌 Clients — OWNERSHIP CLARIFIED
+- `/clients` ("won clients") is a SUB-VIEW of the Customer domain, NOT a separate domain. Original `clients.js` filters the same `Customer` model by won stages; original `customers/index.ejs` renders both via an `isClientView` flag. **Owned by Codex**, along with Customers. Route to be registered by OpenCode when Codex lands it.
 
 ## Job Queue (what happens next)
 
-1. **Codex:** finish Dashboard React page → then Customers (API-first, then pages).
-2. **Antigravity:** Notifications → Companies → Campaigns → Work → Tasks → Team → Settings → Mail → Integrations → Audit → Search. **(GO — approved by OpenCode on baseline confirm.)**
-3. **OpenCode:** merging route registrations into `server.js` + client `<Route>`s as domains land; keep `SYNC.md` + `OPNREC-CONTEXT.md` current.
+1. **Codex:** CSV import/export → regression checks → browser parity testing → Clients (won-customer sub-view) integration.
+2. **Antigravity:** Campaigns → Work → Tasks → Team → Settings → Mail → Integrations → Audit → Search. **(GO continues — approved on baseline confirm.)**
+3. **OpenCode:** build the Signup page (API already exists) → merge/register every new domain into `server.js` + client `<Route>`s in `App.tsx` → keep `SYNC.md` + `OPNREC-CONTEXT.md` current.
 
 ## Blockers / Open Items
 
