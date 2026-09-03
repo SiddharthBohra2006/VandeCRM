@@ -12,6 +12,7 @@ interface AuthState {
   workTypes: WorkType[];
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  signup: (data: { name: string; email: string; password: string; orgName: string }) => Promise<void>;
   logout: () => void;
   switchCompany: (companyId: string) => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -104,6 +105,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loadUser();
   }
 
+  async function signup(data: { name: string; email: string; password: string; orgName: string }) {
+    const res = await authApi.signup(data);
+    localStorage.setItem('crm_token', res.token);
+    setToken(res.token);
+    setUser(res.user);
+    setActiveCompany(res.activeCompany);
+    await loadUser();
+  }
+
   function logout() {
     localStorage.removeItem('crm_token');
     setToken(null);
@@ -121,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, companies, activeCompany, crmTerms, workTypes, loading, login, logout, switchCompany, refreshUser: loadUser }}>
+    <AuthContext.Provider value={{ user, token, companies, activeCompany, crmTerms, workTypes, loading, login, signup, logout, switchCompany, refreshUser: loadUser }}>
       {children}
     </AuthContext.Provider>
   );

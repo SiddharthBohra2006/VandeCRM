@@ -1,0 +1,206 @@
+const express = require('express');
+const { requireApiAuth } = require('./middleware/auth');
+const { isRestrictedUser } = require('../config/roles');
+const { logAudit } = require('../utils/audit');
+const Activity = require('../models/Activity');
+const Customer = require('../models/Customer');
+const Notification = require('../models/Notification');
+
+const router = express.Router();
+router.use(requireApiAuth);
+
+function workspace(req, res) {
+  if (req.activeCompanyId) return String(req.activeCompanyId);
+  res.status(400).json({ ok: false, error: 'Select an active CRM workspace first.' });
+  return null;
+}
+
+function buildCustomerFilter(req, activeWorkspace) {
+  const organization = req.user.organization._id;
+  const filter = {
+    organization,
+    clientCompany: activeWorkspace,
+    nextFollowUpAt: { $ne: null },
+  };
+  if (isRestrictedUser(req.user)) filter.assignedTo = req.user._id;
+  return filter;
+}
+
+// GET /api/tasks — List follow-up tasks
+router.get('/', async (req, res, next) => {
+  try {
+    const activeWorkspace = workspace(req, res);
+    if (!activeWorkspace) return;
+    const organization = req.user.organization._id;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const endOfWeek = new Date(now);
+    endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+    const view = req.query.filter || req.query.view || 'due';
+    const filter = buildCustomerFilter(req, activeWorkspace);
+
+    if (view === 'today') {
+      filter.nextFollowUpAt = { $gte: startOfToday, $lt: startOfTomorrow };
+    } else if (view === 'upcoming') {
+      filter.nextFollowUpAt = { $gte: startOfTomorrow, $lte: endOfWeek };
+    } else if (view === 'all') {
+      filter.nextFollowUpAt = { $ne: null };
+    } else {
+      // 'due' (overdue and due now)
+      filter.nextFollowUpAt = { $lte: now };
+    }
+
+    const baseFilter = buildCustomerFilter(req, activeWorkspace);
+    const accessibleCustomers = await Customer.find(baseFilter).select('_id').lean();
+    const customerIds = accessibleCustomers.map(c => c._id);
+
+    const [tasks, allFollowups, completedActivities] = await Promise.all([
+      Customer.find(filter)
+        .populate('stage assignedTo clientCompany campaign')
+        .sort({ nextFollowUpAt: 1 })
+        .lean(),
+      Customer.find(baseFilter).select('nextFollowUpAt').lean(),
+      Activity.find({
+        organization,
+        customer: { $in: customerIds },
+        type: 'task',
+        $or: [{ followUpAction: 'completed' }, { note: /^Follow-up completed/ }],
+      })
+        .populate('customer user')
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean(),
+    ]);
+
+    const stats = {
+      due: allFollowups.filter(c => c.nextFollowUpAt && new Date(c.nextFollowUpAt) <= now).length,
+      today: allFollowups.filter(
+        c => c.nextFollowUpAt && new Date(c.nextFollowUpAt) >= startOfToday && new Date(c.nextFollowUpAt) < startOfTomorrow
+      ).length,
+      upcoming: allFollowups.filter(c => c.nextFollowUpAt && new Date(c.nextFollowUpAt) >= startOfTomorrow).length,
+      all: allFollowups.length,
+    };
+
+    res.json({
+      ok: true,
+      tasks,
+      completedTasks: completedActivities,
+      stats,
+      view,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/tasks/:id/complete — Mark follow-up as complete
+router.post('/:id/complete', async (req, res, next) => {
+  try {
+    const activeWorkspace = workspace(req, res);
+    if (!activeWorkspace) return;
+    const organization = req.user.organization._id;
+
+    const filter = { _id: req.params.id, organization, clientCompany: activeWorkspace };
+    if (isRestrictedUser(req.user)) filter.assignedTo = req.user._id;
+
+    const customer = await Customer.findOne(filter);
+    if (!customer) {
+      return res.status(404).json({ ok: false, error: 'Task or customer not found.' });
+    }
+
+    const completedAt = customer.nextFollowUpAt;
+    const comment = String(req.body.comment || '').trim().slice(0, 1000);
+    customer.nextFollowUpAt = null;
+    customer.lastContactedAt = new Date();
+    await customer.save();
+
+    await Activity.create({
+      organization,
+      customer: customer._id,
+      user: req.user._id,
+      type: 'task',
+      note: `Follow-up completed${completedAt ? ` for ${completedAt.toLocaleString('en-IN')}` : ''}.`,
+      nextFollowUpAt: completedAt,
+      followUpAction: 'completed',
+      comment,
+    });
+
+    await logAudit(req, {
+      action: 'task_complete',
+      entityType: 'customer',
+      entityId: customer._id,
+      entityName: customer.name,
+      message: `Follow-up completed for "${customer.name}".`,
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/tasks/:id/reschedule — Reschedule follow-up
+router.post('/:id/reschedule', async (req, res, next) => {
+  try {
+    const activeWorkspace = workspace(req, res);
+    if (!activeWorkspace) return;
+    const organization = req.user.organization._id;
+
+    const filter = { _id: req.params.id, organization, clientCompany: activeWorkspace };
+    if (isRestrictedUser(req.user)) filter.assignedTo = req.user._id;
+
+    const customer = await Customer.findOne(filter).populate('assignedTo');
+    if (!customer) {
+      return res.status(404).json({ ok: false, error: 'Task or customer not found.' });
+    }
+
+    const nextFollowUpAt = req.body.nextFollowUpAt ? new Date(req.body.nextFollowUpAt) : null;
+    const comment = String(req.body.comment || '').trim().slice(0, 1000);
+
+    if (!nextFollowUpAt || Number.isNaN(nextFollowUpAt.getTime())) {
+      return res.status(400).json({ ok: false, error: 'Please choose a valid follow-up date and time.' });
+    }
+
+    customer.nextFollowUpAt = nextFollowUpAt;
+    await customer.save();
+
+    await Activity.create({
+      organization,
+      customer: customer._id,
+      user: req.user._id,
+      type: 'task',
+      note: `Follow-up scheduled for ${nextFollowUpAt.toLocaleString('en-IN')}.`,
+      nextFollowUpAt,
+      followUpAction: 'scheduled',
+      comment,
+    });
+
+    await logAudit(req, {
+      action: 'task_reschedule',
+      entityType: 'customer',
+      entityId: customer._id,
+      entityName: customer.name,
+      message: `Follow-up rescheduled for "${customer.name}".`,
+      metadata: { nextFollowUpAt },
+    });
+
+    if (customer.assignedTo && String(customer.assignedTo._id) !== String(req.user._id)) {
+      await Notification.create({
+        organization,
+        user: customer.assignedTo._id,
+        title: 'Follow-up Rescheduled',
+        message: `Follow-up for "${customer.name}" is now scheduled for ${nextFollowUpAt.toLocaleString('en-IN')}.`,
+        link: `/customers/${customer._id}`,
+      });
+    }
+
+    res.json({ ok: true, nextFollowUpAt });
+  } catch (error) {
+    next(error);
+  }
+});
+
+module.exports = router;

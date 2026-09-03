@@ -22,8 +22,8 @@
 | **Companies** | `companies.js` | `companies.ts` | `companies/CompaniesPage.tsx`, `CompanyDetailPage.tsx` | 🟢 Complete (Verified) |
 | **Campaigns** | `campaigns.js` | `campaigns.ts` | `campaigns/CampaignsPage.tsx`, `CampaignDetailPage.tsx` | 🟢 Complete (Verified) |
 | **Work** | `work.js` | `work.ts` | `work/WorkCenterPage.tsx`, `WorkListPage.tsx`, `WorkDetailPage.tsx` | 🟢 Complete (Verified) |
-| **Tasks** | `tasks.js` | `tasks.ts` | `tasks/TasksPage.tsx` | 🟡 In Progress (Step 5) |
-| **Team** | `team.js` | `team.ts` | `team/TeamPage.tsx` | ⚪ Pending |
+| **Tasks** | `tasks.js` | `tasks.ts` | `tasks/TasksPage.tsx` | 🟢 Complete (Verified) |
+| **Team** | `team.js` | `team.ts` | `team/TeamPage.tsx` | 🟡 In Progress (Step 6) |
 | **Settings** | `settings.js` | `settings.ts` | `settings/SettingsPage.tsx` | ⚪ Pending |
 | **Mail** | `mail.js` | `mail.ts` | `mail/MailPage.tsx` | ⚪ Pending |
 | **Integrations** | `integrations.js` | `integrations.ts` | `integrations/IntegrationsPage.tsx` | ⚪ Pending |
@@ -61,4 +61,11 @@
   - Built `client/src/pages/work/WorkCenterPage.tsx`, `WorkListPage.tsx`, and `WorkDetailPage.tsx`.
   - Registered routes `/work`, `/work/:type`, and `/work/:type/:id` in `client/src/App.tsx`.
   - Verified `npm run build` (exit 0) and `node --check` (exit 0).
-- **Next:** Step 5 — Tasks API (`tasks.js`), client API (`tasks.ts`), `TasksPage.tsx`.
+- **Step 5 (Tasks / Follow-ups) Complete:**
+  - Built `server/src/api/tasks.js` (`GET /`, `POST /:id/complete`, `POST /:id/reschedule`) using `Customer`, `Activity`, `Notification` models with `requireApiAuth` self-guarding.
+  - Registered route in `server/src/server.js` (`node --check` passes).
+  - Built `client/src/api/tasks.ts` API client.
+  - Built `client/src/pages/tasks/TasksPage.tsx` with stats, quick-views, inline complete/reschedule, and recent activity history.
+  - Registered route `/tasks` in `client/src/App.tsx`.
+  - Verified `npm run build` (exit 0) and `node --check` (exit 0).
+- **Next:** Step 6 — Team API (`team.js`), client API (`team.ts`), `TeamPage.tsx`.

@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AppLayout from './layouts/AppLayout';
 import AuthLayout from './layouts/AuthLayout';
 import LoginPage from './pages/auth/LoginPage';
+import SignupPage from './pages/auth/SignupPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import CustomersPage from './pages/customers/CustomersPage';
 import CustomerDetailPage from './pages/customers/CustomerDetailPage';
@@ -14,6 +15,7 @@ import CampaignDetailPage from './pages/campaigns/CampaignDetailPage';
 import WorkCenterPage from './pages/work/WorkCenterPage';
 import WorkListPage from './pages/work/WorkListPage';
 import WorkDetailPage from './pages/work/WorkDetailPage';
+import TasksPage from './pages/tasks/TasksPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -34,7 +36,7 @@ export default function App() {
         <Routes>
           <Route element={<GuestRoute><AuthLayout /></GuestRoute>}>
             <Route path="/auth/login" element={<LoginPage />} />
-            <Route path="/auth/signup" element={<div>Signup — TODO</div>} />
+            <Route path="/auth/signup" element={<SignupPage />} />
           </Route>
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/" element={<DashboardPage />} />
@@ -51,7 +53,7 @@ export default function App() {
             <Route path="/settings" element={<div>Settings — TODO</div>} />
             <Route path="/companies" element={<CompaniesPage />} />
             <Route path="/companies/:id" element={<CompanyDetailPage />} />
-            <Route path="/tasks" element={<div>Tasks — TODO</div>} />
+            <Route path="/tasks" element={<TasksPage />} />
             <Route path="/mail" element={<div>Mail — TODO</div>} />
             <Route path="/integrations" element={<div>Integrations — TODO</div>} />
             <Route path="/audit" element={<div>Audit — TODO</div>} />
