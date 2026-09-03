@@ -7,6 +7,8 @@ import DashboardPage from './pages/dashboard/DashboardPage';
 import CustomersPage from './pages/customers/CustomersPage';
 import CustomerDetailPage from './pages/customers/CustomerDetailPage';
 import CustomerFormPage from './pages/customers/CustomerFormPage';
+import CompaniesPage from './pages/companies/CompaniesPage';
+import CompanyDetailPage from './pages/companies/CompanyDetailPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -42,8 +44,8 @@ export default function App() {
             <Route path="/work/:type/:id" element={<div>Work Detail — TODO</div>} />
             <Route path="/team" element={<div>Team — TODO</div>} />
             <Route path="/settings" element={<div>Settings — TODO</div>} />
-            <Route path="/companies" element={<div>Companies — TODO</div>} />
-            <Route path="/companies/:id" element={<div>Company Detail — TODO</div>} />
+            <Route path="/companies" element={<CompaniesPage />} />
+            <Route path="/companies/:id" element={<CompanyDetailPage />} />
             <Route path="/tasks" element={<div>Tasks — TODO</div>} />
             <Route path="/mail" element={<div>Mail — TODO</div>} />
             <Route path="/integrations" element={<div>Integrations — TODO</div>} />

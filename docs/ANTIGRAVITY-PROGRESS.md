@@ -19,8 +19,8 @@
 | Domain | API Route (`server/src/api/`) | Client API (`client/src/api/`) | React Page (`client/src/pages/`) | Status |
 |---|---|---|---|---|
 | **Notifications** | `notifications.js` | `notifications.ts` | (TopBar bell integration) | 🟢 Complete (Verified) |
-| **Companies** | `companies.js` | `companies.ts` | `companies/CompaniesPage.tsx`, `CompanyDetailPage.tsx` | 🟡 In Progress (Step 2) |
-| **Campaigns** | `campaigns.js` | `campaigns.ts` | `campaigns/CampaignsPage.tsx`, `CampaignDetailPage.tsx` | ⚪ Pending |
+| **Companies** | `companies.js` | `companies.ts` | `companies/CompaniesPage.tsx`, `CompanyDetailPage.tsx` | 🟢 Complete (Verified) |
+| **Campaigns** | `campaigns.js` | `campaigns.ts` | `campaigns/CampaignsPage.tsx`, `CampaignDetailPage.tsx` | 🟡 In Progress (Step 3) |
 | **Work** | `work.js` | `work.ts` | `work/WorkCenterPage.tsx`, `WorkListPage.tsx`, `WorkDetailPage.tsx` | ⚪ Pending |
 | **Tasks** | `tasks.js` | `tasks.ts` | `tasks/TasksPage.tsx` | ⚪ Pending |
 | **Team** | `team.js` | `team.ts` | `team/TeamPage.tsx` | ⚪ Pending |
@@ -40,4 +40,11 @@
   - Built `client/src/api/notifications.ts` API client.
   - Integrated notification bell dropdown, unread count polling, mark read, and dismiss actions into `client/src/components/TopBar.tsx`.
   - Verified `tsc --noEmit` and Vite production build (`npm run build` green).
-- **Next:** Step 2 — Companies API (`companies.js`), client API (`companies.ts`), `CompaniesPage.tsx`, `CompanyDetailPage.tsx`.
+- **Step 2 (Companies) Complete:**
+  - Built `server/src/api/companies.js` (`GET /`, `GET /:id`, `POST /`, `PUT /:id`, `POST /switch`, `POST /:id/main`, `POST /:id/collaborators`, `POST /:id/api-key/regenerate`) using `ClientCompany`, `User`, `Campaign`, `Customer`, `Activity`, `Attachment` models with `requireApiAuth` self-guarding.
+  - Registered route in `server/src/server.js` (`node --check` passes).
+  - Built `client/src/api/companies.ts` API client.
+  - Built `client/src/pages/companies/CompaniesPage.tsx` and `CompanyDetailPage.tsx`.
+  - Registered routes `/companies` and `/companies/:id` in `client/src/App.tsx`.
+  - Verified `npm run build` (exit 0) and `node --check` (exit 0).
+- **Next:** Step 3 — Campaigns API (`campaigns.js`), client API (`campaigns.ts`), `CampaignsPage.tsx`, `CampaignDetailPage.tsx`.
