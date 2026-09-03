@@ -12,6 +12,42 @@ export interface CustomersListResponse extends PaginatedResponse<Customer> {
   leadStats: LeadStats;
 }
 
+export interface Activity {
+  _id: string;
+  type: string;
+  note: string;
+  user?: { _id: string; name: string };
+  createdAt: string;
+}
+
+export interface Attachment {
+  _id: string;
+  originalName: string;
+  category: string;
+  size: number;
+  createdAt: string;
+}
+
+export interface RelatedWork {
+  _id: string;
+  title: string;
+  status: string;
+  module?: { key: string; name: string };
+}
+
+export interface CustomerDetailResponse {
+  ok: true;
+  data: Customer;
+  activities: Activity[];
+  attachments: Attachment[];
+  relatedWork: RelatedWork[];
+  stages: Stage[];
+  labels: Label[];
+  users: { _id: string; name: string }[];
+  campaigns: { _id: string; name: string }[];
+  fields: CustomField[];
+}
+
 export const customersApi = {
   list: (params: Record<string, string>) => {
     const query = new URLSearchParams(params).toString();
@@ -19,7 +55,7 @@ export const customersApi = {
   },
 
   get: (id: string) =>
-    api.get<{ ok: true; data: Customer; activities: any[]; attachments: any[]; fields: CustomField[] }>(`/customers/${id}`),
+    api.get<CustomerDetailResponse>(`/customers/${id}`),
 
   create: (data: CustomerInput) =>
     api.post<{ ok: true; data: Customer }>('/customers', data),
@@ -30,6 +66,6 @@ export const customersApi = {
   delete: (id: string) =>
     api.delete<{ ok: true }>(`/customers/${id}`),
 
-  bulk: (data: { action: string; selectedIds: string[]; [key: string]: any }) =>
+  bulk: (data: { action: string; selectedIds: string[]; [key: string]: unknown }) =>
     api.post<{ ok: true; message: string }>('/customers/bulk', data),
 };

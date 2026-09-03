@@ -30,6 +30,9 @@
 - Replaced the Customers boot stub with current workspace-scoped list, detail, create, update, delete, and manager-only bulk APIs.
 - Preserved current lead filtering/stats, field permissions, relation validation, work visibility, automations, notifications, activities, and audit logging.
 - `node --check server/src/api/customers.js`, module loading, diff validation, and client `npx tsc --noEmit` pass.
+- Connected the create form to Customers-owned options and added stage, campaign, owner, labels, lead score, and permission-filtered custom fields.
+- Completed list filters for stage/label/campaign/date/view and wired validated bulk stage, transfer, priority, value, source, and delete actions.
+- Customer API client now uses typed detail activity, attachment, and related-work response models instead of `any`.
 
 ## Next
 
