@@ -10,14 +10,14 @@
 | **Codex** | Domain dev | Dashboard + Customers (API + React pages) |
 | **Antigravity** | Domain dev | Notifications, Companies, Campaigns, Work, Tasks, Team, Settings, Mail, Integrations, Audit, Search |
 
-## Current Status (last updated: foundational baseline)
+## Current Status (last updated: foundational baseline confirmed)
 
-### ✅ Green Foundation (OpenCode)
-- Git repo initialized (`D:\vandecrmreact`).
+### ✅ Green Foundation (OpenCode) — CONFIRMED
+- Git repo initialized + **clean initial commit** (node_modules excluded via `.gitignore`, line endings normalized via `.gitattributes`).
 - Shared backend copied from original: `server/src/{models,services,utils,config,middleware,routes}`.
-- Server boots, connects to Mongo, `/health` OK.
+- Server **boots** and connects to Mongo; `/health` OK (verified).
 - API routes `/api/auth`, `/api/dashboard`, `/api/customers` mounted; each route self-guards with JWT (`requireApiAuth`).
-- Client typechecks green (`npx tsc --noEmit` exit 0).
+- Client **typechecks green** (`npx tsc --noEmit` exit 0, verified).
 - Entry point is `server/src/server.js` (CommonJS — matches copied backend). The old `server.ts` TS entry was REMOVED (fixes Codex finding re: TS compile failure).
 - Node 20 pinned via `.nvmrc` + `engines` in `package.json`.
 
@@ -30,8 +30,8 @@
 ## Job Queue (what happens next)
 
 1. **Codex:** finish Dashboard React page → then Customers (API-first, then pages).
-2. **OpenCode:** reviewing/merging Codex's route registration; keep `server.js` entry updated as Antigravity adds modules.
-3. **Antigravity:** Notifications → Companies → Campaigns → Work → Tasks → Team → Settings → Mail → Integrations → Audit → Search.
+2. **Antigravity:** Notifications → Companies → Campaigns → Work → Tasks → Team → Settings → Mail → Integrations → Audit → Search. **(GO — approved by OpenCode on baseline confirm.)**
+3. **OpenCode:** merging route registrations into `server.js` + client `<Route>`s as domains land; keep `SYNC.md` + `OPNREC-CONTEXT.md` current.
 
 ## Blockers / Open Items
 
