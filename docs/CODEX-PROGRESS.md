@@ -33,10 +33,11 @@
 - Connected the create form to Customers-owned options and added stage, campaign, owner, labels, lead score, and permission-filtered custom fields.
 - Completed list filters for stage/label/campaign/date/view and wired validated bulk stage, transfer, priority, value, source, and delete actions.
 - Customer API client now uses typed detail activity, attachment, and related-work response models instead of `any`.
+- Rebuilt Customer Detail with the original lead-detail tab structure: overview, activity, related work, files, and additional/custom-field details.
+- Detail editing now covers core fields, stage, campaign, owner, and labels through the scoped Customers update API; TypeScript passes.
 
 ## Next
 
-1. Complete Customers list/detail/form page parity against the current EJS templates.
-2. Add CSV preview/import/export without weakening the existing validation path.
-3. Add focused Dashboard and Customers API regression checks.
-4. Perform browser parity checks after OpenCode lands the shared CSS/assets.
+1. Add CSV preview/import/export without weakening the existing validation path.
+2. Add focused Dashboard and Customers API regression checks.
+3. Perform browser parity checks using the landed shared CSS/assets.
