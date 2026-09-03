@@ -26,8 +26,8 @@
 | **Team** | `team.js` | `team.ts` | `team/TeamPage.tsx` | 🟢 Complete (Verified) |
 | **Settings** | `settings.js` | `settings.ts` | `settings/SettingsPage.tsx` | 🟢 Complete (Verified) |
 | **Mail** | `mail.js` | `mail.ts` | `mail/MailPage.tsx` | 🟢 Complete (Verified) |
-| **Integrations** | `integrations.js` | `integrations.ts` | `integrations/IntegrationsPage.tsx` | 🟡 In Progress (Step 9) |
-| **Audit** | `audit.js` | `audit.ts` | `audit/AuditPage.tsx` | ⚪ Pending |
+| **Integrations** | `integrations.js` | `integrations.ts` | `integrations/IntegrationsPage.tsx` | 🟢 Complete (Verified) |
+| **Audit** | `audit.js` | `audit.ts` | `audit/AuditPage.tsx` | 🟡 In Progress (Step 10) |
 | **Search** | `search.js` | `search.ts` | `search/SearchPage.tsx` | ⚪ Pending |
 
 ---
@@ -89,4 +89,11 @@
   - Built `client/src/pages/mail/MailPage.tsx` with 3-pane navigation, sent message viewer, composer with template variables, template manager, and verified SMTP settings.
   - Registered route `/mail` in `client/src/App.tsx`.
   - Verified `npm run build` (exit 0) and `node --check` (exit 0).
-- **Next:** Step 9 — Integrations API (`integrations.js`), client API (`integrations.ts`), `IntegrationsPage.tsx`.
+- **Step 9 (Integrations) Complete:**
+  - Built `server/src/api/integrations.js` (`GET /`, `POST /companies/:id/credentials`, `POST /companies/:id/sync`, `POST /companies/:id/sync-settings`, `POST /sync`, `POST /logs/:id/retry`) using `Campaign`, `ClientCompany`, `SyncLog` models with `requireApiAuth` self-guarding.
+  - Registered route in `server/src/server.js` (`node --check` passes).
+  - Built `client/src/api/integrations.ts` API client.
+  - Built `client/src/pages/integrations/IntegrationsPage.tsx` with platform tabs for Meta Ads Manager, GA4, Inbound Webhook pipe, background sync scheduling, and diagnostics history log table.
+  - Registered route `/integrations` in `client/src/App.tsx`.
+  - Verified `npm run build` (exit 0) and `node --check` (exit 0).
+- **Next:** Step 10 — Audit API (`audit.js`), client API (`audit.ts`), `AuditPage.tsx`.
