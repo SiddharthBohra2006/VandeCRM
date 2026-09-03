@@ -27,8 +27,8 @@
 | **Settings** | `settings.js` | `settings.ts` | `settings/SettingsPage.tsx` | 🟢 Complete (Verified) |
 | **Mail** | `mail.js` | `mail.ts` | `mail/MailPage.tsx` | 🟢 Complete (Verified) |
 | **Integrations** | `integrations.js` | `integrations.ts` | `integrations/IntegrationsPage.tsx` | 🟢 Complete (Verified) |
-| **Audit** | `audit.js` | `audit.ts` | `audit/AuditPage.tsx` | 🟡 In Progress (Step 10) |
-| **Search** | `search.js` | `search.ts` | `search/SearchPage.tsx` | ⚪ Pending |
+| **Audit** | `audit.js` | `audit.ts` | `audit/AuditPage.tsx` | 🟢 Complete (Verified) |
+| **Search** | `search.js` | `search.ts` | `search/SearchPage.tsx` | 🟡 In Progress (Step 11) |
 
 ---
 
@@ -96,4 +96,11 @@
   - Built `client/src/pages/integrations/IntegrationsPage.tsx` with platform tabs for Meta Ads Manager, GA4, Inbound Webhook pipe, background sync scheduling, and diagnostics history log table.
   - Registered route `/integrations` in `client/src/App.tsx`.
   - Verified `npm run build` (exit 0) and `node --check` (exit 0).
-- **Next:** Step 10 — Audit API (`audit.js`), client API (`audit.ts`), `AuditPage.tsx`.
+- **Step 10 (Audit Trail) Complete:**
+  - Built `server/src/api/audit.js` (`GET /`) using `AuditLog`, `User` models with `requireApiAuth` self-guarding.
+  - Registered route in `server/src/server.js` (`node --check` passes).
+  - Built `client/src/api/audit.ts` API client.
+  - Built `client/src/pages/audit/AuditPage.tsx` with action, entity, user filters, and audit trail log table.
+  - Registered route `/audit` in `client/src/App.tsx`.
+  - Verified `npm run build` (exit 0) and `node --check` (exit 0).
+- **Next:** Step 11 — Search API (`search.js`), client API (`search.ts`), `SearchPage.tsx`.
