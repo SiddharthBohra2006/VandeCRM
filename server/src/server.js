@@ -26,7 +26,7 @@ const apiNotifications = require('./api/notifications');
 const apiMail = require('./api/mail');
 const apiIntegrations = require('./api/integrations');
 const apiAudit = require('./api/audit');
-// const apiSearch       = require('./api/search');
+const apiSearch = require('./api/search');
 
 // ============================================
 // REGISTER ALL MONGOOSE MODELS AT BOOT
@@ -131,7 +131,7 @@ app.use('/api/notifications', apiNotifications);
 app.use('/api/mail', apiMail);
 app.use('/api/integrations', apiIntegrations);
 app.use('/api/audit', apiAudit);
-// app.use('/api/search',        apiSearch);
+app.use('/api/search', apiSearch);
 
 // ============================================
 // SERVE REACT BUILD (production)

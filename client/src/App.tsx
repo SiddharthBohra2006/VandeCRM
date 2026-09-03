@@ -21,6 +21,7 @@ import SettingsPage from './pages/settings/SettingsPage';
 import MailPage from './pages/mail/MailPage';
 import IntegrationsPage from './pages/integrations/IntegrationsPage';
 import AuditPage from './pages/audit/AuditPage';
+import SearchPage from './pages/search/SearchPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -62,7 +63,7 @@ export default function App() {
             <Route path="/mail" element={<MailPage />} />
             <Route path="/integrations" element={<IntegrationsPage />} />
             <Route path="/audit" element={<AuditPage />} />
-            <Route path="/search" element={<div>Search — TODO</div>} />
+            <Route path="/search" element={<SearchPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
