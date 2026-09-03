@@ -23,8 +23,8 @@
 | **Campaigns** | `campaigns.js` | `campaigns.ts` | `campaigns/CampaignsPage.tsx`, `CampaignDetailPage.tsx` | 🟢 Complete (Verified) |
 | **Work** | `work.js` | `work.ts` | `work/WorkCenterPage.tsx`, `WorkListPage.tsx`, `WorkDetailPage.tsx` | 🟢 Complete (Verified) |
 | **Tasks** | `tasks.js` | `tasks.ts` | `tasks/TasksPage.tsx` | 🟢 Complete (Verified) |
-| **Team** | `team.js` | `team.ts` | `team/TeamPage.tsx` | 🟡 In Progress (Step 6) |
-| **Settings** | `settings.js` | `settings.ts` | `settings/SettingsPage.tsx` | ⚪ Pending |
+| **Team** | `team.js` | `team.ts` | `team/TeamPage.tsx` | 🟢 Complete (Verified) |
+| **Settings** | `settings.js` | `settings.ts` | `settings/SettingsPage.tsx` | 🟡 In Progress (Step 7) |
 | **Mail** | `mail.js` | `mail.ts` | `mail/MailPage.tsx` | ⚪ Pending |
 | **Integrations** | `integrations.js` | `integrations.ts` | `integrations/IntegrationsPage.tsx` | ⚪ Pending |
 | **Audit** | `audit.js` | `audit.ts` | `audit/AuditPage.tsx` | ⚪ Pending |
@@ -68,4 +68,11 @@
   - Built `client/src/pages/tasks/TasksPage.tsx` with stats, quick-views, inline complete/reschedule, and recent activity history.
   - Registered route `/tasks` in `client/src/App.tsx`.
   - Verified `npm run build` (exit 0) and `node --check` (exit 0).
-- **Next:** Step 6 — Team API (`team.js`), client API (`team.ts`), `TeamPage.tsx`.
+- **Step 6 (Team Management) Complete:**
+  - Built `server/src/api/team.js` (`GET /`, `POST /`, `PUT /:id`, `DELETE /:id`, `GET /roles`, `POST /roles`, `PUT /roles/:id`, `DELETE /roles/:id`) using `User`, `ClientCompany`, `CustomRole`, `WorkType`, `CustomField` models with `requireApiAuth` self-guarding.
+  - Registered route in `server/src/server.js` (`node --check` passes).
+  - Built `client/src/api/team.ts` API client.
+  - Built `client/src/pages/team/TeamPage.tsx` with members tab (stats, search, add/edit member modal) and custom roles matrix tab.
+  - Registered route `/team` in `client/src/App.tsx`.
+  - Verified `npm run build` (exit 0) and `node --check` (exit 0).
+- **Next:** Step 7 — Settings API (`settings.js`), client API (`settings.ts`), `SettingsPage.tsx`.

@@ -18,13 +18,45 @@ const apiCustomers = require('./api/customers'); // OWNER: Codex (currently boot
 // Antigravity will add & register more here (see ANTIGRAVITY-TASKS.md):
 const apiCampaigns = require('./api/campaigns');
 const apiWork = require('./api/work');
-// const apiTeam         = require('./api/team');
+const apiTeam = require('./api/team');
 // const apiSettings     = require('./api/settings');
 const apiCompanies = require('./api/companies');
 const apiTasks = require('./api/tasks');
 const apiNotifications = require('./api/notifications');
 // const apiAudit        = require('./api/audit');
 // const apiSearch       = require('./api/search');
+
+// ============================================
+// REGISTER ALL MONGOOSE MODELS AT BOOT
+// The original server requires every model so mongoose registers all schemas
+// up front. Without this, populate refs (e.g. User -> CustomRole) throw
+// MissingSchemaError on authenticated routes. Keep this in sync with the
+// models directory so every ref resolves regardless of which API is hit.
+// ============================================
+require('./models/Activity');
+require('./models/Attachment');
+require('./models/AuditLog');
+require('./models/AutomationRule');
+require('./models/Campaign');
+require('./models/ClientCompany');
+require('./models/CrmLabel');
+require('./models/CrmStage');
+require('./models/CustomField');
+require('./models/CustomRecord');
+require('./models/CustomRole');
+require('./models/Customer');
+require('./models/DashboardView');
+require('./models/EmailAccount');
+require('./models/EmailMessage');
+require('./models/EmailTemplate');
+require('./models/Notification');
+require('./models/Organization');
+require('./models/SavedReport');
+require('./models/SavedView');
+require('./models/SyncLog');
+require('./models/User');
+require('./models/WorkItem');
+require('./models/WorkType');
 
 const { ensureCrmIndexes, syncWorkTypeDefaults, syncWorkspaceSeedData } = require('./services/defaults');
 
@@ -89,7 +121,7 @@ app.use('/api/customers', apiCustomers); // OWNER: Codex (in progress)
 // app.use('/api/clients',       apiClients);
 app.use('/api/campaigns', apiCampaigns);
 app.use('/api/work', apiWork);
-// app.use('/api/team',          apiTeam);
+app.use('/api/team', apiTeam);
 // app.use('/api/settings',      apiSettings);
 app.use('/api/companies', apiCompanies);
 app.use('/api/tasks', apiTasks);

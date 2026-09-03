@@ -33,7 +33,7 @@
 
 ### 🔶 In Progress
 - **Codex:** Dashboard API `server/src/api/dashboard.js` COMPLETE; Dashboard React page in progress; Customers API (`server/src/api/customers.js`) in progress.
-- **Antigravity:** Notifications, Companies, Campaigns, Work, & Tasks complete (API + pages); Team domain in progress (Step 6).
+- **Antigravity:** Notifications, Companies, Campaigns, Work, Tasks, & Team complete (API + pages); Settings domain in progress (Step 7).
 
 ### ⚪ Pending Domains (Antigravity Queue)
 - Settings → Mail → Integrations → Audit → Search.

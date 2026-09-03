@@ -16,6 +16,7 @@ import WorkCenterPage from './pages/work/WorkCenterPage';
 import WorkListPage from './pages/work/WorkListPage';
 import WorkDetailPage from './pages/work/WorkDetailPage';
 import TasksPage from './pages/tasks/TasksPage';
+import TeamPage from './pages/team/TeamPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -49,7 +50,7 @@ export default function App() {
             <Route path="/work" element={<WorkCenterPage />} />
             <Route path="/work/:type" element={<WorkListPage />} />
             <Route path="/work/:type/:id" element={<WorkDetailPage />} />
-            <Route path="/team" element={<div>Team — TODO</div>} />
+            <Route path="/team" element={<TeamPage />} />
             <Route path="/settings" element={<div>Settings — TODO</div>} />
             <Route path="/companies" element={<CompaniesPage />} />
             <Route path="/companies/:id" element={<CompanyDetailPage />} />
