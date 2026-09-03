@@ -21,8 +21,8 @@
 | **Notifications** | `notifications.js` | `notifications.ts` | (TopBar bell integration) | 🟢 Complete (Verified) |
 | **Companies** | `companies.js` | `companies.ts` | `companies/CompaniesPage.tsx`, `CompanyDetailPage.tsx` | 🟢 Complete (Verified) |
 | **Campaigns** | `campaigns.js` | `campaigns.ts` | `campaigns/CampaignsPage.tsx`, `CampaignDetailPage.tsx` | 🟢 Complete (Verified) |
-| **Work** | `work.js` | `work.ts` | `work/WorkCenterPage.tsx`, `WorkListPage.tsx`, `WorkDetailPage.tsx` | 🟡 In Progress (Step 4) |
-| **Tasks** | `tasks.js` | `tasks.ts` | `tasks/TasksPage.tsx` | ⚪ Pending |
+| **Work** | `work.js` | `work.ts` | `work/WorkCenterPage.tsx`, `WorkListPage.tsx`, `WorkDetailPage.tsx` | 🟢 Complete (Verified) |
+| **Tasks** | `tasks.js` | `tasks.ts` | `tasks/TasksPage.tsx` | 🟡 In Progress (Step 5) |
 | **Team** | `team.js` | `team.ts` | `team/TeamPage.tsx` | ⚪ Pending |
 | **Settings** | `settings.js` | `settings.ts` | `settings/SettingsPage.tsx` | ⚪ Pending |
 | **Mail** | `mail.js` | `mail.ts` | `mail/MailPage.tsx` | ⚪ Pending |
@@ -54,4 +54,11 @@
   - Built `client/src/pages/campaigns/CampaignsPage.tsx` and `CampaignDetailPage.tsx`.
   - Registered routes `/campaigns` and `/campaigns/:id` in `client/src/App.tsx`.
   - Verified `npm run build` (exit 0) and `node --check` (exit 0).
-- **Next:** Step 4 — Work API (`work.js`), client API (`work.ts`), `WorkCenterPage.tsx`, `WorkListPage.tsx`, `WorkDetailPage.tsx`.
+- **Step 4 (Work) Complete:**
+  - Built `server/src/api/work.js` (`GET /`, `GET /:type`, `GET /:type/:id`, `POST /:type`, `PUT /:type/:id`, `POST /:type/:id/status`, `DELETE /:type/:id`, `POST /:type/:id/subtasks`) using `CustomRecord`, `WorkType`, `Customer`, `User`, `AuditLog` models with `requireApiAuth` self-guarding.
+  - Registered route in `server/src/server.js` (`node --check` passes).
+  - Built `client/src/api/work.ts` API client.
+  - Built `client/src/pages/work/WorkCenterPage.tsx`, `WorkListPage.tsx`, and `WorkDetailPage.tsx`.
+  - Registered routes `/work`, `/work/:type`, and `/work/:type/:id` in `client/src/App.tsx`.
+  - Verified `npm run build` (exit 0) and `node --check` (exit 0).
+- **Next:** Step 5 — Tasks API (`tasks.js`), client API (`tasks.ts`), `TasksPage.tsx`.

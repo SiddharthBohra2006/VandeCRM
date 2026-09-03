@@ -11,6 +11,9 @@ import CompaniesPage from './pages/companies/CompaniesPage';
 import CompanyDetailPage from './pages/companies/CompanyDetailPage';
 import CampaignsPage from './pages/campaigns/CampaignsPage';
 import CampaignDetailPage from './pages/campaigns/CampaignDetailPage';
+import WorkCenterPage from './pages/work/WorkCenterPage';
+import WorkListPage from './pages/work/WorkListPage';
+import WorkDetailPage from './pages/work/WorkDetailPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -41,9 +44,9 @@ export default function App() {
             <Route path="/clients" element={<div>Clients — TODO</div>} />
             <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
-            <Route path="/work" element={<div>Work Center — TODO</div>} />
-            <Route path="/work/:type" element={<div>Work List — TODO</div>} />
-            <Route path="/work/:type/:id" element={<div>Work Detail — TODO</div>} />
+            <Route path="/work" element={<WorkCenterPage />} />
+            <Route path="/work/:type" element={<WorkListPage />} />
+            <Route path="/work/:type/:id" element={<WorkDetailPage />} />
             <Route path="/team" element={<div>Team — TODO</div>} />
             <Route path="/settings" element={<div>Settings — TODO</div>} />
             <Route path="/companies" element={<CompaniesPage />} />
