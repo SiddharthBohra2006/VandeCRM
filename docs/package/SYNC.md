@@ -33,10 +33,10 @@
 
 ### 🔶 In Progress
 - **Codex:** Dashboard API `server/src/api/dashboard.js` COMPLETE; Dashboard React page in progress; Customers API (`server/src/api/customers.js`) in progress.
-- **Antigravity:** Notifications, Companies, Campaigns, Work, Tasks, Team, & Settings complete (API + pages); Mail domain in progress (Step 8).
+- **Antigravity:** Notifications, Companies, Campaigns, Work, Tasks, Team, Settings, & Mail complete (API + pages); Integrations domain in progress (Step 9).
 
 ### ⚪ Pending Domains (Antigravity Queue)
-- Mail → Integrations → Audit → Search.
+- Integrations → Audit → Search.
 
 ### 📌 Clients — OWNERSHIP CLARIFIED
 - `/clients` ("won clients") is a SUB-VIEW of the Customer domain, NOT a separate domain. Original `clients.js` filters the same `Customer` model by won stages; original `customers/index.ejs` renders both via an `isClientView` flag. **Owned by Codex**, along with Customers. Route to be registered by OpenCode when Codex lands it.

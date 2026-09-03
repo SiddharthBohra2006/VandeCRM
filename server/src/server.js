@@ -23,6 +23,7 @@ const apiSettings = require('./api/settings');
 const apiCompanies = require('./api/companies');
 const apiTasks = require('./api/tasks');
 const apiNotifications = require('./api/notifications');
+const apiMail = require('./api/mail');
 // const apiAudit        = require('./api/audit');
 // const apiSearch       = require('./api/search');
 
@@ -126,6 +127,7 @@ app.use('/api/settings', apiSettings);
 app.use('/api/companies', apiCompanies);
 app.use('/api/tasks', apiTasks);
 app.use('/api/notifications', apiNotifications);
+app.use('/api/mail', apiMail);
 // app.use('/api/audit',         apiAudit);
 // app.use('/api/search',        apiSearch);
 

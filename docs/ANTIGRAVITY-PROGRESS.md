@@ -25,8 +25,8 @@
 | **Tasks** | `tasks.js` | `tasks.ts` | `tasks/TasksPage.tsx` | 🟢 Complete (Verified) |
 | **Team** | `team.js` | `team.ts` | `team/TeamPage.tsx` | 🟢 Complete (Verified) |
 | **Settings** | `settings.js` | `settings.ts` | `settings/SettingsPage.tsx` | 🟢 Complete (Verified) |
-| **Mail** | `mail.js` | `mail.ts` | `mail/MailPage.tsx` | 🟡 In Progress (Step 8) |
-| **Integrations** | `integrations.js` | `integrations.ts` | `integrations/IntegrationsPage.tsx` | ⚪ Pending |
+| **Mail** | `mail.js` | `mail.ts` | `mail/MailPage.tsx` | 🟢 Complete (Verified) |
+| **Integrations** | `integrations.js` | `integrations.ts` | `integrations/IntegrationsPage.tsx` | 🟡 In Progress (Step 9) |
 | **Audit** | `audit.js` | `audit.ts` | `audit/AuditPage.tsx` | ⚪ Pending |
 | **Search** | `search.js` | `search.ts` | `search/SearchPage.tsx` | ⚪ Pending |
 
@@ -82,4 +82,11 @@
   - Built `client/src/pages/settings/SettingsPage.tsx` with category tabs for pipeline stages, form fields, tags, CRM terminology, and look & feel themes.
   - Registered route `/settings` in `client/src/App.tsx`.
   - Verified `npm run build` (exit 0) and `node --check` (exit 0).
-- **Next:** Step 8 — Mail API (`mail.js`), client API (`mail.ts`), `MailPage.tsx`.
+- **Step 8 (Mail) Complete:**
+  - Built `server/src/api/mail.js` (`GET /`, `POST /send`, `POST /templates`, `PUT /templates/:id`, `DELETE /templates/:id`, `POST /settings`) using `EmailAccount`, `EmailTemplate`, `EmailMessage`, `Customer`, `Activity` models with `requireApiAuth` self-guarding.
+  - Registered route in `server/src/server.js` (`node --check` passes).
+  - Built `client/src/api/mail.ts` API client.
+  - Built `client/src/pages/mail/MailPage.tsx` with 3-pane navigation, sent message viewer, composer with template variables, template manager, and verified SMTP settings.
+  - Registered route `/mail` in `client/src/App.tsx`.
+  - Verified `npm run build` (exit 0) and `node --check` (exit 0).
+- **Next:** Step 9 — Integrations API (`integrations.js`), client API (`integrations.ts`), `IntegrationsPage.tsx`.
