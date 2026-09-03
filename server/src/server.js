@@ -23,9 +23,7 @@ const apiCustomers = require('./api/customers'); // OWNER: Codex (currently boot
 // const apiSettings     = require('./api/settings');
 // const apiCompanies    = require('./api/companies');
 // const apiTasks        = require('./api/tasks');
-// const apiMail         = require('./api/mail');
-// const apiNotifications = require('./api/notifications');
-// const apiIntegrations = require('./api/integrations');
+const apiNotifications = require('./api/notifications');
 // const apiAudit        = require('./api/audit');
 // const apiSearch       = require('./api/search');
 
@@ -96,9 +94,7 @@ app.use('/api/customers', apiCustomers); // OWNER: Codex (in progress)
 // app.use('/api/settings',      apiSettings);
 // app.use('/api/companies',     apiCompanies);
 // app.use('/api/tasks',         apiTasks);
-// app.use('/api/mail',          apiMail);
-// app.use('/api/notifications', apiNotifications);
-// app.use('/api/integrations',  apiIntegrations);
+app.use('/api/notifications', apiNotifications);
 // app.use('/api/audit',         apiAudit);
 // app.use('/api/search',        apiSearch);
 

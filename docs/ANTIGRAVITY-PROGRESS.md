@@ -18,8 +18,8 @@
 
 | Domain | API Route (`server/src/api/`) | Client API (`client/src/api/`) | React Page (`client/src/pages/`) | Status |
 |---|---|---|---|---|
-| **Notifications** | `notifications.js` | `notifications.ts` | (Context / Header integration) | 🟡 Ready to start (Step 1) |
-| **Companies** | `companies.js` | `companies.ts` | `companies/CompaniesPage.tsx`, `CompanyDetailPage.tsx` | ⚪ Pending |
+| **Notifications** | `notifications.js` | `notifications.ts` | (TopBar bell integration) | 🟢 Complete (Verified) |
+| **Companies** | `companies.js` | `companies.ts` | `companies/CompaniesPage.tsx`, `CompanyDetailPage.tsx` | 🟡 In Progress (Step 2) |
 | **Campaigns** | `campaigns.js` | `campaigns.ts` | `campaigns/CampaignsPage.tsx`, `CampaignDetailPage.tsx` | ⚪ Pending |
 | **Work** | `work.js` | `work.ts` | `work/WorkCenterPage.tsx`, `WorkListPage.tsx`, `WorkDetailPage.tsx` | ⚪ Pending |
 | **Tasks** | `tasks.js` | `tasks.ts` | `tasks/TasksPage.tsx` | ⚪ Pending |
@@ -33,6 +33,11 @@
 ---
 
 ## Coordination Log
-- Read and aligned with all architectural and contract documentation: `MIGRATION-ARCHITECTURE.md`, `API-CONTRACTS.md`, `REACT-PATTERNS.md`, `CODEX-PROGRESS.md`, `ANTIGRAVITY-TASKS.md`.
-- Confirmed CommonJS backend module conventions and typed Vite React patterns matching OpenCode and Codex conventions.
-- Beginning execution following Priority Order in `ANTIGRAVITY-TASKS.md`.
+- Read and aligned with all architectural and contract documentation: `MIGRATION-ARCHITECTURE.md`, `API-CONTRACTS.md`, `REACT-PATTERNS.md`, `CODEX-PROGRESS.md`, `ANTIGRAVITY-TASKS.md`, `SYNC.md`, `OWNERSHIP.md`.
+- **Step 1 (Notifications) Complete:**
+  - Built `server/src/api/notifications.js` (`GET /feed`, `GET /`, `POST /:id/read`, `POST /read-all`) using `Notification` model with `requireApiAuth` self-guarding.
+  - Registered route in `server/src/server.js` (`node --check` passes).
+  - Built `client/src/api/notifications.ts` API client.
+  - Integrated notification bell dropdown, unread count polling, mark read, and dismiss actions into `client/src/components/TopBar.tsx`.
+  - Verified `tsc --noEmit` and Vite production build (`npm run build` green).
+- **Next:** Step 2 — Companies API (`companies.js`), client API (`companies.ts`), `CompaniesPage.tsx`, `CompanyDetailPage.tsx`.
