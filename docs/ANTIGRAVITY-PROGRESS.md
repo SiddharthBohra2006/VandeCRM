@@ -24,8 +24,8 @@
 | **Work** | `work.js` | `work.ts` | `work/WorkCenterPage.tsx`, `WorkListPage.tsx`, `WorkDetailPage.tsx` | 🟢 Complete (Verified) |
 | **Tasks** | `tasks.js` | `tasks.ts` | `tasks/TasksPage.tsx` | 🟢 Complete (Verified) |
 | **Team** | `team.js` | `team.ts` | `team/TeamPage.tsx` | 🟢 Complete (Verified) |
-| **Settings** | `settings.js` | `settings.ts` | `settings/SettingsPage.tsx` | 🟡 In Progress (Step 7) |
-| **Mail** | `mail.js` | `mail.ts` | `mail/MailPage.tsx` | ⚪ Pending |
+| **Settings** | `settings.js` | `settings.ts` | `settings/SettingsPage.tsx` | 🟢 Complete (Verified) |
+| **Mail** | `mail.js` | `mail.ts` | `mail/MailPage.tsx` | 🟡 In Progress (Step 8) |
 | **Integrations** | `integrations.js` | `integrations.ts` | `integrations/IntegrationsPage.tsx` | ⚪ Pending |
 | **Audit** | `audit.js` | `audit.ts` | `audit/AuditPage.tsx` | ⚪ Pending |
 | **Search** | `search.js` | `search.ts` | `search/SearchPage.tsx` | ⚪ Pending |
@@ -75,4 +75,11 @@
   - Built `client/src/pages/team/TeamPage.tsx` with members tab (stats, search, add/edit member modal) and custom roles matrix tab.
   - Registered route `/team` in `client/src/App.tsx`.
   - Verified `npm run build` (exit 0) and `node --check` (exit 0).
-- **Next:** Step 7 — Settings API (`settings.js`), client API (`settings.ts`), `SettingsPage.tsx`.
+- **Step 7 (Settings) Complete:**
+  - Built `server/src/api/settings.js` (`GET /`, `POST /stages`, `PUT /stages/:id`, `DELETE /stages/:id`, `POST /stages/reorder`, `POST /fields`, `PUT /fields/:id`, `DELETE /fields/:id`, `POST /labels`, `DELETE /labels/:id`, `PUT /terminology`, `PUT /theme`) using `CrmStage`, `CrmLabel`, `CustomField`, `WorkType`, `Organization`, `ClientCompany`, `AutomationRule`, `Customer` models with `requireApiAuth` self-guarding.
+  - Registered route in `server/src/server.js` (`node --check` passes).
+  - Built `client/src/api/settings.ts` API client.
+  - Built `client/src/pages/settings/SettingsPage.tsx` with category tabs for pipeline stages, form fields, tags, CRM terminology, and look & feel themes.
+  - Registered route `/settings` in `client/src/App.tsx`.
+  - Verified `npm run build` (exit 0) and `node --check` (exit 0).
+- **Next:** Step 8 — Mail API (`mail.js`), client API (`mail.ts`), `MailPage.tsx`.
