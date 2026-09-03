@@ -34,6 +34,13 @@ I am the **lead architect/guide**. I do NOT implement feature pages — I build 
 10. ✅ Node 20 pinning: `.nvmrc` = `20`, `engines.node = "20.x"`.
 11. ✅ `.gitignore` (excludes node_modules, dist, .env, logs).
 12. ✅ Created coordination package: `docs/package/SYNC.md`, `docs/package/OWNERSHIP.md`, this `OPNREC-CONTEXT.md`.
+13. ✅ **STYLING FOUNDATION (the big parity gap):**
+    - Copied the original design system into the React client: `client/src/styles/{app,auth,lead-detail,search}.css` (from `D:\VandeAgencyCRM\public\css\`). `app.css` = 354KB gold/teal theme (Inter + Plus Jakarta Sans).
+    - Rewrote `client/src/index.css`: imports the real system + thin React glue ONLY (dropdowns, bell, stat cards, form cards, `.btn-primary/secondary/danger` aliased to theme vars). Removed the generic blue/gray overrides that conflicted with the design system.
+    - Wired org theme into `AuthContext` (`applyTheme`): sets CSS vars (`--gold/--teal/--bg/--panel/--text` + derived `--bg-soft/--border/--muted/--sub/--hover/--accent-text`) and `data-theme`/`dark-theme` on `<html>` from `user.organization.theme` (defaults applied on mount).
+    - Added `theme?: OrganizationTheme` to `User` type in `client/src/api/auth.ts` (returned by `/auth/me`).
+    - Verified: `npx tsc --noEmit` exit 0 + `npx vite build` green (335KB CSS bundle).
+    - **Added parity rule to `docs/REACT-PATTERNS.md`:** all pages must use ORIGINAL EJS class names (`page-head`, `dashboard-head`, `btn`, `leads-table-top-bar`, etc.) — NOT invented `.page-header`/`.stats-bar`/`.form-card`. Open the matching EJS view and mirror its exact class names.
 
 ## What Codex Has DONE (verified)
 - Dashboard API `server/src/api/dashboard.js` — FULL implementation (workspace-scoped, permissions, preferences, pipeline move). Verified boots; returns 401 JSON without token.
@@ -51,11 +58,10 @@ I am the **lead architect/guide**. I do NOT implement feature pages — I build 
 - Original reference routes: `D:\VandeAgencyCRM\src\routes\*.js`; EJS views: `D:\VandeAgencyCRM\src\views\`.
 
 ## Current Next Steps FOR ME (OpenCode)
-1. Make the **clean initial git commit** (node_modules excluded — verify `.gitignore` works, then commit).
-2. Give **Antigravity the go-ahead** + confirm his plan + tell him to read SYNC.md & OWNERSHIP.md and register routes per pattern (or I'll merge his registrations).
-3. Confirm to **Codex** the foundation is green + his TS-compile finding is resolved (server.ts→server.js).
-4. As domains land, merge route registration into `server.js` and add client `<Route>`s.
-5. Keep `SYNC.md` and this file updated.
+1. **Commit the styling foundation** + the in-flight Codex/Antigravity working tree as a clean checkpoint (git add/commit).
+2. Chore coordination: make sure Codex (Dashboard/Customers) and Antigravity (all other domains) adopt the EJS-class-name parity rule from REACT-PATTERNS.md so their pages render with the real design system.
+3. As domains land, merge route registration into `server.js` and add client `<Route>`s.
+4. Keep `SYNC.md` and this file updated as the migration progresses.
 
 ## Coordination Rules to Never Forget
 - Always read `docs/package/SYNC.md` (the live tracker) at session start.

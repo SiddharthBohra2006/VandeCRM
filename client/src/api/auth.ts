@@ -1,11 +1,19 @@
 import { api } from './client';
 
+export interface OrganizationTheme {
+  gold: string;
+  teal: string;
+  background: string;
+  surface: string;
+  text: string;
+}
+
 export interface User {
   _id: string;
   name: string;
   email: string;
   role: string;
-  organization: { _id: string; name: string };
+  organization: { _id: string; name: string; theme?: OrganizationTheme };
   dashboardHiddenSections: string[];
   dashboardHiddenCards: string[];
   dashboardCardOrder: string[];

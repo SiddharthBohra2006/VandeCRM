@@ -360,11 +360,33 @@ export default function AppLayout() {
 
 ## CSS Strategy
 
-1. Copy all CSS files from `D:\VandeAgencyCRM\public\` to `D:\vandecrmreact\client\public\`
-2. Import the main CSS in `main.tsx`
-3. Component-specific styles go in colocated `.css` files
-4. **Do not change class names** — they must match the EJS templates exactly
-5. **Do not redesign anything** — pixel parity
+The original design system is ALREADY imported into the React client. **Do NOT copy CSS again and do NOT re-invent styles.**
+
+**How it works:**
+1. The original stylesheets live in `client/src/styles/` (copied from `D:\VandeAgencyCRM\public\css\`):
+   - `app.css` — the full branded design system (gold/teal theme, Inter + Plus Jakarta Sans, all layout classes)
+   - `auth.css` — public login/signup shell
+   - `lead-detail.css`, `search.css` — page-specific styles
+2. `client/src/index.css` imports all four and adds ONLY thin React glue (dropdowns, bell, stat cards, form cards, button modifiers aliased to theme vars).
+3. `main.tsx` imports `index.css`. Vite bundles everything.
+4. `AuthContext` applies the org theme CSS variables (`--gold/--teal/--bg/--panel/--text/...`) + `data-theme` + `dark-theme` class on `<html>`. **Do not touch theme application.**
+
+**Critical rules (pixel parity):**
+1. **Use the ORIGINAL class names from the EJS templates**, NOT invented ones. For every page, open the matching EJS view in `D:\VandeAgencyCRM\src\views\` and copy the exact class names. These are already styled by `app.css`.
+2. Do NOT define your own `.page-header`, `.stats-bar`, `.form-card`, etc. — those are thin React helpers only and won't match the original look. Prefer the original classes.
+3. Use theme variables in any new CSS: `var(--gold)`, `var(--teal)`, `var(--bg)`, `var(--panel)`, `var(--text)`, `var(--sub)`, `var(--muted)`, `var(--border)`, `var(--hover)`, `var(--gold-dim)`, `var(--accent-text)`. Never hard-code brand colors.
+4. The `.btn` class is styled by the design system. Use `.btn` alone for the primary action (theme-gold). Do not add inline blue/gray colors.
+
+**Key original class names (use these):**
+- Page head: `page-head`, `dashboard-head`, `page-subtitle`, `page-head-actions` (NOT `.page-header`)
+- Buttons: `btn`, `btn btn-*` variants (check EJS)
+- Table: `leads-table-top-bar`, `data-table` (design system owns `.data-table`)
+- Tabs: `lead-view-tabs`, `tab-nav-btn`, `tabs-nav-bar`
+- Layout: `.sidebar`, `.topbar`, `.page-content`, `.nav-item`, `.nav-item.active`
+- Badges: `stage-badge` (design system owns it)
+- Modal/dialog: `simple-dialog`, `modal-header`, `modal-close`
+
+When in doubt, open the original EJS view and mirror its exact class names — that IS the design system.
 
 ## Rules
 

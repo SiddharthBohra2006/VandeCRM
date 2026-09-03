@@ -10,22 +10,29 @@
 | **Codex** | Domain dev | Dashboard + Customers (API + React pages) |
 | **Antigravity** | Domain dev | Notifications, Companies, Campaigns, Work, Tasks, Team, Settings, Mail, Integrations, Audit, Search |
 
-## Current Status (last updated: foundational baseline confirmed)
+## Current Status (last updated: styling foundation merged)
 
 ### ✅ Green Foundation (OpenCode) — CONFIRMED
 - Git repo initialized + **clean initial commit** (node_modules excluded via `.gitignore`, line endings normalized via `.gitattributes`).
 - Shared backend copied from original: `server/src/{models,services,utils,config,middleware,routes}`.
 - Server **boots** and connects to Mongo; `/health` OK (verified).
-- API routes `/api/auth`, `/api/dashboard`, `/api/customers` mounted; each route self-guards with JWT (`requireApiAuth`).
+- API routes `/api/auth`, `/api/dashboard`, `/api/customers`, `/api/notifications` mounted; each route self-guards with JWT (`requireApiAuth`).
 - Client **typechecks green** (`npx tsc --noEmit` exit 0, verified).
 - Entry point is `server/src/server.js` (CommonJS — matches copied backend). The old `server.ts` TS entry was REMOVED (fixes Codex finding re: TS compile failure).
 - Node 20 pinned via `.nvmrc` + `engines` in `package.json`.
 
-### 🔶 In Progress
-- **Codex:** Dashboard API `server/src/api/dashboard.js` COMPLETE; Dashboard React page in progress; Customers API (`server/src/api/customers.js`) still a boot stub.
+### ✅ Styling Foundation (OpenCode) — NEW
+- Original design system now imported into the React client: `client/src/styles/{app,auth,lead-detail,search}.css` copied from `D:\VandeAgencyCRM\public\css\`.
+- `client/src/index.css` rewritten: imports the real system + thin React glue (no generic blue/gray overrides). Vite bundles it (build green, 335KB CSS verified).
+- Org theme applied at runtime: `AuthContext` sets CSS vars (`--gold/--teal/--bg/--panel/--text/...`) + `data-theme`/`dark-theme` on `<html>` from `user.organization.theme` (exposed via `/auth/me`, typed in `User`).
+- **Parity rule added to REACT-PATTERNS.md:** all pages must use ORIGINAL EJS class names (`page-head`, `dashboard-head`, `btn`, `leads-table-top-bar`, etc.), NOT invented `.page-header`/`.stats-bar`/`.form-card`. Agents must mirror the EJS class names for the true look.
 
-### ⚪ Not Started
-- **Antigravity:** all assigned domains (Notifications first).
+### 🔶 In Progress
+- **Codex:** Dashboard API `server/src/api/dashboard.js` COMPLETE; Dashboard React page in progress; Customers API (`server/src/api/customers.js`) in progress.
+- **Antigravity:** Notifications complete (API + TopBar bell); Companies domain in progress (Step 2).
+
+### ⚪ Pending Domains (Antigravity Queue)
+- Campaigns → Work → Tasks → Team → Settings → Mail → Integrations → Audit → Search.
 
 ## Job Queue (what happens next)
 
@@ -49,3 +56,4 @@
 
 ## Change Log
 - **Baseline:** OpenCode set up git, copied backend, fixed server entry (`.js`), fixed priority type junction, created DashboardPage placeholder, added `requireApiPermission`, verified green boot + typecheck.
+- **Styling Foundation:** OpenCode imported the original design system into the React client (styles + theme application) and added the EJS-class-name parity rule to REACT-PATTERNS.md.
