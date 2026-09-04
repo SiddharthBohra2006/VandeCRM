@@ -7,6 +7,7 @@ import {
   Sparkles, ListChecks, Calendar, UserPlus, Clock, TriangleAlert, Target,
   Filter, Video, X, RotateCcw, ArrowUpRight, Activity, FlaskConical, Info,
   ShieldCheck, RefreshCw, ArrowRightLeft, Phone, CircleCheck, PencilLine, Move,
+  PanelLeftClose, PanelLeftOpen, SlidersHorizontal, LogOut, UserCheck, FolderKanban,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -63,7 +64,14 @@ const lucideMap: Record<string, LucideIcon> = {
   'circle-check': CircleCheck,
   'pencil-line': PencilLine,
   move: Move,
+  'panel-left-close': PanelLeftClose,
+  'panel-left-open': PanelLeftOpen,
+  'sliders-horizontal': SlidersHorizontal,
+  'log-out': LogOut,
+  'user-check': UserCheck,
+  'folder-kanban': FolderKanban,
 };
+
 
 // Map Emoji/key-based work-module icons (EJS uses these in a moduleIcons table)
 // and unknown names to sensible Lucide icons so nothing renders blank.

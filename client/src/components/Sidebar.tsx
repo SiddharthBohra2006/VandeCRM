@@ -222,8 +222,13 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
           )}
         </details>
 
-        <button className="sidebar-toggle-btn desktop-only-toggle" onClick={onToggle} aria-label="Toggle Sidebar" title="Collapse sidebar">
-          <Icon name="panel-left-close" size={isOpen ? 16 : 18} />
+        <button
+          className="sidebar-toggle-btn desktop-only-toggle"
+          onClick={onToggle}
+          aria-label="Toggle Sidebar"
+          title={isOpen ? "Collapse sidebar" : "Expand sidebar"}
+        >
+          <Icon name={isOpen ? "panel-left-close" : "panel-left-open"} size={16} />
         </button>
       </div>
 
