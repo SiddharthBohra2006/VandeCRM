@@ -13,7 +13,7 @@ export interface ClientsListResponse extends PaginatedResponse<Customer> {
   labels: Label[];
   fields: CustomField[];
   companies: { _id: string; name: string }[];
-  campaigns: { _id: string; name: string }[];
+  campaigns: { _id: string; name: string; platform?: string }[];
   users: { _id: string; name: string }[];
   savedViews: any[];
   activeSavedView: any;

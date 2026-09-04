@@ -12,7 +12,7 @@ export interface Customer {
   labels: { _id: string; name: string; color: string }[];
   assignedTo: { _id: string; name: string } | null;
   clientCompany: { _id: string; name: string } | null;
-  campaign: { _id: string; name: string } | null;
+  campaign: { _id: string; name: string; platform?: string } | null;
   notes: string;
   customData: Record<string, any>;
   nextFollowUpAt: string | null;
