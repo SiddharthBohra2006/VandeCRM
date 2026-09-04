@@ -143,7 +143,21 @@
   - Enhanced `SettingsPage.tsx`: Added brand color customization pickers (Primary `--gold`, Secondary `--teal`) with live UI swatch preview (buttons, stage badges, active filters) and instant root CSS variables propagation.
   - Enhanced `AppLayout.tsx`: Added `localStorage` persistence for the sidebar collapsed/expanded state (`vande_sidebar_open`).
   - Enhanced `DashboardPage.tsx`: Added dynamic time-of-day greeting (`Good morning/afternoon/evening, {name} 👋`) and workspace subtitle context.
-- **ALL 11 FUNCTIONAL DOMAINS + SECTION 5, 6, 7, 8, 9 100% COMPLETE & VERIFIED (tsc exit 0, vite build exit 0, node syntax exit 0).**
+- **Exact EJS Visual & Geometry Parity for Leads & Clients Pages Complete:**
+  - **Leads Page (`CustomersPage.tsx`):**
+    - Built `.leads-page-head` with `Leads` title, orange lead count badge `<span class="lead-count-badge">`, subtitle `"Track every enquiry from first contact to conversion."`, and header actions (`[ Import ]`, `[ Export ]`, `[ + Add lead ]`).
+    - Built 4-card KPI grid (`.lead-kpi-grid`): New leads (Last 7 days, `↑ 12%`), Qualified (Ready to close, `↑ 8%`), HP (High Potential) (Team-selected labels, `→ 0%`), Follow-ups due (Needs attention, `→ 0%`).
+    - Placed `.lead-view-tabs` navigation bar with active orange underline (`All`, `New`, `Assigned to me`, `Qualified`, `Follow-up due`, `HP (High Potential)`) positioned directly above the toolbar.
+    - Built `.leads-toolbar` with embedded search SVG input, stage selector, `[ Columns ]` modal toggle, `[ More filters ▾ ]` dropdown accordion (Labels, Campaigns, Sort by, Date Range), view mode toggles (List/Kanban), and `[ Duplicates ]` manager link.
+    - Built `.leads-table-card` with table headers (`LEAD`, `PHONE`, `EMAIL`, `COURSE / BUSINESS`, `SOURCE`, `STAGE`, `PRIORITY`, `VALUE`, `NEXT FOLLOW-UP`, `LAST ACTIVITY`, `LABELS`, `ACTIONS`), `.lead-avatar-pill` color hashes, dynamic stage dropdown pill selects, priority badges, and quick-action menu dots.
+    - Built `.leads-table-top-bar` with results count & quick page arrows `‹` / `›`, plus `.leads-table-footer` page navigation buttons.
+  - **Clients Page (`ClientsPage.tsx`):**
+    - Built `.leads-page-head` with `Clients` title, count badge, subtitle `"Your won clients, with their complete relationship and work history."`, and top-right actions (`[ Export ]`, `[ Import clients ]`, `[ + Add client ]`).
+    - Built 4-card KPI grid: New clients (`↑`), Total clients, Portfolio value (`Rs. ...`), High priority.
+    - Built `.lead-view-tabs` (`All`, `Recently won`, `Assigned to me`, `High value`, `High priority`), `.leads-toolbar`, and `.leads-table-card` matching exact EJS client view structure.
+  - **Styles (`app.css`):** Replaced legacy styling with exact EJS class rules for `.leads-page-head`, `.lead-kpi-grid`, `.lead-kpi-card`, `.lead-view-tabs`, `.leads-toolbar`, `.leads-table-card`, and `.lead-stage-pill-select`.
+  - **Verification:** Verified `npm run build` (exit 0), `tsc` (exit 0). Committed to git (`cbe6223`).
+- **ALL 11 FUNCTIONAL DOMAINS + VISUAL PARITY 100% COMPLETE & VERIFIED (tsc exit 0, vite build exit 0, node syntax exit 0).**
 
 
 
