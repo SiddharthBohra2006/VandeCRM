@@ -5,7 +5,7 @@ import {
   BarChart3, FileText, ChevronsUpDown, Check, Plus, ListTodo, Clapperboard,
   Palette, Globe, PenLine, Image as ImageIcon, SquareCheckBig, Search,
   Sparkles, ListChecks, Calendar, UserPlus, Clock, TriangleAlert, Target,
-  Filter, Video,
+  Filter, Video, X, RotateCcw, ArrowUpRight,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -49,6 +49,9 @@ const lucideMap: Record<string, LucideIcon> = {
   video: Video,
   target: Target,
   filter: Filter,
+  x: X,
+  'rotate-ccw': RotateCcw,
+  'arrow-up-right': ArrowUpRight,
 };
 
 // Map Emoji/key-based work-module icons (EJS uses these in a moduleIcons table)

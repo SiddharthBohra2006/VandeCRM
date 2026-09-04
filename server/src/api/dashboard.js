@@ -125,7 +125,11 @@ router.get('/', async (req, res, next) => {
       weeklyWorkProgress,
       recentCustomers: customers.slice(0, 6), attentionCustomers, campaigns, dashboardViews,
       availableDashboardFields: customFields, totalCustomers: customers.length,
-      totalValue: activeCustomers.reduce((sum, item) => sum + (item.value || 0), 0)
+      totalValue: activeCustomers.reduce((sum, item) => sum + (item.value || 0), 0),
+      dashboardCardsCustomized: req.user.dashboardCardsCustomized || false,
+      dashboardHiddenCards: req.user.dashboardHiddenCards || [],
+      dashboardCardOrder: req.user.dashboardCardOrder || [],
+      dashboardHiddenSections: req.user.dashboardHiddenSections || []
     });
   } catch (error) { next(error); }
 });
