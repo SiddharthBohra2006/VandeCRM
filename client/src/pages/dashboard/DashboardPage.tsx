@@ -327,6 +327,9 @@ export default function DashboardPage() {
   const sectionChoices = SECTION_CHOICES.map(([key, label]) => ({ key, label, visible: !editSections.has(key) }));
 
   const dragStartModalPinned = (key: string) => (e: DragEvent) => {
+    if (window.getSelection) {
+      window.getSelection()?.removeAllRanges();
+    }
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', key);
     setDragKey(key);
@@ -344,6 +347,9 @@ export default function DashboardPage() {
   };
 
   const dragStartDashboardMetric = (key: string) => (e: DragEvent) => {
+    if (window.getSelection) {
+      window.getSelection()?.removeAllRanges();
+    }
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', key);
     setDashboardDragKey(key);

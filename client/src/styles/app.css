@@ -6152,11 +6152,25 @@ html.dark-theme body {
   background: var(--panel);
   color: var(--text);
   text-decoration: none;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  -webkit-user-drag: element;
+}
+.dashboard-metric * {
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
 }
 .dashboard-metric:hover { border-color: color-mix(in srgb, var(--row-accent) 40%, var(--border)); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0, 0, 0, .08); }
 .dashboard-metric[draggable="true"] { cursor: grab; }
 .dashboard-metric[draggable="true"]:active { cursor: grabbing; }
-.dashboard-metric.is-dragging { opacity: .42; transform: scale(.98); }
+.dashboard-metric.is-dragging {
+  opacity: .42 !important;
+  transform: scale(.98);
+  border: 2px dashed var(--gold, #ea580c) !important;
+}
 .dashboard-metric[hidden],
 .dashboard-metric.is-hidden,
 .dashboard-metric-row[hidden],
