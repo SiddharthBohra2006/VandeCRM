@@ -131,7 +131,7 @@ F. **Remaining (my ownership) when time permits:** admin-recovery *page* (API do
   1. **3.1** Dashboard customize/pin dialog (two-panel Available/Pinned, drag-reorder, section toggles; per-user persist via new `POST /api/dashboard/preferences` → `dashboardCardsCustomized`/`HiddenCards`/`CardOrder`).
   2. **3.2** Dashboard "movement" grid (`dashboard-movement-grid`, perm-gated: `businesses.view`/`ads.view`/work-module view) + `#movementPreviewDialog`.
   3. **4.1** Sticky/frozen first-column + header on leads table (`CustomersPage.tsx`; EJS uses `table-scroll.js`). 🟡
-  4. **4.2** Confirm whether "Hot Lead" is a distinct tier; port badge if so. 🟡 low.
+   4. **4.2** ✅ RESOLVED 2026-09-04: "Hot" is a summary KPI only (`leadStats.hotLeads`, EJS:761), NOT a per-row badge; already ported at `CustomersPage.tsx:261-262`. No work needed.
   5. **7.1** Build shared `<ConfirmDialog>` (EJS `.simple-dialog` style) in `client/src/components/`; then swap `window.confirm()` in my 4 files (`CustomerDetailPage`×2, `CustomersPage`×1, `DuplicatesPage`×1) + hand component to Antigravity for its 11.
 - **Antigravity's next work (coordination only):** §5 Companies (six missing sections — biggest gap in project), §6 Integrations help/checklist panels, §7.1 swap in its 11 files.
 - **Do NOT re-task (all verified complete by audit):** work board/calendar/drag-drop, work detail subtasks, work-type builder, automations, duplicates merge, CSV import, notifications bell, error pages, auth reset routes, Spotlight search, models/data layer.
