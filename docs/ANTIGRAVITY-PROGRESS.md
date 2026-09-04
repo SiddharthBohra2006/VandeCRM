@@ -156,8 +156,17 @@
     - Built 4-card KPI grid: New clients (`↑`), Total clients, Portfolio value (`Rs. ...`), High priority.
     - Built `.lead-view-tabs` (`All`, `Recently won`, `Assigned to me`, `High value`, `High priority`), `.leads-toolbar`, and `.leads-table-card` matching exact EJS client view structure.
   - **Styles (`app.css`):** Replaced legacy styling with exact EJS class rules for `.leads-page-head`, `.lead-kpi-grid`, `.lead-kpi-card`, `.lead-view-tabs`, `.leads-toolbar`, `.leads-table-card`, and `.lead-stage-pill-select`.
-  - **Verification:** Verified `npm run build` (exit 0), `tsc` (exit 0). Committed to git (`cbe6223`).
+- **Dashboard Customization & Drag-and-Drop Parity Complete:**
+  - Built full EJS `#dashboardCustomizeDialog` 2-column modal (`.dashboard-customize-dialog`, `.pin-cards-split`) in `client/src/pages/dashboard/DashboardPage.tsx`:
+    - Tab 1 ("Dashboard cards"): Left column `AVAILABLE CARDS` with live search and 4 category groups (`Leads & Clients`, `Work & Tasks`, `Finance`, `Custom Fields`) with `+` pin buttons. Right column `PINNED TO DASHBOARD` with counter badge, HTML5 drag-and-drop handles `⠿`, switch toggles (`.switch-toggle`), and `✕` unpin buttons.
+    - Tab 2 ("Page sections"): 6 toggleable dashboard sections (`Work progress`, `Upcoming deadlines`, `Active pipeline`, `Needs attention`, `Recent movements`, `Activity log`) with drag handles and switch toggles.
+    - Footer: `[ ↺ Reset to default ]` button (left) + `[ Cancel ]` and `[ Save changes ]` buttons (right).
+  - Main dashboard `.dashboard-metrics` drag-and-drop metric card reordering with real-time UI reordering and persistence to `POST /api/dashboard/preferences/dashboard` and `localStorage`.
+  - Header matched to EJS: `Good morning, {userName} 👋` greeting + workspace subtitle + date pill + `[ Pin dashboard cards ]` button.
+  - Active Pipeline Kanban column drag-and-drop (`POST /api/dashboard/pipeline/move`).
+  - Verified `npm run build` (exit 0) and committed (`09f9b09`).
 - **ALL 11 FUNCTIONAL DOMAINS + VISUAL PARITY 100% COMPLETE & VERIFIED (tsc exit 0, vite build exit 0, node syntax exit 0).**
+
 
 
 
