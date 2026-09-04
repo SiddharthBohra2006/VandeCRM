@@ -174,7 +174,20 @@
       - Real-time **Live Table Preview** (`.cols-preview-table-card`) rendering sample lead rows (`Rohan Das`, `Ananya Iyer`) updating instantly as columns are toggled or reordered.
     - **Footer:** `[ ↺ Reset ]` (left) + `[ Cancel ]` & `[ Save Layout ]` (right).
   - Integrated into both `CustomersPage.tsx` and `ClientsPage.tsx` with localStorage persistence.
+- **Universal Search Spotlight Modal Parity Complete (`TopBar.tsx` / `SearchModal.tsx`):**
+  - Rebuilt `SearchModal.tsx` and updated `app.css` to 100% EJS visual and functional parity matching `#airbnbSearchModal` / `search.css`:
+    - Top Search input row with orange highlight focus ring, live SVG search icon, clear `✕`, and close modal `✕`.
+    - 7 Category tabs with active orange bottom indicator (`Everything`, `Leads`, `Clients`, `Work & Tasks`, `Meetings & Activity`, `Work History`, `Team`).
+    - Filter control bar: `Date range` preset dropdown (`Anytime`, `Today`, `Yesterday`, `Last 7 days`, `This month`, `Custom range`), `From` / `To` date pickers, `Field` selector (`Last updated`, `Created / Logged`, `Follow-up / Deadline`), and `More filters` button (`/search`).
+    - Default 2-Column Spotlight Grid:
+      - **Left Column:** `⏱ Recent searches` with relative timestamp ("2 min ago", "Yesterday"), return `↵` rerun buttons, and `[ Clear all ]` action. `⚡ Quick access` section with 4 KPI cards (`My follow-ups`, `Open tasks`, `Today's meetings`, `Unread messages`) + `[ View all shortcuts › ]` button.
+      - **Right Column:** `Top results` list with entity badges (`Lead`, `Client`, `Work`, `Task`, `Meeting`, `Team`), relative timestamps, and right navigation chevrons `›`, plus `[ Show more results ▾ ]` action.
+    - Live Search Result View: Grouped category headers with item count badges, highlighted search terms (`<mark>`), and keyboard navigation (ArrowUp/ArrowDown selection, Enter to navigate, Escape to close).
+- **Lead & Client Details Page Parity Complete (`CustomerDetailPage.tsx`):**
+  - Restored `.lead-record-ui .lead-profile-grid` 2-column structure (Left: Overview facts, KPI metrics, Activity composer & timeline, Work items, Files; Right: `.lead-stage-card`, `.lead-owner-card`, `.lead-followup-panel`, `.lead-quick-card`).
+  - Fixed dark mode sidebar bleed and active sidebar navigation highlight when navigating from clients (`?from=clients`).
 - **ALL 11 FUNCTIONAL DOMAINS + VISUAL PARITY 100% COMPLETE & VERIFIED (tsc exit 0, vite build exit 0, node syntax exit 0).**
+
 
 
 
