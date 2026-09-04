@@ -107,20 +107,34 @@ E. ✅ **Chrome Shell UI Parity DONE (2026-09-04):**
 
 F. **Remaining (my ownership) when time permits:** admin-recovery *page* (API done; UI not wired); continue closing per-module sub-action/filter endpoint parity gaps; ensure `index.css` parallel classes (`.stat-card` etc.) are replaced with EJS classes (`.business-panel`, `.dashboard-metric`, etc.) — documented in `docs/REACT-PATTERNS.md`.
 
-## UI PARITY TRACKER (2026-09-04 — biggest remaining gaps, in priority order)
-✅ **Closed this session:** work list board+calendar (#board/calendar), Spotlight Search Modal, **Settings custom-modules builder + Automations (items #6 & #7 — see WorkTypeBuilder.tsx / AutomationsTab.tsx)**.
-> **NOTE:** Codex departed 2026-09-04. Items #1–#5 (Dashboard/Leads/Clients + detail views) were Codex-owned but are **now OpenCode's responsibility** (see OWNERSHIP.md).
-1. **Dashboard parity** (PARTIAL ✅: metric-icon card theming `getCardTheme`/`.dashboard-metric-icon`, weekly chart today-highlight + tooltips, rich pipeline kanban cards) — REMAINING: 2-col card-pinning modal (`#dashboardCustomizeDialog`).
-2. **Leads table parity** — horizontal stage-filter pills w/ counts, 32px avatar circles (`getAvatarColor`), WhatsApp/Call quick-actions, Hot Lead/High Potential badges, sticky header + frozen first column.
-3. **Clients table parity** — portfolio KPI cards, won-deal value tags, active-project counts, account-manager avatar column.
-4. **Lead detail parity** — 1-click contact strip (`.lead-profile-contact-buttons`), Quick Activity Composer (Call/WhatsApp/Message/Note w/ instant timeline refresh), follow-up quick-postpone (+1d/+3d/+1w), persistent right-sidebar controls (`.sidebar-box-section`).
-5. **Client detail parity** — client summary KPI grid (`.client-summary-grid`), linked work items tab w/ progress bars + module badges, documents/folders + preview popup.
-6. ✅ **Settings: Custom modules (work-types) builder** — DONE (`WorkTypeBuilder.tsx`, `POST /settings/work-types`, `POST /settings/work-types/:id`, `DELETE /settings/work-types/:id`, `workTypeParts` serialization).
-7. ✅ **Settings: Automations** — DONE (`AutomationsTab.tsx`, `POST /settings/automations`, `POST /settings/automations/:id/toggle`, `POST /settings/automations/:id/delete`).
-8. **Work detail parity** — summary sidebar (Created by/on, Last updated), activity timeline feed, secondary assignee, collaborators, start date, links + custom-field sections, per-subtask deadline/priority, subtask tree in list. (🔧 Antigravity ported to ~100% in working tree — verify/commit.)
-9. **Lead duplicates page** (`customers/duplicates.ejs`) — no React route.
-10. **Error pages** 403/404/500 — ✅ built by Antigravity (`NotFoundPage`/`ForbiddenPage`, `*` + `/403` routes) — verify/commit.
-11. **Inline-style consolidation** — replace ad-hoc `style={{...}}` with EJS classes (`.work-card-panel`, `.summary-card-panel`, `.collaborator-pill-grid`, etc.).
+## UI PARITY TRACKER (2026-09-04 — REBASED AFTER ALL CODEIGHT-OWNED ITEMS LANDED)
+✅ **All former-Codex-owned domains are now committed and the working tree is CLEAN.**
+> **IMPORTANT — Codex departed 2026-09-04 permanently and will NOT return.** Former-Codex domains were SPLIT per user decision: **OpenCode owns Dashboard + Customers/Leads** (incl. duplicates); **Antigravity owns Clients** (won-customer sub-view + client detail). See OWNERSHIP.md.
+1. ✅ **Dashboard parity** — DONE (metric-icon card theming `getCardTheme`/`.dashboard-metric-icon`, weekly chart today-highlight + tooltips, rich pipeline kanban cards). *REMAINING only if pursued: 2-col card-pinning modal (`#dashboardCustomizeDialog`).*
+2. ✅ **Leads table parity** — DONE (stage-filter pills w/ counts, 32px avatar circles `getAvatarColor`, priority badges, stick behavior, view tabs All/New/Assigned/Qualified/Recently updated/High Potential/Overdue). Committed.
+3. ✅ **Clients table parity** — **DONE by Antigravity** (avatar pills, WhatsApp/Call quick links, priority badges, KPI metrics) — commit `5b2a78a`.
+4. ✅ **Lead detail parity** — DONE (Codex's complete composer: tabbed Note/Call/Email/WhatsApp/Meeting/Task activities `handleLogActivity`, timeline search/filter, follow-up date/time, quick-reschedule, attachments manager, stage/owner sidebar controls). Committed.
+5. **Client detail parity** — client summary KPI grid (`.client-summary-grid`), linked work items tab w/ progress bars + module badges, documents/folders + preview popup. **(Antigravity's Clients domain — verify/commit.)**
+6. ✅ **Settings: Custom modules (work-types) builder** — DONE (`WorkTypeBuilder.tsx`, workTypes routes).
+7. ✅ **Settings: Automations** — DONE (`AutomationsTab.tsx`, automations routes).
+8. ✅ **Work detail parity** — DONE (~100% EJS, Antigravity). Committed in `ba05944`.
+9. ✅ **Lead duplicates page** — DONE (`DuplicatesPage.tsx` review + merge). Committed in `2b4bb21`.
+10. ✅ **Error pages** 403/404/500 — DONE (Antigravity `NotFoundPage`/`ForbiddenPage`). Committed.
+11. **Inline-style consolidation** — STILL OPEN (low priority): replace remaining ad-hoc `style={{...}}` with EJS classes.
+
+## SESSION-COMPLETE NOTES (2026-09-04) — for future-me
+- **State:** Everything is committed, working tree is CLEAN. Local-only (no `origin` remote).
+- **Split (post-Codex):** OpenCode = Dashboard + Customers/Leads (+duplicates); Antigravity = Clients. Do NOT work Antigravity's Clients files without coordination even though they were touched this session.
+- **CODE-MODE LESSON (critical for concurrent agents):** Antigravity is ACTIVE and committing concurrently via `git add -A`. During this session a stale `read` made me re-add duplicate state that Codex/Antigravity had already implemented, causing TS2451 redeclaration errors. **ALWAYS re-`git status` + re-`read` shared pages immediately before editing them, and after every remote-style commit, to detect concurrent changes. Verify my edits still exist afterward** (their `git add -A` can sweep mine up or conflict).
+- **ClientsPage concurrency example:** Antigravity committed the Clients avatar-pill parity as `5b2a78a` while I was finishing the split docs — my own ClientsPage `git commit` found "nothing to commit, working tree clean" because Antigravity had already landed the SAME change. Expect this vacillation.
+- **Next OpenCode move — INDEPENDENT AUDIT BACKLOG (see `docs/REACT-MIGRATION-GAP-AUDIT.md`, saved fresh 2026-09-04):**
+  1. **3.1** Dashboard customize/pin dialog (two-panel Available/Pinned, drag-reorder, section toggles; per-user persist via new `POST /api/dashboard/preferences` → `dashboardCardsCustomized`/`HiddenCards`/`CardOrder`).
+  2. **3.2** Dashboard "movement" grid (`dashboard-movement-grid`, perm-gated: `businesses.view`/`ads.view`/work-module view) + `#movementPreviewDialog`.
+  3. **4.1** Sticky/frozen first-column + header on leads table (`CustomersPage.tsx`; EJS uses `table-scroll.js`). 🟡
+  4. **4.2** Confirm whether "Hot Lead" is a distinct tier; port badge if so. 🟡 low.
+  5. **7.1** Build shared `<ConfirmDialog>` (EJS `.simple-dialog` style) in `client/src/components/`; then swap `window.confirm()` in my 4 files (`CustomerDetailPage`×2, `CustomersPage`×1, `DuplicatesPage`×1) + hand component to Antigravity for its 11.
+- **Antigravity's next work (coordination only):** §5 Companies (six missing sections — biggest gap in project), §6 Integrations help/checklist panels, §7.1 swap in its 11 files.
+- **Do NOT re-task (all verified complete by audit):** work board/calendar/drag-drop, work detail subtasks, work-type builder, automations, duplicates merge, CSV import, notifications bell, error pages, auth reset routes, Spotlight search, models/data layer.
 
 ## Verification Commands (fresh 2026-09-04)
 - Server boot + route probe: `cd server; node src/server.js` (or Start-Process w/ PORT=5099). Then with a JWT: `Invoke-WebRequest http://localhost:PORT/api/<route> -Headers @{Authorization="Bearer <token>"}` — expect HTTP 200.
