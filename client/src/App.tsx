@@ -22,6 +22,7 @@ import WorkDetailPage from './pages/work/WorkDetailPage';
 import TasksPage from './pages/tasks/TasksPage';
 import TeamPage from './pages/team/TeamPage';
 import SettingsPage from './pages/settings/SettingsPage';
+import SetupPage from './pages/settings/SetupPage';
 import MailPage from './pages/mail/MailPage';
 import IntegrationsPage from './pages/integrations/IntegrationsPage';
 import AuditPage from './pages/audit/AuditPage';
@@ -31,6 +32,7 @@ import AnalyticsPage from './pages/analytics/AnalyticsPage';
 import ReportsIndexPage from './pages/reports/ReportsIndexPage';
 import ReportTablePage from './pages/reports/ReportTablePage';
 import ModuleReportBuilderPage from './pages/reports/ModuleReportBuilderPage';
+import ClientDashboardPage from './pages/clients/ClientDashboardPage';
 import NotFoundPage from './pages/errors/NotFoundPage';
 import ForbiddenPage from './pages/errors/ForbiddenPage';
 
@@ -65,12 +67,14 @@ export default function App() {
             <Route path="/customers/duplicates" element={<DuplicatesPage />} />
             <Route path="/customers/:id" element={<CustomerDetailPage />} />
             <Route path="/clients" element={<ClientsPage />} />
+            <Route path="/client-dashboard" element={<ClientDashboardPage />} />
             <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
             <Route path="/work" element={<WorkCenterPage />} />
             <Route path="/work/:type" element={<WorkListPage />} />
             <Route path="/work/:type/:id" element={<WorkDetailPage />} />
             <Route path="/team" element={<TeamPage />} />
+            <Route path="/settings/setup" element={<SetupPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/companies" element={<CompaniesPage />} />
             <Route path="/companies/:id" element={<CompanyDetailPage />} />

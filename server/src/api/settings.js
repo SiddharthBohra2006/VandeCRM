@@ -11,8 +11,10 @@ const Customer = require('../models/Customer');
 const CustomRecord = require('../models/CustomRecord');
 const CustomRole = require('../models/CustomRole');
 const User = require('../models/User');
+const Campaign = require('../models/Campaign');
 const { slugify } = require('../utils/slug');
 const { logAudit } = require('../utils/audit');
+const crmPresets = require('../config/crmPresets');
 
 const router = express.Router();
 router.use(requireApiAuth);
@@ -22,6 +24,113 @@ function workspace(req, res) {
   res.status(400).json({ ok: false, error: 'Select an active CRM workspace first.' });
   return null;
 }
+
+// ==================== SETUP WIZARD ====================
+
+// GET /api/settings/setup — Setup wizard data (admin only)
+router.get('/setup', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Access denied' });
+    const organization = req.user.organization._id;
+    const companyId = workspace(req, res);
+    if (!companyId) return;
+
+    const [company, teamCount, stageCount, fieldCount, labelCount, leadCount, workTypeCount, campaignCount, totalCompanyCount, hasDemoData] = await Promise.all([
+      ClientCompany.findOne({ _id: companyId, organization }).select('name website contactPerson email phone').lean(),
+      User.countDocuments({ organization, isActive: true }),
+      CrmStage.countDocuments({ organization, clientCompany: companyId, isActive: true }),
+      CustomField.countDocuments({ organization, clientCompany: companyId, entity: 'customer', isActive: true }),
+      CrmLabel.countDocuments({ organization, clientCompany: companyId, isActive: true }),
+      Customer.countDocuments({ organization, clientCompany: companyId }),
+      WorkType.countDocuments({ organization, clientCompany: companyId, isActive: true }),
+      Campaign.countDocuments({ organization, clientCompany: companyId, status: { $ne: 'archived' } }),
+      ClientCompany.countDocuments({ organization }),
+      Customer.exists({ organization, clientCompany: companyId, email: { $in: ['aarav.sharma@example.com', 'neha.patel@example.com', 'rohan.das@example.com'] } })
+    ]);
+
+    const steps = [
+      { title: 'Company profile', detail: 'Add the business contact details for this CRM workspace.', href: `/companies/${companyId}`, done: Boolean(company?.website || company?.contactPerson || company?.email || company?.phone), action: 'Set up profile' },
+      { title: 'Team access', detail: 'Invite the people who will use this CRM and give them the right role.', href: '/team', done: teamCount > 1, action: 'Manage team' },
+      { title: 'Pipeline', detail: 'Rename stages so they match how this company sells.', href: '/settings#stages', done: stageCount > 0, action: 'Customize stages' },
+      { title: 'Fields and labels', detail: 'Add the information and tags this company needs to track.', href: '/settings#fields', done: fieldCount > 0 || labelCount > 0, action: 'Customize CRM' },
+      { title: 'Import existing leads', detail: 'Upload a CSV, review duplicates and mapping, then confirm the import.', href: '/customers', done: leadCount > 0, action: 'Import leads' },
+      { title: 'Work types and targets', detail: 'Choose the work your team delivers and set the fields and statuses it needs.', href: '/settings#work-types', done: workTypeCount > 0, action: 'Customize work' },
+      { title: 'Campaigns and integrations', detail: 'Optional: add active campaigns or connect lead and reporting sources.', href: '/campaigns', done: campaignCount > 0, optional: true, action: 'Configure optional tools' },
+      { title: 'Review and launch', detail: 'Open the dashboard and start working from the CRM you configured.', href: '/', done: false, action: 'Open dashboard' }
+    ];
+    const requiredSteps = steps.filter(step => !step.optional && step.title !== 'Review and launch');
+    steps[steps.length - 1].done = requiredSteps.every(step => step.done);
+
+    res.json({
+      ok: true,
+      title: `Set up ${company?.name || 'CRM'}`,
+      company,
+      steps,
+      completedSteps: requiredSteps.filter(step => step.done).length,
+      requiredStepCount: requiredSteps.length,
+      isFirstCompany: totalCompanyCount === 1,
+      leadCount,
+      hasDemoData: Boolean(hasDemoData),
+      presets: crmPresets,
+    });
+  } catch (error) { next(error); }
+});
+
+// POST /api/settings/setup/preset — Apply an industry preset (admin only)
+router.post('/setup/preset', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Access denied' });
+    const preset = crmPresets[req.body.preset];
+    const organization = req.user.organization._id;
+    const clientCompany = workspace(req, res);
+    if (!clientCompany) return;
+    if (!preset || req.body.confirm !== 'replace') {
+      return res.status(400).json({ ok: false, error: 'Choose a preset and confirm the replacement.' });
+    }
+
+    const { deleteOnboardingData } = require('../services/defaults');
+    await deleteOnboardingData(organization, clientCompany);
+
+    if (await Customer.exists({ organization, clientCompany })) {
+      return res.status(400).json({ ok: false, error: 'Presets can only be applied before leads are imported.' });
+    }
+    await Promise.all([CrmStage.deleteMany({ organization, clientCompany }), CrmLabel.deleteMany({ organization, clientCompany }), CustomField.deleteMany({ organization, clientCompany, entity: 'customer' })]);
+    await CrmStage.insertMany(preset.stages.map((stage, index) => ({ organization, clientCompany, name: stage.name, key: slugify(stage.name), order: (index + 1) * 10, isDefault: index === 0, isWon: stage.isWon === true, isLost: stage.isLost === true })));
+    await CrmLabel.insertMany(preset.labels.map(name => ({ organization, clientCompany, name })));
+    await CustomField.insertMany(preset.fields.map(([label, type = 'text', options = []], index) => ({ organization, clientCompany, entity: 'customer', label, key: slugify(label), type, options, order: (index + 1) * 10 })));
+
+    await logAudit(req, { action: 'preset_apply', entityType: 'crm_preset', entityName: preset.label, message: `Applied ${preset.label} CRM preset.` });
+    res.json({ ok: true, message: 'Preset applied. You can customize everything next.' });
+  } catch (error) { next(error); }
+});
+
+// POST /api/settings/setup/clear-demo — Clear onboarding demo data (admin only)
+router.post('/setup/clear-demo', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Access denied' });
+    const organization = req.user.organization._id;
+    const clientCompany = workspace(req, res);
+    if (!clientCompany) return;
+    const { deleteOnboardingData } = require('../services/defaults');
+    await deleteOnboardingData(organization, clientCompany);
+    await logAudit(req, { action: 'clear_demo_data', entityType: 'crm_setup', message: 'Cleared onboarding demo data.' });
+    res.json({ ok: true, message: 'Onboarding demo data cleared.' });
+  } catch (error) { next(error); }
+});
+
+// POST /api/settings/setup/load-demo — Load onboarding demo data (admin only)
+router.post('/setup/load-demo', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Access denied' });
+    const organization = req.user.organization._id;
+    const clientCompany = workspace(req, res);
+    if (!clientCompany) return;
+    const { seedOnboardingData } = require('../services/defaults');
+    await seedOnboardingData(organization, clientCompany);
+    await logAudit(req, { action: 'load_demo_data', entityType: 'crm_setup', message: 'Loaded onboarding demo data.' });
+    res.json({ ok: true, message: 'Onboarding demo data loaded. Go to the dashboard to explore!' });
+  } catch (error) { next(error); }
+});
 
 // GET /api/settings — Settings overview data
 router.get('/', async (req, res, next) => {

@@ -87,3 +87,40 @@ export const settingsApi = {
   deleteAutomation: (id: string) =>
     api.post<{ ok: true }>(`/settings/automations/${id}/delete`),
 };
+
+export interface SetupStep {
+  title: string;
+  detail: string;
+  href: string;
+  done: boolean;
+  action: string;
+  optional?: boolean;
+}
+
+export interface SetupPreset {
+  label: string;
+  stages: { name: string; isWon?: boolean; isLost?: boolean }[];
+  labels: string[];
+  fields: [string, string?, string[]?][];
+}
+
+export interface SetupResponse {
+  ok: true;
+  title: string;
+  company: { _id: string; name: string; website?: string; contactPerson?: string; email?: string; phone?: string } | null;
+  steps: SetupStep[];
+  completedSteps: number;
+  requiredStepCount: number;
+  isFirstCompany: boolean;
+  leadCount: number;
+  hasDemoData: boolean;
+  presets: Record<string, SetupPreset>;
+}
+
+export const setupApi = {
+  get: () => api.get<SetupResponse>('/settings/setup'),
+  applyPreset: (preset: string) =>
+    api.post<{ ok: true; message: string }>('/settings/setup/preset', { preset, confirm: 'replace' }),
+  clearDemo: () => api.post<{ ok: true; message: string }>('/settings/setup/clear-demo'),
+  loadDemo: () => api.post<{ ok: true; message: string }>('/settings/setup/load-demo'),
+};
