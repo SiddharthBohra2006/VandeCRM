@@ -138,10 +138,12 @@
   - Fully enhanced `client/src/pages/companies/CompanyDetailPage.tsx` to 100% EJS parity: 10-card metric KPI grid, pre-scoped inline "Add Lead to Company" drawer, company attachments upload & stored documents list with download/delete actions, leads portfolio table with stage badges, filterable workspace activity stream (5-pill filter bar: All/Notes/Stages/Calls/Emails), collaborators panel with avatar badges & quick add/remove, and campaign performance aggregation.
 - **Integrations Page Parity Complete (Section 6):**
   - Enhanced `client/src/pages/integrations/IntegrationsPage.tsx`: Added side-by-side instructional help panels for Meta Ads ("How to get Meta Credentials", "Meta Setup Checklist"), GA4 ("How to get Google credentials", "GA4 Setup Checklist"), live Webhook code snippets (cURL & JavaScript Fetch), and clear credentials / sync all actions.
-- **ConfirmDialog Modal Implementation Complete (Section 7):**
-  - Built accessible, reusable `<ConfirmDialog>` component in `client/src/components/ConfirmDialog.tsx` with danger/warning/primary variants, keyboard Escape listener, and backdrop click handlers.
-  - Replaced native `window.confirm()` calls across all Antigravity domain pages: `CampaignDetailPage.tsx`, `CompanyDetailPage.tsx`, `MailPage.tsx`, `settings/AutomationsTab.tsx`, `SettingsPage.tsx`, `settings/WorkTypeBuilder.tsx`, `TeamPage.tsx`, `WorkDetailPage.tsx`.
-- **ALL ASSIGNED FUNCTIONAL DOMAINS + SECTION 5, 6, 7 COMPLETE & VERIFIED (tsc exit 0, vite build exit 0, node syntax exit 0).**
+- **Fine-Tuning & Polish Complete (Section 9):**
+  - Enhanced `TasksPage.tsx`: Added lead initial avatar circles with deterministic palettes, normalized telephone strings, and 1-click WhatsApp (`https://wa.me/...`) and Call (`tel:...`) action links in every follow-up queue row.
+  - Enhanced `SettingsPage.tsx`: Added brand color customization pickers (Primary `--gold`, Secondary `--teal`) with live UI swatch preview (buttons, stage badges, active filters) and instant root CSS variables propagation.
+  - Enhanced `AppLayout.tsx`: Added `localStorage` persistence for the sidebar collapsed/expanded state (`vande_sidebar_open`).
+  - Enhanced `DashboardPage.tsx`: Added dynamic time-of-day greeting (`Good morning/afternoon/evening, {name} 👋`) and workspace subtitle context.
+- **ALL 11 FUNCTIONAL DOMAINS + SECTION 5, 6, 7, 8, 9 100% COMPLETE & VERIFIED (tsc exit 0, vite build exit 0, node syntax exit 0).**
 
 
 

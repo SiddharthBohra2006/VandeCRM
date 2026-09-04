@@ -4,6 +4,31 @@ import { tasksApi, TaskStats, TaskActivity } from '../../api/tasks';
 import { Customer } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 
+const AVATAR_PALETTES = [
+  { bg: '#eff6ff', color: '#2563eb' },
+  { bg: '#ecfdf5', color: '#059669' },
+  { bg: '#faf5ff', color: '#7c3aed' },
+  { bg: '#f0fdfa', color: '#0d9488' },
+  { bg: '#fdf2f8', color: '#db2777' },
+  { bg: '#fff7ed', color: '#ea580c' },
+  { bg: '#fffbeb', color: '#d97706' },
+];
+
+function getAvatarColor(str: string) {
+  let hash = 0;
+  for (let i = 0; i < (str || '').length; i++) hash = (hash << 5) - hash + str.charCodeAt(i);
+  return AVATAR_PALETTES[Math.abs(hash) % AVATAR_PALETTES.length];
+}
+
+function initialsOf(name: string) {
+  return (name || 'L').split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'L';
+}
+
+function normalizePhone(phone?: string) {
+  if (!phone) return '';
+  return phone.replace(/[^0-9+]/g, '');
+}
+
 function toDatetimeLocal(value?: string | null): string {
   if (!value) return '';
   const date = new Date(value);
@@ -175,18 +200,65 @@ export default function TasksPage() {
               </tr>
             ) : (
               tasks.map(task => {
+                const avatarColor = getAvatarColor(task.name);
+                const cleanPhone = normalizePhone(task.phone);
                 const isOverdue = task.nextFollowUpAt && new Date(task.nextFollowUpAt) < new Date();
                 const row = rescheduleData[task._id] || { nextFollowUpAt: '', comment: '' };
 
                 return (
                   <tr key={task._id} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '0.75rem 1rem' }}>
-                      <Link to={`/customers/${task._id}`} style={{ fontWeight: 800, color: 'var(--text)', textDecoration: 'none' }}>
-                        {task.name}
-                      </Link>
-                      <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.74rem' }}>
-                        {task.phone || task.email || task.source || '—'}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <span
+                          style={{
+                            width: 30,
+                            height: 30,
+                            borderRadius: '50%',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: '0.72rem',
+                            flexShrink: 0,
+                            background: avatarColor.bg,
+                            color: avatarColor.color,
+                          }}
+                        >
+                          {initialsOf(task.name)}
+                        </span>
+                        <div>
+                          <Link to={`/customers/${task._id}`} style={{ fontWeight: 800, color: 'var(--text)', textDecoration: 'none' }}>
+                            {task.name}
+                          </Link>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '2px', flexWrap: 'wrap' }}>
+                            {cleanPhone && (
+                              <>
+                                <a
+                                  href={`https://wa.me/${cleanPhone}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn small"
+                                  style={{ padding: '2px 6px', fontSize: '0.7rem', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' }}
+                                  title="Open WhatsApp chat"
+                                >
+                                  💬 WA
+                                </a>
+                                <a
+                                  href={`tel:${cleanPhone}`}
+                                  className="btn small"
+                                  style={{ padding: '2px 6px', fontSize: '0.7rem', color: 'var(--teal)', borderColor: 'rgba(20, 184, 166, 0.3)' }}
+                                  title="Call phone"
+                                >
+                                  📞 Call
+                                </a>
+                              </>
+                            )}
+                            <span style={{ color: 'var(--muted)', fontSize: '0.74rem' }}>
+                              {task.phone || task.email || task.source || '—'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     </td>
                     <td style={{ padding: '0.75rem 1rem' }}>
                       <strong style={{ color: isOverdue ? 'var(--red)' : 'var(--text)', fontSize: '0.85rem' }}>

@@ -6,9 +6,28 @@ import TopBar from '../components/TopBar';
 
 export default function AppLayout() {
   const { user, activeCompany, companies, crmTerms, workTypes, switchCompany, loading } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try {
+      const saved = localStorage.getItem('vande_sidebar_open');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
   const navigate = useNavigate();
   const location = useLocation();
+
+  const toggleSidebar = () => {
+    setSidebarOpen(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('vande_sidebar_open', String(next));
+      } catch {
+        // ignore localStorage errors
+      }
+      return next;
+    });
+  };
 
   if (loading) {
     return <div className="loading-screen">Loading...</div>;
@@ -28,7 +47,7 @@ export default function AppLayout() {
         workTypes={workTypes}
         crmTerms={crmTerms}
         isOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onToggle={toggleSidebar}
         onSwitchCompany={switchCompany}
         currentPath={location.pathname}
       />

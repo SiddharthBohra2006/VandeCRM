@@ -154,7 +154,7 @@ function movementTone(group: string, tone?: string) {
 }
 
 export default function DashboardPage() {
-  const { crmTerms } = useAuth();
+  const { user, activeCompany, crmTerms } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -326,13 +326,20 @@ export default function DashboardPage() {
     setDragKey(null);
   };
 
+  const currentHour = new Date().getHours();
+  const timeGreeting = currentHour < 12 ? 'Good morning' : currentHour < 17 ? 'Good afternoon' : 'Good evening';
+  const userName = user?.name ? user.name.split(' ')[0] : 'there';
+
   return (
     <div className="page-container">
       <section className="page-head dashboard-head">
         <div>
-          <p className="eyebrow">Workspace overview</p>
+          <p className="eyebrow">{timeGreeting}, {userName} 👋</p>
           <h1>Dashboard</h1>
-          <p>Track pipeline health, delivery, and the work needing attention.</p>
+          <p className="page-subtitle">
+            {activeCompany ? `Workspace overview for ${activeCompany.name}. ` : 'Workspace overview. '}
+            Track pipeline health, delivery, and the work needing attention.
+          </p>
         </div>
         <div className="dashboard-head-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button className="btn" type="button" onClick={openCustomize}>Pin dashboard cards</button>

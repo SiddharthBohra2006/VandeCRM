@@ -261,6 +261,8 @@ export default function SettingsPage() {
     try {
       await settingsApi.updateTheme({ gold, teal });
       setTheme(prev => ({ ...prev, gold, teal }));
+      document.documentElement.style.setProperty('--gold', gold);
+      document.documentElement.style.setProperty('--teal', teal);
       setSuccess('Theme updated.');
     } catch (err: any) {
       setError(err.message || 'Failed to update theme');
@@ -619,43 +621,120 @@ export default function SettingsPage() {
 
       {/* APPEARANCE TAB */}
       {activeCategory === 'appearance' && (
-        <article className="team-card" style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)', padding: '1.5rem' }}>
-          <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '1rem' }}>Theme Presets</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
-            {[
-              { name: 'Vande Classic Dark', gold: '#ffcc00', teal: '#00bcd4' },
-              { name: 'Warm Amber & Emerald', gold: '#f59e0b', teal: '#10b981' },
-              { name: 'Royal Indigo & Cyan', gold: '#6366f1', teal: '#06b6d4' },
-              { name: 'Crimson & Slate', gold: '#e11d48', teal: '#0f766e' },
-            ].map(preset => (
-              <div
-                key={preset.name}
-                style={{
-                  padding: '1rem',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  background: 'var(--bg-soft, rgba(255,255,255,0.02))',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.75rem',
-                }}
-              >
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <div style={{ width: '24px', height: '24px', borderRadius: '4px', background: preset.gold }} />
-                  <div style={{ width: '24px', height: '24px', borderRadius: '4px', background: preset.teal }} />
-                </div>
-                <strong>{preset.name}</strong>
-                <button
-                  type="button"
-                  className="btn small outline"
-                  onClick={() => handleApplyThemePreset(preset.gold, preset.teal)}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <article className="team-card" style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)', padding: '1.5rem' }}>
+            <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Theme Presets</h2>
+            <p style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+              Choose a curated color palette for your organization.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
+              {[
+                { name: 'Vande Classic Dark', gold: '#ffcc00', teal: '#00bcd4' },
+                { name: 'Warm Amber & Emerald', gold: '#f59e0b', teal: '#10b981' },
+                { name: 'Royal Indigo & Cyan', gold: '#6366f1', teal: '#06b6d4' },
+                { name: 'Crimson & Slate', gold: '#e11d48', teal: '#0f766e' },
+                { name: 'Sunset Orange & Sky', gold: '#ea580c', teal: '#0284c7' },
+                { name: 'Violet & Rose', gold: '#8b5cf6', teal: '#f43f5e' },
+              ].map(preset => (
+                <div
+                  key={preset.name}
+                  style={{
+                    padding: '1rem',
+                    border: `1px solid ${theme.gold === preset.gold && theme.teal === preset.teal ? 'var(--gold)' : 'var(--border)'}`,
+                    borderRadius: '8px',
+                    background: 'var(--bg-soft, rgba(255,255,255,0.02))',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.75rem',
+                  }}
                 >
-                  Apply Preset
-                </button>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <div style={{ width: '24px', height: '24px', borderRadius: '4px', background: preset.gold }} title={`Primary: ${preset.gold}`} />
+                    <div style={{ width: '24px', height: '24px', borderRadius: '4px', background: preset.teal }} title={`Secondary: ${preset.teal}`} />
+                    {theme.gold === preset.gold && theme.teal === preset.teal && (
+                      <span className="pill" style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--gold)' }}>Active</span>
+                    )}
+                  </div>
+                  <strong style={{ fontSize: '0.9rem' }}>{preset.name}</strong>
+                  <button
+                    type="button"
+                    className="btn small outline"
+                    onClick={() => handleApplyThemePreset(preset.gold, preset.teal)}
+                  >
+                    Apply Preset
+                  </button>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="team-card" style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)', padding: '1.5rem' }}>
+            <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Custom Brand Colors</h2>
+            <p style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+              Define precise brand colors for accent buttons, focus states, and key metrics.
+            </p>
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                handleApplyThemePreset(theme.gold, theme.teal);
+              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}
+            >
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
+                  Primary Brand Color (--gold)
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <input
+                      type="color"
+                      value={theme.gold || '#ffcc00'}
+                      onChange={e => setTheme({ ...theme, gold: e.target.value })}
+                      style={{ height: '38px', width: '50px', padding: '2px', border: 'none', borderRadius: '4px' }}
+                    />
+                    <input
+                      type="text"
+                      value={theme.gold || '#ffcc00'}
+                      onChange={e => setTheme({ ...theme, gold: e.target.value })}
+                      style={{ flex: 1, textTransform: 'uppercase' }}
+                    />
+                  </div>
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
+                  Secondary Accent Color (--teal)
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <input
+                      type="color"
+                      value={theme.teal || '#00bcd4'}
+                      onChange={e => setTheme({ ...theme, teal: e.target.value })}
+                      style={{ height: '38px', width: '50px', padding: '2px', border: 'none', borderRadius: '4px' }}
+                    />
+                    <input
+                      type="text"
+                      value={theme.teal || '#00bcd4'}
+                      onChange={e => setTheme({ ...theme, teal: e.target.value })}
+                      style={{ flex: 1, textTransform: 'uppercase' }}
+                    />
+                  </div>
+                </label>
               </div>
-            ))}
-          </div>
-        </article>
+
+              {/* Live UI Elements Preview */}
+              <div style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--bg-soft, rgba(255,255,255,0.02))' }}>
+                <p style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)', margin: '0 0 0.75rem 0' }}>Live UI Preview</p>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button type="button" className="btn primary" style={{ background: theme.gold, color: '#000', borderColor: theme.gold }}>Primary Action</button>
+                  <button type="button" className="btn" style={{ borderColor: theme.teal, color: theme.teal }}>Secondary Action</button>
+                  <span className="stage-badge" style={{ backgroundColor: theme.gold, color: '#000', padding: '3px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700 }}>Stage Badge</span>
+                  <span className="pill" style={{ borderColor: theme.teal, color: theme.teal, padding: '3px 8px', borderRadius: '12px', fontSize: '0.75rem' }}>Active Filter</span>
+                </div>
+              </div>
+
+              <button className="btn primary" type="submit" style={{ alignSelf: 'flex-start', marginTop: '0.5rem' }}>
+                Save Custom Brand Colors
+              </button>
+            </form>
+          </article>
+        </div>
       )}
       {/* CUSTOM WORK TYPES (MODULES) TAB */}
       {activeCategory === 'work-types' && (
