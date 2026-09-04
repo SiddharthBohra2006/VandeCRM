@@ -119,10 +119,7 @@ export default function IntegrationsPage() {
       action: async () => {
         if (!selectedCompanyId) return;
         try {
-          await integrationsApi.saveCredentials(selectedCompanyId, {
-            metaAdAccountId: '',
-            metaAccessToken: '',
-          });
+          await integrationsApi.clearMeta(selectedCompanyId);
           setMetaAdAccountId('');
           setMetaAccessToken('');
           setSuccess('Meta credentials cleared.');
@@ -146,10 +143,7 @@ export default function IntegrationsPage() {
       action: async () => {
         if (!selectedCompanyId) return;
         try {
-          await integrationsApi.saveCredentials(selectedCompanyId, {
-            ga4PropertyId: '',
-            ga4ServiceAccountJson: '',
-          });
+          await integrationsApi.clearGa4(selectedCompanyId);
           setGa4PropertyId('');
           setGa4ServiceAccountJson('');
           setSuccess('GA4 credentials cleared.');
@@ -161,6 +155,31 @@ export default function IntegrationsPage() {
         }
       },
     });
+  }
+
+
+  async function handleApiKeyStatus() {
+    if (!selectedCompanyId) return;
+    try {
+      setSyncing(true); setError('');
+      const next = apiKeyStatus === 'active' ? 'disabled' : 'active';
+      await integrationsApi.setApiKeyStatus(selectedCompanyId, next);
+      setApiKeyStatus(next); setSuccess(`Inbound API key ${next}.`); await loadIntegrations();
+    } catch (err: any) { setError(err.message || 'Failed to update API key'); } finally { setSyncing(false); }
+  }
+
+  function promptRotateApiKey() {
+    setConfirmState({ open: true, title: 'Rotate inbound API key', message: 'The current key will stop working immediately. Update every webhook sender after rotating.', confirmText: 'Rotate key', variant: 'danger', action: async () => {
+      if (!selectedCompanyId) return;
+      try { await integrationsApi.rotateApiKey(selectedCompanyId); setSuccess('Inbound API key rotated.'); await loadIntegrations(); }
+      catch (err: any) { setError(err.message || 'Failed to rotate API key'); }
+      finally { setConfirmState(prev => ({ ...prev, open: false })); }
+    }});
+  }
+
+  async function handleRunDue() {
+    try { setSyncing(true); setError(''); const result = await integrationsApi.runDue(); setSuccess(`Ran ${result.count} due integration sync(s).`); await loadIntegrations(); }
+    catch (err: any) { setError(err.message || 'Failed to run scheduled syncs'); } finally { setSyncing(false); }
   }
 
   async function handleSaveSchedule(e: React.FormEvent) {
@@ -365,6 +384,10 @@ export default function IntegrationsPage() {
                 </strong>
               </span>
             </div>
+            <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
+              <button type="button" className="btn small outline" disabled={syncing} onClick={handleRunDue}>Run Due Syncs</button>
+              <button type="button" className="btn small outline" disabled={syncing} onClick={handleApiKeyStatus}>{apiKeyStatus === 'active' ? 'Disable API Key' : 'Enable API Key'}</button>
+              <button type="button" className="btn small outline" disabled={syncing} onClick={promptRotateApiKey}>Rotate API Key</button>
             <button
               type="button"
               className="btn small primary"
@@ -373,6 +396,7 @@ export default function IntegrationsPage() {
             >
               {syncing ? 'Syncing Brand...' : '⚡ Sync Brand Now'}
             </button>
+            </div>
           </div>
         )}
 

@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { customersApi, downloadCustomersCsv, downloadImportTemplate, CustomersListResponse, ImportPreviewRow } from '../../api/customers';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import CustomizeColumnsModal, { ColumnDefinition } from '../../components/CustomizeColumnsModal';
-import { SCHEMA_OPTIONS, parseCsvRow, suggestTarget } from '../../utils/importCsv';
+import { SCHEMA_OPTIONS, importFileToCsv, parseCsvRow, suggestTarget } from '../../utils/importCsv';
 
 const CUSTOMER_COLUMNS: ColumnDefinition[] = [
   { key: 'name', label: 'Lead', icon: 'user', defaultVisible: true },
@@ -313,41 +313,22 @@ export default function CustomersPage() {
     } catch { /* defaults remain empty */ }
   }
 
-  function handleCsvFile(file: File | undefined | null) {
-    if (!file) {
-      setCsvFileName('');
-      setCsvText('');
-      setCsvHeaders([]);
-      setCsvMappings({});
-      setCsvStatus('Choose a CSV to preview its database impact.');
-      return;
-    }
-    if (!/\.csv$/i.test(file.name)) {
-      setCsvFileName(file.name);
-      setCsvText('');
-      setCsvHeaders([]);
-      setCsvMappings({});
-      setCsvStatus('Excel files (.xlsx/.xls) are not supported on this screen yet. Export the sheet as CSV (File → Save As → CSV UTF-8) and upload that file instead.');
-      return;
-    }
-    setCsvFileName(file.name);
-    setCsvStatus(`Reading ${file.name}...`);
-    const reader = new FileReader();
-    reader.onload = e => {
-      const text = String(e.target?.result || '');
+  async function handleCsvFile(file: File | undefined | null) {
+    if (!file) { setCsvFileName(''); setCsvText(''); setCsvHeaders([]); setCsvMappings({}); setCsvStatus('Choose an Excel or CSV file to preview its database impact.'); return; }
+    setCsvFileName(file.name); setCsvStatus(`Reading ${file.name}...`);
+    try {
+      const text = await importFileToCsv(file);
       setCsvText(text);
       const lines = text.split(/\r?\n/);
       const headers = parseCsvRow(lines[0] || '').filter(header => header.trim());
+      if (!headers.length) throw new Error('No columns detected in file.');
       setCsvHeaders(headers);
-      const initialMappings: Record<string, string> = {};
-      headers.forEach(header => { initialMappings[header] = suggestTarget(header); });
-      setCsvMappings(initialMappings);
+      setCsvMappings(Object.fromEntries(headers.map(header => [header, suggestTarget(header)])));
       setCsvStatus(`Loaded ${file.name} (${Math.max(0, lines.length - 1)} rows). Review mappings and click Preview.`);
-    };
-    reader.onerror = () => {
-      setCsvStatus('Failed to read CSV file.');
-    };
-    reader.readAsText(file);
+    } catch (caught) {
+      setCsvText(''); setCsvHeaders([]); setCsvMappings({});
+      setCsvStatus(caught instanceof Error ? caught.message : 'Failed to read import file.');
+    }
   }
 
   async function handlePreviewImport() {
@@ -1105,7 +1086,7 @@ export default function CustomersPage() {
                 </button>
                 <label className="csv-drop-zone">
                   <p>Drop CSV here or click to browse</p>
-                  <input ref={csvInputRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={e => handleCsvFile(e.target.files?.[0])} />
+                  <input ref={csvInputRef} type="file" accept=".xlsx,.xls,.csv,text/csv" style={{ display: 'none' }} onChange={e => handleCsvFile(e.target.files?.[0])} />
                   <span>{csvFileName || 'No file selected'}</span>
                 </label>
                 <p className="csv-file-status">{csvStatus}</p>

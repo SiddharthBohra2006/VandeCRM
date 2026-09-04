@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { customersApi } from '../../api/customers';
 import { useAuth } from '../../contexts/AuthContext';
 import Icon from '../../components/Icons';
-import { SCHEMA_OPTIONS, parseCsvRow, suggestTarget } from '../../utils/importCsv';
+import { SCHEMA_OPTIONS, importFileToCsv, parseCsvRow, suggestTarget } from '../../utils/importCsv';
 
 export default function CustomerImportPage() {
   const navigate = useNavigate();
@@ -45,35 +45,23 @@ export default function CustomerImportPage() {
     }).catch(() => {});
   }, []);
 
-  const handleFile = (file: File | undefined) => {
+  const handleFile = async (file: File | undefined) => {
     if (!file) return;
-    if (!/\.csv$/i.test(file.name)) {
-      setCsvData('');
-      setHeaders([]);
-      setMappings({});
-      setCsvFileName(file.name);
-      setFileStatus('Excel files (.xlsx/.xls) are not supported on this screen yet. Export the sheet as CSV in Excel (File â " Save As â " CSV UTF-8) and upload that file instead.');
-      return;
-    }
     setCsvFileName(file.name);
     setFileStatus(`Reading ${Math.max(1, Math.round(file.size / 1024))} KB file...`);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = (e.target?.result as string) || '';
+    try {
+      const content = await importFileToCsv(file);
       setCsvData(content);
       const lines = content.split(/\r?\n/);
-      const parsed = parseCsvRow(lines[0] || '');
-      if (!parsed.length || !parsed[0]) {
-        setFileStatus('No columns detected in file.');
-        return;
-      }
-      setHeaders(parsed.filter(h => h.trim()));
-      const initialMappings: Record<string, string> = {};
-      parsed.filter(h => h.trim()).forEach(h => { initialMappings[h] = suggestTarget(h); });
-      setMappings(initialMappings);
-      setFileStatus(`${lines.length - 1} rows ready.`);
-    };
-    reader.readAsText(file);
+      const parsed = parseCsvRow(lines[0] || '').filter(h => h.trim());
+      if (!parsed.length) throw new Error('No columns detected in file.');
+      setHeaders(parsed);
+      setMappings(Object.fromEntries(parsed.map(header => [header, suggestTarget(header)])));
+      setFileStatus(`${Math.max(0, lines.length - 1)} rows ready from the first worksheet.`);
+    } catch (caught) {
+      setCsvData(''); setHeaders([]); setMappings({});
+      setFileStatus(caught instanceof Error ? caught.message : 'Failed to read import file.');
+    }
   };
 
   const handlePreview = async () => {
@@ -142,8 +130,8 @@ export default function CustomerImportPage() {
       <section className="team-card wide" style={{ marginBottom: '1.5rem' }}>
         <div className="panel-title-row">
           <div>
-            <h2>Step 1: Upload CSV</h2>
-            <p className="team-muted">Upload a .csv file. For Excel sheets, export to CSV first (File â " Save As â " CSV).</p>
+            <h2>Step 1: Upload Excel or CSV</h2>
+            <p className="team-muted">Upload .xlsx, .xls, or .csv. Excel files use the first worksheet.</p>
           </div>
         </div>
         <label
@@ -156,8 +144,8 @@ export default function CustomerImportPage() {
           }}
           style={{ border: '2px dashed var(--border)', padding: '2rem', textAlign: 'center', borderRadius: 8, cursor: 'pointer', background: 'var(--hover)', display: 'block', marginTop: '1rem' }}
         >
-          <span style={{ fontSize: '0.95rem', color: 'var(--text)', display: 'block', marginBottom: '0.5rem', fontWeight: 700 }}>Drag and drop CSV here, or click to browse</span>
-          <input type="file" accept=".csv,text/csv" style={{ display: 'none' }}
+          <span style={{ fontSize: '0.95rem', color: 'var(--text)', display: 'block', marginBottom: '0.5rem', fontWeight: 700 }}>Drag and drop Excel or CSV here, or click to browse</span>
+          <input type="file" accept=".xlsx,.xls,.csv,text/csv" style={{ display: 'none' }}
             onChange={e => handleFile(e.target.files?.[0])} />
           <span style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--gold)' }}>
             {csvFileName || 'No file selected'}

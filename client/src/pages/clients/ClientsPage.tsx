@@ -3,6 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { clientsApi, ClientsListResponse } from '../../api/clients';
 import { customersApi, downloadCustomersCsv } from '../../api/customers';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import CustomizeColumnsModal, { ColumnDefinition } from '../../components/CustomizeColumnsModal';
 
 const CLIENT_COLUMNS: ColumnDefinition[] = [
@@ -65,6 +66,7 @@ export default function ClientsPage() {
   const [bulkAction, setBulkAction] = useState('');
   const [bulkValue, setBulkValue] = useState('');
   const [applyingBulk, setApplyingBulk] = useState(false);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Column visibility & order
   const [showColumnsModal, setShowColumnsModal] = useState(false);
@@ -215,9 +217,9 @@ export default function ClientsPage() {
     }
   }
 
-  async function handleBulkAction() {
+  async function handleBulkAction(confirmed = false) {
     if (!bulkAction || !selectedIds.size) return;
-    if (bulkAction === 'delete' && !window.confirm(`Delete ${selectedIds.size} selected clients?`)) return;
+    if (bulkAction === 'delete' && !confirmed) { setConfirmBulkDelete(true); return; }
     try {
       setApplyingBulk(true);
       setError('');
@@ -575,7 +577,7 @@ export default function ClientsPage() {
             className="btn small primary"
             type="button"
             disabled={!bulkAction || applyingBulk}
-            onClick={handleBulkAction}
+            onClick={() => void handleBulkAction()}
           >
             {applyingBulk ? 'Applying…' : 'Apply'}
           </button>
@@ -884,6 +886,16 @@ export default function ClientsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete selected clients"
+        message={`Delete ${selectedIds.size} selected clients? This cannot be undone.`}
+        confirmText="Delete clients"
+        loading={applyingBulk}
+        onCancel={() => setConfirmBulkDelete(false)}
+        onConfirm={() => { setConfirmBulkDelete(false); void handleBulkAction(true); }}
+      />
 
       {/* Columns Customization Modal */}
       <CustomizeColumnsModal

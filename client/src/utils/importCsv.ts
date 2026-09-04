@@ -82,3 +82,33 @@ export function suggestTarget(header: string): string {
   if (/^(full|customer|lead|contact)_?name$/.test(key)) return 'name';
   return header;
 }
+
+type SheetJs = { read(data: ArrayBuffer, options: Record<string, unknown>): { SheetNames: string[]; Sheets: Record<string, unknown> }; utils: { sheet_to_csv(sheet: unknown, options: Record<string, unknown>): string } };
+let sheetJsPromise: Promise<SheetJs> | null = null;
+function loadSheetJs(): Promise<SheetJs> {
+  const existing = (window as typeof window & { XLSX?: SheetJs }).XLSX;
+  if (existing) return Promise.resolve(existing);
+  if (sheetJsPromise) return sheetJsPromise;
+  sheetJsPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    script.async = true;
+    script.onload = () => {
+      const loaded = (window as typeof window & { XLSX?: SheetJs }).XLSX;
+      loaded ? resolve(loaded) : reject(new Error('Excel reader did not initialize.'));
+    };
+    script.onerror = () => reject(new Error('Excel reader could not load. Check your connection or save the sheet as CSV.'));
+    document.head.appendChild(script);
+  });
+  return sheetJsPromise;
+}
+
+export async function importFileToCsv(file: File): Promise<string> {
+  if (/\.csv$/i.test(file.name)) return file.text();
+  if (!/\.xlsx?$/i.test(file.name)) throw new Error('Choose a .csv, .xlsx, or .xls file.');
+  const XLSX = await loadSheetJs();
+  const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+  const firstName = workbook.SheetNames[0];
+  if (!firstName || !workbook.Sheets[firstName]) throw new Error('The Excel workbook has no readable worksheet.');
+  return XLSX.utils.sheet_to_csv(workbook.Sheets[firstName], { dateNF: 'yyyy-mm-dd hh:mm' });
+}

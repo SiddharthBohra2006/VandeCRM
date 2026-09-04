@@ -52,6 +52,11 @@ export const integrationsApi = {
   get: () => api.get<IntegrationsResponse>('/integrations'),
   saveCredentials: (companyId: string, data: { metaAdAccountId?: string; metaAccessToken?: string; ga4PropertyId?: string; ga4ServiceAccountJson?: string }) =>
     api.post<{ ok: true; data: any }>(`/integrations/companies/${companyId}/credentials`, data),
+  clearMeta: (companyId: string) => api.post<{ ok: true; data: any }>(`/integrations/companies/${companyId}/meta/clear`),
+  clearGa4: (companyId: string) => api.post<{ ok: true; data: any }>(`/integrations/companies/${companyId}/ga4/clear`),
+  setApiKeyStatus: (companyId: string, apiKeyStatus: 'active' | 'disabled') => api.post<{ ok: true; data: any }>(`/integrations/companies/${companyId}/api-key/status`, { apiKeyStatus }),
+  rotateApiKey: (companyId: string) => api.post<{ ok: true; data: any }>(`/integrations/companies/${companyId}/api-key/rotate`),
+  runDue: () => api.post<{ ok: true; count: number }>('/integrations/scheduled/run-due'),
   saveSyncSettings: (companyId: string, data: { integrationSyncEnabled: boolean; integrationSyncIntervalMinutes: number }) =>
     api.post<{ ok: true; data: any }>(`/integrations/companies/${companyId}/sync-settings`, data),
   syncCompany: (companyId: string) =>

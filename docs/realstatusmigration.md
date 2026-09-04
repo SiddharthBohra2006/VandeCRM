@@ -5,6 +5,31 @@ Audit date: 4 September 2026. Requested by the project owner. Independent source
 Reference: `D:\VandeAgencyCRM`. Migration: `D:\vandecrmreact`.
 Migration HEAD inspected: `d54da637563453d601419da7b45ad6f3dd7138a2` — `fix(dashboard): resolve pin dashboard cards modal toggle and state handling`.
 
+## Recheck after repair commit and follow-up fixes — 5 September 2026
+
+Migration HEAD rechecked: `5a17aefb404406d8cb617ceb1f2b745392e3719b`. The working tree also contains the follow-up fixes listed below; they are intentionally left uncommitted for review.
+
+The source status is materially different from the original 4 September audit. The large repair commit addresses permission-driven navigation, authenticated routing, import mappings/defaults, dashboard saved layouts, work views and pagination, team permission matrices, integration lifecycle endpoints, report route precedence, accessible dialogs, attachment downloads, workspace invalidation, search scoping and multiple data-integrity issues. The follow-up recheck then found and fixed these remaining confirmed defects:
+
+- Restricted dashboard custom fields could still escape in stage cards, attention cards and field definitions. All three response paths now use the lead-field visibility rule.
+- Customer creation accepted an arbitrary organization workspace ID, and duplicate detection/merge was organization-wide. Creation now restricts cross-workspace targeting to managers and active workspaces; duplicate operations use the active workspace scope.
+- Integration Clear buttons called the ordinary preserve-secret endpoint. They now call the dedicated Meta and GA4 clear endpoints. Run-due, API-key enable/disable and rotation controls are connected to their implemented endpoints.
+- Client bulk deletion used `window.confirm`; it now uses the shared keyboard-complete `ConfirmDialog`.
+- The Activity dashboard preference now controls the rendered activity feed, and failed dashboard card reorders roll back with visible feedback.
+- Both React import flows now accept `.csv`, `.xls` and `.xlsx`; Excel converts the first worksheet with the same SheetJS 0.20.3 browser build as EJS.
+
+Current verification evidence:
+
+| Check | Result |
+|---|---|
+| Production client build after the final Excel/import fix | Passed: 1,915 modules transformed |
+| Full TypeScript check | Passed |
+| `node --check` across all top-level API files plus server entry | Passed: 19 APIs plus `server.js` |
+| Credential-response regression check with nested Mongoose and lean shapes | Passed for admin, manager, agent and client synthetic roles |
+| Recheck invariants for dashboard field visibility, workspace-scoped duplicates and dedicated credential clearing | Passed |
+| Working-tree whitespace/error check | Passed; only Git's CRLF normalization warning remains for `SYNC.md` |
+
+A 100% runtime and pixel-parity sign-off still requires an authenticated disposable database and the role/workspace/responsive matrix in the final section of this document. That environment was not available in this task, so the source and production-build gates are green while live parity remains unverified. The Excel reader also needs network access to the same SheetJS CDN used by EJS.
 ## Verdict
 
 **The migration is not 100% complete and is not ready for a parity sign-off.** Most screens and much of their styling exist. Several apparently finished controls have no effective behavior, some APIs violate the existing data model, and several permission gates have disappeared. These are functional and data-integrity problems, not merely optional polish.

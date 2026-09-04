@@ -147,7 +147,8 @@ router.get('/', async (req, res, next) => {
     const dashboardHiddenSections = activeDashboardView ? (activeDashboardView.hiddenSections || []) : (req.user.dashboardHiddenSections || []);
     const customFieldMetrics = activeDashboardView ? (activeDashboardView.customFieldMetrics || []) : [];
 
-    const dashboardFieldCounts = customFields.map(field => {
+    const visibleCustomFields = customFields.filter(field => canAccessLeadField(req.user, field.key, 'view'));
+    const dashboardFieldCounts = visibleCustomFields.map(field => {
       let total = 0;
       for (const customer of customers) {
         const data = customer.customData;
@@ -162,7 +163,7 @@ router.get('/', async (req, res, next) => {
     const stages = allStages.filter(stage => stage.isActive || populatedStages.has(String(stage._id)));
     const stageCards = stages.map(stage => {
       const items = customers.filter(item => item.stage && String(item.stage._id) === String(stage._id)).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      return { stage, customers: items, count: items.length, value: items.reduce((sum, item) => sum + (item.value || 0), 0) };
+      return { stage, customers: items.map(customer => sanitizeDashboardCustomer(customer, req.user)), count: items.length, value: items.reduce((sum, item) => sum + (item.value || 0), 0) };
     });
     const now = new Date();
     const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
@@ -197,14 +198,13 @@ router.get('/', async (req, res, next) => {
       moduleStats: visibleWorkTypes.map(type => { const records = workItems.filter(item => String(item.workType?._id) === String(type._id)); return { key: type.key, name: type.name, icon: type.icon, color: type.color, total: records.length, open: records.filter(isOpenWork).length, completed: records.filter(isComplete).length, statuses: type.statuses.map(status => ({ key: status.key, label: status.label, count: records.filter(item => item.status === status.key).length })) }; }),
       upcomingDeadlines: workItems.filter(item => isOpenWork(item) && item.deadline && item.deadline <= nextWeek).sort((a, b) => a.deadline - b.deadline).slice(0, 6),
       weeklyWorkProgress,
-      recentCustomers: customers.slice(0, 6).map(customer => sanitizeDashboardCustomer(customer, req.user)), attentionCustomers, campaigns, dashboardViews,
-      availableDashboardFields: customFields, totalCustomers: customers.length,
+      recentCustomers: customers.slice(0, 6).map(customer => sanitizeDashboardCustomer(customer, req.user)), attentionCustomers: attentionCustomers.map(customer => sanitizeDashboardCustomer(customer, req.user)), campaigns, dashboardViews,
+      availableDashboardFields: visibleCustomFields, totalCustomers: customers.length,
       totalValue: activeCustomers.reduce((sum, item) => sum + (item.value || 0), 0),
       dashboardCardsCustomized: Boolean(activeDashboardView) || req.user.dashboardCardsCustomized || false,
       dashboardHiddenCards,
       dashboardCardOrder,
       dashboardHiddenSections,
-      customFieldMetrics,
       customFieldMetrics,
       activeDashboardViewId: activeDashboardView ? String(activeDashboardView._id) : null,
       dashboardFieldCounts,

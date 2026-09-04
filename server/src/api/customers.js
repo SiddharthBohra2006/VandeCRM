@@ -530,9 +530,11 @@ router.post('/', permits('businesses.create'), async (req, res, next) => {
     if (!req.body.stage) req.body.stage = firstStage?._id;
     if (!req.body.stage) return res.status(400).json({ ok: false, error: 'Create an active CRM stage before adding leads.' });
     let targetWorkspace = req.activeCompanyId;
-    if (req.body.clientCompany && /^[a-f\d]{24}$/i.test(String(req.body.clientCompany))) {
-      const validCompany = await ClientCompany.findOne({ _id: req.body.clientCompany, organization: req.user.organization._id });
-      if (validCompany) targetWorkspace = String(validCompany._id);
+    if (req.body.clientCompany && String(req.body.clientCompany) !== String(req.activeCompanyId)) {
+      if (!isManager(req.user) || !/^[a-f\d]{24}$/i.test(String(req.body.clientCompany))) return res.status(403).json({ ok: false, error: 'Cannot create a lead in that CRM.' });
+      const validCompany = await ClientCompany.findOne({ _id: req.body.clientCompany, organization: req.user.organization._id, status: { $ne: 'inactive' } });
+      if (!validCompany) return res.status(400).json({ ok: false, error: 'Choose an accessible active CRM.' });
+      targetWorkspace = String(validCompany._id);
     }
     const customer = await Customer.create({ organization: req.user.organization._id, clientCompany: targetWorkspace, ...input(req.body, options.fields, req.user), assignedTo: isManager(req.user) ? (req.body.assignedTo || req.user._id) : req.user._id });
     await runLeadAutomation({ customer, trigger: 'lead_created' });
@@ -608,7 +610,7 @@ router.get('/duplicates', async (req, res, next) => {
       return res.status(403).json({ ok: false, error: 'Access denied.' });
     }
     const organization = req.user.organization._id;
-    const customers = await Customer.find({ organization })
+    const customers = await Customer.find(scope(req))
       .populate('stage labels assignedTo clientCompany campaign')
       .sort({ updatedAt: -1 });
 
@@ -645,8 +647,8 @@ router.post('/duplicates/merge', permits('businesses.update'), async (req, res, 
     }
 
     const [primary, duplicate] = await Promise.all([
-      Customer.findOne({ _id: primaryId, organization }),
-      Customer.findOne({ _id: duplicateId, organization }),
+      Customer.findOne(scope(req, { _id: primaryId })),
+      Customer.findOne(scope(req, { _id: duplicateId })),
     ]);
 
     if (!primary || !duplicate) {

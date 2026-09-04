@@ -442,6 +442,7 @@ export default function DashboardPage() {
       setDashboardDragKey(null);
       return;
     }
+    const previousOrder = dashboard.dashboardCardOrder || [];
     const currentOrder = orderedCards.map(c => c.key);
     const fromIndex = currentOrder.indexOf(sourceKey);
     const toIndex = currentOrder.indexOf(targetKey);
@@ -462,7 +463,10 @@ export default function DashboardPage() {
         dashboardHiddenCards: [...hiddenCards],
         hiddenSections: [...savedSections]
       });
-    } catch (_) {}
+    } catch (caught) {
+      setDashboard(prev => prev ? { ...prev, dashboardCardOrder: previousOrder } : null);
+      setError(caught instanceof Error ? caught.message : 'Could not save dashboard card order');
+    }
   };
 
   const userName = user?.name ? user.name.split(' ')[0] : 'Admin';
@@ -840,7 +844,7 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {!savedSections.has('recent') && (
+      {!savedSections.has('activity') && !savedSections.has('recent') && (
         <article className="business-panel movement-panel movement-panel-v2" data-movement-feed>
           <header className="movement-header">
             <div className="movement-heading">
