@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { CustomerDetailResponse, customersApi } from '../../api/customers';
 import { useAuth } from '../../contexts/AuthContext';
 import { CustomerInput } from '../../types';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 type Tab = 'overview' | 'activity' | 'work' | 'files' | 'details';
 
@@ -42,6 +43,7 @@ export default function CustomerDetailPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [confirmAction, setConfirmAction] = useState<{ kind: 'delete' } | { kind: 'deleteAttachment'; attachmentId: string } | null>(null);
 
   // Activity Composer State
   const [activityType, setActivityType] = useState('note');
@@ -97,7 +99,13 @@ export default function CustomerDetailPage() {
   }
 
   async function remove() {
-    if (!id || !window.confirm(`Delete this ${crmTerms.leadSingular.toLowerCase()} permanently?`)) return;
+    if (!id) return;
+    setConfirmAction({ kind: 'delete' });
+  }
+
+  async function handleConfirmDelete() {
+    if (!id) return;
+    setConfirmAction(null);
     try {
       await customersApi.delete(id);
       navigate('/customers');
@@ -193,8 +201,15 @@ export default function CustomerDetailPage() {
     }
   }
 
-  async function handleDeleteAttachment(attachmentId: string) {
-    if (!id || !window.confirm('Delete this attachment?')) return;
+  function confirmDeleteAttachment(attachmentId: string) {
+    if (!id) return;
+    setConfirmAction({ kind: 'deleteAttachment', attachmentId });
+  }
+
+  async function handleConfirmDeleteAttachment() {
+    if (!id || confirmAction?.kind !== 'deleteAttachment') return;
+    const attachmentId = confirmAction.attachmentId;
+    setConfirmAction(null);
     try {
       setError('');
       await customersApi.deleteAttachment(id, attachmentId);
@@ -569,7 +584,7 @@ export default function CustomerDetailPage() {
                               <button
                                 className="btn btn-danger"
                                 style={{ padding: '2px 8px', fontSize: '0.72rem' }}
-                                onClick={() => handleDeleteAttachment(file._id)}
+                                onClick={() => confirmDeleteAttachment(file._id)}
                               >
                                 Delete
                               </button>
@@ -670,6 +685,18 @@ export default function CustomerDetailPage() {
           </section>
         </aside>
       </div>
+
+      <ConfirmDialog
+        open={confirmAction !== null}
+        title={confirmAction?.kind === 'deleteAttachment' ? 'Delete Attachment' : `Delete this ${crmTerms.leadSingular.toLowerCase()}?`}
+        message={confirmAction?.kind === 'deleteAttachment'
+          ? 'Delete this attachment permanently?'
+          : `This will permanently delete the ${crmTerms.leadSingular.toLowerCase()} and all of its data. This action cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
+        onConfirm={() => void (confirmAction?.kind === 'deleteAttachment' ? handleConfirmDeleteAttachment() : handleConfirmDelete())}
+        onCancel={() => setConfirmAction(null)}
+      />
     </div>
   );
 }

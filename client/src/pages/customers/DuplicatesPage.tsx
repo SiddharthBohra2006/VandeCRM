@@ -2,6 +2,7 @@
 import { Link } from 'react-router-dom';
 import { customersApi } from '../../api/customers';
 import Icon from '../../components/Icons';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 interface DuplicateCustomer {
   _id: string;
@@ -27,6 +28,7 @@ export default function DuplicatesPage() {
   const [merging, setMerging] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [mergeGroupKey, setMergeGroupKey] = useState<string | null>(null);
 
   // Selected merge targets per group: groupKey -> { primaryId, duplicateId }
   const [mergeSelections, setMergeSelections] = useState<Record<string, { primaryId: string; duplicateId: string }>>({});
@@ -66,10 +68,15 @@ export default function DuplicatesPage() {
       setError('Choose two different leads to merge.');
       return;
     }
+    setMergeGroupKey(groupKey);
+  }
 
-    if (!window.confirm('Merge this duplicate lead? The duplicate profile will be removed, and its timeline will move to the primary lead.')) {
-      return;
-    }
+  async function handleConfirmMerge() {
+    if (!mergeGroupKey) return;
+    const groupKey = mergeGroupKey;
+    setMergeGroupKey(null);
+    const sel = mergeSelections[groupKey];
+    if (!sel) return;
 
     try {
       setMerging(true);
@@ -246,6 +253,17 @@ export default function DuplicatesPage() {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={mergeGroupKey !== null}
+        title="Merge Duplicate Lead?"
+        message="Merge this duplicate lead? The duplicate profile will be removed, and its timeline will move to the primary lead. This action cannot be undone."
+        confirmText="Merge"
+        variant="primary"
+        loading={merging}
+        onConfirm={() => void handleConfirmMerge()}
+        onCancel={() => setMergeGroupKey(null)}
+      />
     </div>
   );
 }
