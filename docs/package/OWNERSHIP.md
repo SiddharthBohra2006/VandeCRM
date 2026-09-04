@@ -2,15 +2,18 @@
 
 **Purpose:** Define exactly who owns what so developers never collide. Read this in addition to SYNC.md. If a file is not listed as yours, you do NOT edit it unless the change is requested and logged through SYNC.md.
 
-> **2026-09-04 — DEVELOPER RETIREMENT:** **Codex has left the project** (liaison capacity reached; will not return). Codex's owned domains — Dashboard, Customers/Leads, Clients (won-customer sub-view), and their detail views — are **taken over by OpenCode** (the lead architect). Ownership lines below remain as historical reference, but OpenCode is now responsible for completing, maintaining, and committing those files. See `OPNREC-CONTEXT.md` and `SYNC.md` for the remaining parity work.
+> **2026-09-04 — DEVELOPER RETIREMENT & OWNERSHIP SPLIT:** **Codex has left the project** (liaison capacity reached; will not return). Codex's former domains have been **split between the two remaining developers** (per user decision):
+> - **OpenCode** assumes **Dashboard + Customers/Leads** (list, detail, form, duplicates).
+> - **Antigravity** assumes **Clients** (won-customer sub-view + Client detail).
+> All former-Codex work is complete and committed. See `OPNREC-CONTEXT.md` and `SYNC.md`.
 
 ## The Developers
 
 | Developer | Role | Status |
 |---|---|---|
-| **OpenCode** | Lead architect — shared infra, auth, routing, types, coordination docs. **Also owns former-Codex Dashboard/Customers/Leads/Clients.** | Active |
-| ~~Codex~~ | ~~Dashboard + Customers/Leads + Clients (won-customer sub-view)~~ | **Departed (no longer returning)** — assumed by OpenCode |
-| **Antigravity** | All other 11 functional domains | Active |
+| **OpenCode** | Lead architect — shared infra, auth, routing, types, coordination docs. **Owns former-Codex Dashboard + Customers/Leads.** | Active |
+| ~~Codex~~ | ~~Dashboard + Customers/Leads + Clients (won-customer sub-view)~~ | **Departed (no longer returning)** — domains split between OpenCode (Dashboard+Customers) and Antigravity (Clients) |
+| **Antigravity** | All 11 functional domains + **Clients (won-customer sub-view, from Codex)** | Active |
 
 ## Ownership Tables
 
@@ -29,24 +32,23 @@
 - `docs/package/SYNC.md`, `docs/package/OWNERSHIP.md`, `docs/package/OPNREC-CONTEXT.md`
 - Backend shared folders copied from original (they are shared read-only reference): `server/src/{models,services,utils,config,middleware,routes}`
 
-### ~~Codex~~ → Now OpenCode (dev departed)
-> Assumed by OpenCode on 2026-09-04 after Codex left. These files remain OpenCode's responsibility until the project is finished.
+### ~~Codex~~ → Split: OpenCode (Dashboard + Customers/Leads) & Antigravity (Clients)
+> Former-Codex files. **OpenCode owns** (Dashboard + Customers/Leads, incl. duplicates):
 - `server/src/api/dashboard.js`
 - `server/src/api/customers.js`
-- `server/src/api/clients.js` **(Clients = won-customer sub-view of the Customer domain, same Customer model; owned with Customers)**
 - `client/src/pages/dashboard/DashboardPage.tsx`
-- `client/src/pages/customers/CustomersPage.tsx`, `CustomerDetailPage.tsx`, `CustomerFormPage.tsx`
-- `client/src/pages/clients/ClientsPage.tsx` (won-customer view)
-- `client/src/api/customers.ts`, `client/src/api/clients.ts` (domain clients)
+- `client/src/pages/customers/CustomersPage.tsx`, `CustomerDetailPage.tsx`, `CustomerFormPage.tsx`, `DuplicatesPage.tsx`
+- `client/src/api/customers.ts`
 
 > ⚠️ **2026-09-04 one-off:** OpenCode edited `CustomerDetailPage.tsx` (+ `client/src/styles/lead-detail.css`) to rewire the page to the `.lead-record-ui` class system (fixes the dead-styling UI gap). Ownership stays with Codex; please review the diff. See SYNC.md UI PARITY TRACKER.
 
-### Antigravity
+### Antigravity (11 functional domains + Clients from Codex)
 - API: `server/src/api/{notifications,companies,campaigns,work,tasks,team,settings,mail,integrations,audit,search}.js`
 - Client API: `client/src/api/{notifications,companies,campaigns,work,tasks,team,settings,mail,integrations,audit,search}.ts`
 - Pages: `client/src/pages/{notifications,companies,campaigns,work,tasks,team,settings,mail,integrations,audit,search}/...`
 - Contexts (if any new): e.g. `NotificationContext`
 - `docs/ANTIGRAVITY-PROGRESS.md`
+- **Clients (won-customer sub-view, taken over from Codex 2026-09-04):** `server/src/api/clients.js`, `client/src/api/clients.ts`, `client/src/pages/clients/ClientsPage.tsx` + Client detail (rendered via `CustomerDetailPage` for won customers)
 
 > ⚠️ **2026-09-04 one-off:** OpenCode edited `client/src/pages/work/WorkListPage.tsx` (added board + calendar views to Antigravity's flat list page) and `server/src/api/work.js` (added `month` filter, `pageSize` 100, `parentRecord` populate) for the board/calendar parity port. Ownership stays with Antigravity; please review the diff (commit `0beba29`). See SYNC.md UI PARITY TRACKER.
 

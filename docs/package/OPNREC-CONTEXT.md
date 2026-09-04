@@ -17,9 +17,9 @@ I am the **lead architect/guide**. I do NOT implement feature pages — I build 
 
 | Developer | Owns | Status |
 |---|---|---|
-| **OpenCode (me)** | Auth, JWT middleware, server entry/boot, shared `api/client.ts` + `types`, backend copy, route registration, coordination docs | Active |
-| ~~Codex~~ | ~~Dashboard + Customers~~ | **Departed 2026-09-04** — OpenCode now owns Dashboard/Customers/Clients |
-| **Antigravity** | The other 11 domains | Active |
+| **OpenCode (me)** | Auth, JWT middleware, server entry/boot, shared `api/client.ts` + `types`, backend copy, route registration, coordination docs + **former-Codex Dashboard & Customers/Leads** | Active |
+| ~~Codex~~ | ~~Dashboard + Customers~~ | **Departed 2026-09-04** — domains split: OpenCode (Dashboard+Customers), Antigravity (Clients) |
+| **Antigravity** | The other 11 domains + **Clients (won-customer sub-view)** | Active |
 
 ## What I Have DONE (in this effort)
 1. ✅ Init git repo `D:\vandecrmreact` (was NOT a repo).
