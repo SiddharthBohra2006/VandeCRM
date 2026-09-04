@@ -2068,6 +2068,18 @@ dd { margin: 0; color: var(--text); font-size: .86rem; overflow-wrap: anywhere; 
   min-height: auto;
   accent-color: var(--teal);
 }
+#theme-ripple-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100500;
+  pointer-events: none;
+  background: var(--ripple-bg);
+  clip-path: circle(0px at var(--ripple-x) var(--ripple-y));
+  transition: clip-path 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#theme-ripple-overlay.expanding {
+  clip-path: circle(150% at var(--ripple-x) var(--ripple-y));
+}
 
 .empty {
   color: var(--muted);
@@ -10810,5 +10822,60 @@ html.dark-theme .crm-badge-team,
   .crm-search-modal {
     max-height: 94vh;
   }
+}
+
+/* ==================== SETTINGS polish (EJS parity) ==================== */
+.settings-category-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+.settings-panel.wide {
+  grid-column: 1 / -1;
+}
+.form-control {
+  min-height: 38px;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--input);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+.form-control:focus {
+  border-color: var(--gold);
+  outline: none;
+}
+.stage-list-header.desktop-only {
+  display: grid;
+}
+@media (max-width: 760px) {
+  .stage-list-header.desktop-only { display: none !important; }
+}
+.inline-form {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: end;
+}
+@media (max-width: 900px) {
+  .inline-form { grid-template-columns: 1fr; }
+}
+.inline-form input[type="color"] { width: 42px; height: 38px; padding: 3px; border-radius: 8px; }
+.inline-form label:has(input[type="checkbox"]) { display: flex; align-items: center; gap: 0.35rem; padding-bottom: 0.55rem; }
+.inline-form .btn { white-space: nowrap; }
+.settings-row input[type="checkbox"],
+.settings-row input[type="color"],
+.inline-form input[type="checkbox"],
+.inline-form input[type="color"] {
+  width: auto;
+  min-height: auto;
+  accent-color: var(--teal);
 }
 

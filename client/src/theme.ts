@@ -42,3 +42,17 @@ export function applyThemePreset(preset: ThemePreset) {
   localStorage.setItem('theme-preset', JSON.stringify(preset));
   localStorage.setItem('theme', preset.type);
 }
+
+export function applyThemeRipple(x: number, y: number, bg: string) {
+  const ripple = document.createElement('div');
+  ripple.id = 'theme-ripple-overlay';
+  ripple.style.setProperty('--ripple-x', `${x}px`);
+  ripple.style.setProperty('--ripple-y', `${y}px`);
+  ripple.style.setProperty('--ripple-bg', bg);
+  document.body.appendChild(ripple);
+  ripple.offsetWidth;
+  ripple.classList.add('expanding');
+  setTimeout(() => {
+    ripple.remove();
+  }, 900);
+}

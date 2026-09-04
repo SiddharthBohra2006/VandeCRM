@@ -8,7 +8,7 @@ import WorkTypeBuilder from './WorkTypeBuilder';
 import AutomationsTab from './AutomationsTab';
 import Icon from '../../components/Icons';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import { THEME_PRESETS, applyThemePreset } from '../../theme';
+import { THEME_PRESETS, applyThemePreset, applyThemeRipple } from '../../theme';
 
 const STAGE_GRID = '24px 1.5fr 70px 80px 80px 80px 80px 110px';
 const STAGE_HEADER = [
@@ -257,8 +257,10 @@ export default function SettingsPage() {
   }
 
   async function saveStageOrder() {
-    const ids = stages.map(s => s._id);
     try {
+      const ids = Array.from(document.querySelectorAll('[data-settings-panel="stages"] .draggable-stage')).map(
+        el => el.getAttribute('data-stage-id') || ''
+      ).filter(Boolean);
       await settingsApi.reorderStages(ids);
     } catch (err: any) {
       setError(err.message || 'Failed to save stage order');
@@ -333,8 +335,10 @@ export default function SettingsPage() {
   }
 
   async function saveFieldOrder() {
-    const ids = fields.map(f => f._id);
     try {
+      const ids = Array.from(document.querySelectorAll('[data-settings-panel="fields"] .field-card')).map(
+        el => el.getAttribute('data-field-id') || ''
+      ).filter(Boolean);
       await settingsApi.reorderFields(ids);
     } catch (err: any) {
       setError(err.message || 'Failed to save field order');
@@ -574,7 +578,10 @@ export default function SettingsPage() {
                 key={preset.name}
                 preset={preset}
                 active={activePresetKey() === preset.name}
-                onClick={() => handleApplyTheme(preset.gold, preset.teal, preset.bg, preset.surface, preset.text)}
+                onClick={(e: React.MouseEvent) => {
+                  handleApplyTheme(preset.gold, preset.teal, preset.bg, preset.surface, preset.text);
+                  applyThemeRipple(e.clientX || e.currentTarget.getBoundingClientRect().left + e.currentTarget.getBoundingClientRect().width / 2, e.clientY || e.currentTarget.getBoundingClientRect().top + e.currentTarget.getBoundingClientRect().height / 2, preset.bg);
+                }}
               />
             ))}
           </div>
@@ -657,6 +664,7 @@ export default function SettingsPage() {
               return (
                 <form
                   key={stage._id}
+                  data-stage-id={stage._id}
                   className={`settings-row draggable-stage ${dragStageId === stage._id ? 'is-dragging' : ''}`}
                   draggable
                   onDragStart={() => setDragStageId(stage._id)}
@@ -752,6 +760,7 @@ export default function SettingsPage() {
               return (
                 <form
                   key={field._id}
+                  data-field-id={field._id}
                   className="field-card"
                   draggable
                   onDragStart={() => setDragFieldId(field._id)}
@@ -833,7 +842,7 @@ function isDark(hex: string): boolean {
 function ThemeCard({ preset, active, onClick }: {
   preset: typeof THEME_PRESETS[number];
   active: boolean;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent) => void;
 }) {
   return (
     <div className={`theme-card ${active ? 'is-active' : ''}`} onClick={onClick}>

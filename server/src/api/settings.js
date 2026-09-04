@@ -235,7 +235,7 @@ router.put('/stages/:id', async (req, res, next) => {
     const activeWorkspace = workspace(req, res);
     if (!activeWorkspace) return;
     const organization = req.user.organization._id;
-    const { name, color, isWon, isLost, isDefault, order } = req.body;
+    const { name, color, isWon, isLost, isDefault, isActive, order } = req.body;
 
     const stage = await CrmStage.findOne({ _id: req.params.id, organization, clientCompany: activeWorkspace });
     if (!stage) {
@@ -246,6 +246,7 @@ router.put('/stages/:id', async (req, res, next) => {
     if (color) stage.color = color;
     if (isWon !== undefined) stage.isWon = Boolean(isWon);
     if (isLost !== undefined) stage.isLost = Boolean(isLost);
+    if (isActive !== undefined) stage.isActive = Boolean(isActive);
     if (order !== undefined) stage.order = Number(order);
 
     if (isDefault) {
@@ -388,7 +389,7 @@ router.put('/fields/:id', async (req, res, next) => {
     const activeWorkspace = workspace(req, res);
     if (!activeWorkspace) return;
     const organization = req.user.organization._id;
-    const { label, options, required, order } = req.body;
+    const { label, type, options, required, isActive, order } = req.body;
 
     const field = await CustomField.findOne({ _id: req.params.id, organization, clientCompany: activeWorkspace });
     if (!field) {
@@ -396,8 +397,10 @@ router.put('/fields/:id', async (req, res, next) => {
     }
 
     if (label) field.label = String(label).trim();
+    if (type) field.type = String(type);
     if (options !== undefined) field.options = Array.isArray(options) ? options : [];
     if (required !== undefined) field.required = Boolean(required);
+    if (isActive !== undefined) field.isActive = Boolean(isActive);
     if (order !== undefined) field.order = Number(order);
 
     await field.save();
