@@ -6,6 +6,7 @@ const CustomRole = require('../models/CustomRole');
 const WorkType = require('../models/WorkType');
 const CustomField = require('../models/CustomField');
 const { hashPassword } = require('../services/passwords');
+const { parseCsv, rowsToObjects, toCsv } = require('../utils/csv');
 const { logAudit } = require('../utils/audit');
 const {
   ROLE_DEFINITIONS,
@@ -16,10 +17,46 @@ const {
   canManageUser,
 } = require('../config/roles');
 
+const roleOptions = Object.keys(ROLE_DEFINITIONS);
+const roleAliases = {
+  editing: 'video_editor',
+  'web dev': 'website_developer',
+  'content distribution': 'content_manager',
+  'content team': 'content_manager',
+  posting: 'content_manager',
+  'script / comment': 'content_manager',
+  ads: 'ads_manager',
+  graphics: 'graphic_designer'
+};
+const customRoleTemplates = {
+  sales: { permissions: ['businesses.view', 'businesses.create', 'businesses.update', 'tasks.view', 'tasks.create', 'tasks.update'], scope: 'assigned' },
+  basic: { permissions: ['businesses.view', 'businesses.update', 'tasks.view', 'tasks.update'], scope: 'assigned' },
+  video_editor: { permissions: ['videos.view', 'videos.update'], scope: 'assigned' },
+  team_view: { permissions: ['team.view'], scope: 'organization' }
+};
+
+function normalizeImportedRole(value) {
+  const label = String(value || '').trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+  const directRole = roleOptions.find(role => role.replaceAll('_', ' ') === label || ROLE_DEFINITIONS[role].label.toLowerCase() === label);
+  const alias = Object.entries(roleAliases).find(([name]) => label === name || label.startsWith(`${name}/`) || label.startsWith(`${name} /`));
+  return directRole || alias?.[1] || 'agent';
+}
+
+function parseBoolean(value, defaultValue = true) {
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return defaultValue;
+  return ['true', 'yes', '1', 'active', 'on'].includes(text);
+}
+
+function splitCompanyNames(value) {
+  return String(value || '')
+    .split('|')
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
 const router = express.Router();
 router.use(requireApiAuth);
-
-const roleOptions = Object.keys(ROLE_DEFINITIONS);
 
 function normalizeArray(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
@@ -246,6 +283,183 @@ router.delete('/:id', async (req, res, next) => {
     });
 
     res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/team/template.csv — Download import template
+router.get('/template.csv', async (req, res, next) => {
+  try {
+    const headers = ['name', 'email', 'password', 'role', 'customRole', 'permissionTemplate', 'isActive', 'assignedCompanies'];
+    const rows = [{
+      name: 'Priya Sharma',
+      email: 'priya@example.com',
+      password: 'ChangeMe123',
+      role: 'Agent',
+      customRole: '',
+      permissionTemplate: '',
+      isActive: 'yes',
+      assignedCompanies: 'Vande Digital Academy|Shopify Fashion Store'
+    }];
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="team-import-template.csv"');
+    res.send(toCsv(headers, rows));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/team/export.csv — Export all team members
+router.get('/export.csv', async (req, res, next) => {
+  try {
+    const organization = req.user.organization._id;
+    const [users, companies] = await Promise.all([
+      User.find({ organization }).populate('customRole').sort({ role: 1, name: 1 }),
+      ClientCompany.find({ organization }).populate('assignedUsers').sort({ name: 1 })
+    ]);
+
+    const headers = ['name', 'email', 'role', 'customRole', 'isActive', 'assignedCompanies', 'lastLoginAt'];
+    const rows = users.map(user => {
+      const assignedCompanies = companies
+        .filter(company => company.assignedUsers.some(assigned => String(assigned._id) === String(user._id)))
+        .map(company => company.name)
+        .join('|');
+
+      return {
+        name: user.name,
+        email: user.email,
+        role: ROLE_DEFINITIONS[user.role]?.label || user.role,
+        customRole: user.customRole?.name || '',
+        isActive: user.isActive === false ? 'no' : 'yes',
+        assignedCompanies,
+        lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : ''
+      };
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="vande-crm-team.csv"');
+    res.send(toCsv(headers, rows));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/team/import — Import team members from CSV
+router.post('/import', async (req, res, next) => {
+  try {
+    const organization = req.user.organization._id;
+    const csvText = String(req.body.csvData || '').trim();
+    if (!csvText) {
+      return res.status(400).json({ ok: false, error: 'Please provide CSV data to import.' });
+    }
+
+    const rows = rowsToObjects(parseCsv(csvText));
+    const companies = await ClientCompany.find({ organization }).sort({ name: 1 });
+    const companyByName = new Map(companies.map(company => [company.name.toLowerCase(), company]));
+    const customRoleByName = new Map((await CustomRole.find({ organization })).map(role => [role.name.toLowerCase(), role]));
+
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    for (const row of rows) {
+      const name = String(row.name || '').trim();
+      const email = String(row.email || '').trim().toLowerCase();
+      const password = String(row.password || '');
+      const requestedValidRole = normalizeImportedRole(row.role);
+      const role = canAssignRole(req.user, requestedValidRole) ? requestedValidRole : 'agent';
+      const customRoleName = String(row.customRole || '').trim();
+      const permissionTemplate = String(row.permissionTemplate || '').trim().toLowerCase();
+      const importsCustomRole = Object.prototype.hasOwnProperty.call(row, 'customRole');
+      let customRole = customRoleName ? customRoleByName.get(customRoleName.toLowerCase()) : null;
+      const isActive = parseBoolean(row.isActive, true);
+      const companyNames = splitCompanyNames(row.assignedCompanies);
+
+      if (!email) {
+        skipped += 1;
+        continue;
+      }
+
+      const existingByEmail = await User.findOne({ email });
+      if (existingByEmail && String(existingByEmail.organization) !== String(organization)) {
+        skipped += 1;
+        continue;
+      }
+
+      let user = existingByEmail && String(existingByEmail.organization) === String(organization) ? existingByEmail : null;
+      if (!user && (!name || password.length < 8)) {
+        skipped += 1;
+        continue;
+      }
+      if (user && !canManageUser(req.user, user)) {
+        skipped += 1;
+        continue;
+      }
+      if (customRoleName && !customRole) {
+        const template = customRoleTemplates[permissionTemplate];
+        if (!template) {
+          skipped += 1;
+          continue;
+        }
+        customRole = await CustomRole.create({ organization, name: customRoleName, ...template });
+        customRoleByName.set(customRoleName.toLowerCase(), customRole);
+      }
+
+      if (user) {
+        const isSelf = String(user._id) === String(req.user._id);
+        if (name) user.name = name;
+        if (!isSelf) user.role = role;
+        if (!isSelf && importsCustomRole) user.customRole = customRole?._id || null;
+        if (!isSelf) user.isActive = isActive;
+        if (password) {
+          if (password.length < 8) {
+            skipped += 1;
+            continue;
+          }
+          user.passwordHash = await hashPassword(password);
+        }
+        await user.save();
+        updated += 1;
+      } else {
+        user = await User.create({
+          organization,
+          name,
+          email,
+          passwordHash: await hashPassword(password),
+          role,
+          customRole: customRole?._id || null,
+          isActive
+        });
+        created += 1;
+      }
+
+      const assignedCompanyIds = companyNames
+        .map(companyName => companyByName.get(companyName.toLowerCase()))
+        .filter(Boolean)
+        .map(company => company._id);
+
+      await ClientCompany.updateMany(
+        { organization },
+        { $pull: { assignedUsers: user._id } }
+      );
+      if (assignedCompanyIds.length) {
+        await ClientCompany.updateMany(
+          { _id: { $in: assignedCompanyIds }, organization },
+          { $addToSet: { assignedUsers: user._id } }
+        );
+      }
+    }
+
+    await logAudit(req, {
+      action: 'import',
+      entityType: 'user',
+      message: `Team CSV import completed. Created ${created}, updated ${updated}, skipped ${skipped}.`,
+      metadata: { created, updated, skipped }
+    });
+
+    res.json({ ok: true, created, updated, skipped });
   } catch (error) {
     next(error);
   }

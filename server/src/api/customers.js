@@ -158,6 +158,40 @@ router.get('/export/csv', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+router.get('/import-template.csv', async (req, res, next) => {
+  try {
+    const organization = req.user.organization._id;
+    if (!workspace(req, res)) return;
+    const fields = await CustomField.find({ organization, clientCompany: req.activeCompanyId, entity: 'customer', isActive: true }).sort({ order: 1, createdAt: 1 });
+    const headers = [...csvHeaders, ...fields.map(field => `custom_${field.key}`)];
+    const sample = {
+      name: 'Rahul Sharma',
+      company: 'Sample Brand Pvt Ltd',
+      email: 'rahul@example.com',
+      phone: '9876543210',
+      source: 'Website',
+      value: '50000',
+      priority: 'high',
+      leadScore: '80',
+      stage: 'New Lead',
+      labels: 'HP|Retainer',
+      notes: 'Imported sample row. Delete before uploading real data.',
+      campaign: 'Bootcamp',
+      nextFollowUpAt: ''
+    };
+    fields.forEach(field => {
+      if (field.type === 'select') sample[`custom_${field.key}`] = field.options[0] || '';
+      else if (field.type === 'checkbox') sample[`custom_${field.key}`] = 'yes';
+      else if (field.type === 'number') sample[`custom_${field.key}`] = '10000';
+      else if (field.type === 'date') sample[`custom_${field.key}`] = '2026-07-02';
+      else sample[`custom_${field.key}`] = '';
+    });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="vande-agency-import-template.csv"');
+    res.send(toCsv(headers, [sample]));
+  } catch (error) { next(error); }
+});
+
 router.post('/import/preview', permits('businesses.create'), express.text({ type: ['text/csv', 'text/plain', 'application/octet-stream'], limit: '4mb' }), async (req, res, next) => {
   try {
     if (!isManager(req.user)) return res.status(403).json({ ok: false, error: 'Access denied' });

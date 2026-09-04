@@ -172,3 +172,26 @@ export async function downloadCustomersCsv(params: { scope?: string; dateFrom?: 
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+export async function downloadImportTemplate() {
+  const token = localStorage.getItem('crm_token');
+  const res = await fetch('/api/customers/import-template.csv', {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    let msg = 'Template download failed';
+    try { const j = await res.json(); if (j?.error) msg = j.error; } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const contentDisposition = res.headers.get('Content-Disposition') || '';
+  const fileMatch = contentDisposition.match(/filename="?([^";]+)"?/);
+  a.href = url;
+  a.download = fileMatch ? fileMatch[1] : 'vande-agency-import-template.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

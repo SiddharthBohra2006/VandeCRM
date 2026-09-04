@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { customersApi, downloadCustomersCsv, CustomersListResponse, ImportPreviewRow } from '../../api/customers';
+import { customersApi, downloadCustomersCsv, downloadImportTemplate, CustomersListResponse, ImportPreviewRow } from '../../api/customers';
 import ConfirmDialog from '../../components/ConfirmDialog';
 
 const AVATAR_PALETTES = [
@@ -58,6 +58,7 @@ export default function CustomersPage() {
   const [previewCounts, setPreviewCounts] = useState({ totalRows: 0, createCount: 0, updateCount: 0, skipCount: 0 });
   const [importResult, setImportResult] = useState<{ imported: number; updated: number; skipped: number } | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [duplicateRule, setDuplicateRule] = useState<'update' | 'skip' | 'create'>('update');
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -212,7 +213,7 @@ export default function CustomersPage() {
     try {
       setPreviewing(true);
       setError('');
-      const result = await customersApi.importPreview({ csvData: csvText, csvFileName });
+      const result = await customersApi.importPreview({ csvData: csvText, csvFileName, duplicateRule });
       setPreviewRows(result.preview.rows);
       setPreviewCounts({
         totalRows: result.preview.totalRows,
@@ -234,7 +235,7 @@ export default function CustomersPage() {
     try {
       setWorking(true);
       setError('');
-      const result = await customersApi.import({ csvData: csvText, csvFileName });
+      const result = await customersApi.import({ csvData: csvText, csvFileName, duplicateRule });
       setImportResult({
         imported: result.imported,
         updated: result.updated,
@@ -926,12 +927,28 @@ export default function CustomersPage() {
             {isManager && (
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
                 <h4 style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--gold)', margin: '0 0 0.5rem' }}>Import Leads from CSV</h4>
+                <button
+                  className="btn btn-secondary"
+                  style={{ width: '100%', marginBottom: '0.75rem' }}
+                  type="button"
+                  onClick={() => void downloadImportTemplate().catch(err => setError(err instanceof Error ? err.message : 'Template download failed'))}
+                >
+                  Download import template
+                </button>
                 <label className="csv-drop-zone">
                   <p>Drop CSV here or click to browse</p>
                   <input ref={csvInputRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={e => handleCsvFile(e.target.files?.[0])} />
                   <span>{csvFileName || 'No file selected'}</span>
                 </label>
                 <p className="csv-file-status">{csvStatus}</p>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, margin: '0.75rem 0 0.25rem' }}>
+                  On duplicate match
+                  <select value={duplicateRule} onChange={e => setDuplicateRule(e.target.value as 'update' | 'skip' | 'create')} className="app-select" style={{ display: 'block', width: '100%', marginTop: '0.25rem' }}>
+                    <option value="update">Update existing record</option>
+                    <option value="skip">Skip duplicate</option>
+                    <option value="create">Create new anyway</option>
+                  </select>
+                </label>
                 <button className="btn btn-primary" style={{ width: '100%' }} type="button" disabled={previewing || !csvText.trim()} onClick={() => void handlePreviewImport()}>
                   {previewing ? 'Previewing...' : 'Preview Import'}
                 </button>

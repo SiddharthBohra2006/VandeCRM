@@ -56,6 +56,23 @@ router.post('/preferences/dashboard', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+router.post('/preferences/dashboard/views', async (req, res, next) => {
+  try {
+    const name = String(req.body.name || '').trim().slice(0, 60);
+    const allowed = ['metrics', 'work-progress', 'deadlines', 'pipeline', 'attention', 'recent', 'activity'];
+    const hiddenSections = (Array.isArray(req.body.hiddenSections) ? req.body.hiddenSections : String(req.body.hiddenSections || '').split(',')).filter(item => allowed.includes(item));
+    const cardOrder = String(req.body.cardOrder || '').split(',').map(item => item.trim()).filter(Boolean).slice(0, 40);
+    const customFieldMetrics = String(req.body.customFieldMetrics || '').split(',').map(item => item.trim()).filter(Boolean).slice(0, 6);
+    if (!name) return res.status(400).json({ ok: false, error: 'Enter a dashboard view name.' });
+    const view = await DashboardView.findOneAndUpdate(
+      { organization: req.user.organization._id, user: req.user._id, name },
+      { hiddenSections, cardOrder, customFieldMetrics },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    res.json({ ok: true, data: view });
+  } catch (error) { next(error); }
+});
+
 router.post('/pipeline/move', async (req, res, next) => {
   try {
     if (!hasPermission(req.user, 'businesses.update')) return res.status(403).json({ ok: false, error: 'Access denied' });

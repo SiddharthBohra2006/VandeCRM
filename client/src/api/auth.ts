@@ -13,6 +13,7 @@ export interface User {
   name: string;
   email: string;
   role: string;
+  customRole?: { name: string };
   organization: { _id: string; name: string; theme?: OrganizationTheme };
   dashboardHiddenSections: string[];
   dashboardHiddenCards: string[];

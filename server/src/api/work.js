@@ -5,6 +5,7 @@ const { hasWorkPermission, isRestrictedUser } = require('../config/roles');
 const { isClosed, isComplete } = require('../utils/workCompletion');
 const { assignableWorkUsers } = require('../utils/workAssignments');
 const { logAudit } = require('../utils/audit');
+const { runRecordAutomation } = require('../services/automation');
 const { parseCsv, rowsToObjects } = require('../utils/csv');
 const CustomRecord = require('../models/CustomRecord');
 const WorkType = require('../models/WorkType');
@@ -17,6 +18,8 @@ router.use(requireApiAuth);
 
 const priorities = ['low', 'medium', 'high'];
 const ids = value => [...new Set((Array.isArray(value) ? value : value ? [value] : []).filter(Boolean))];
+
+const monthKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
 function workspace(req, res) {
   if (req.activeCompanyId) return String(req.activeCompanyId);
@@ -32,6 +35,49 @@ const restrictToAssigned = (filter, user) => {
   }
   return filter;
 };
+
+async function ensureMonthlyRecords(req) {
+  const now = new Date();
+  const month = monthKey(now);
+  const activeWorkspace = String(req.activeCompanyId || req.activeCompany?._id);
+  const base = { organization: req.user.organization._id, workspace: activeWorkspace, module: req.workType._id };
+  const company = req.activeCompany || null;
+  if (req.workType.key === 'payment' && !(await CustomRecord.exists({ ...base, 'customFields.billingMonth': month }))) {
+    await CustomRecord.create({
+      ...base,
+      title: `${company?.name || 'Workspace'} · ${now.toLocaleString('en', { month: 'long', year: 'numeric' })}`,
+      status: 'pending',
+      deadline: new Date(now.getFullYear(), now.getMonth() + 1, 0),
+      customFields: { billingMonth: month, expectedAmount: company?.monthlyPackage || 0, paidAmount: 0 },
+      createdBy: req.user._id,
+    });
+  }
+  if (req.workType.key !== 'task') return;
+  const templates = await CustomRecord.find({
+    ...base,
+    'customFields.repeatMonthly': true,
+    $or: [{ 'customFields.recurringSource': { $exists: false } }, { 'customFields.recurringSource': '' }],
+  });
+  for (const template of templates) {
+    if (monthKey(template.createdAt) === month || (await CustomRecord.exists({ ...base, 'customFields.recurringSource': String(template._id), 'customFields.recurringMonth': month }))) continue;
+    const day = Math.min(Number((template.customFields && template.customFields.get ? template.customFields.get('repeatDay') : null) || 1), new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate());
+    const tf = template.customFields && template.customFields.toObject ? template.customFields.toObject() : {};
+    await CustomRecord.create({
+      ...base,
+      title: template.title,
+      status: req.workType.statuses[0]?.key || 'pending',
+      assignedTo: template.assignedTo,
+      collaborators: template.collaborators || [],
+      secondaryAssignee: template.secondaryAssignee,
+      priority: template.priority,
+      deadline: new Date(now.getFullYear(), now.getMonth(), day),
+      notes: template.notes,
+      customer: template.customer,
+      customFields: { ...Object.fromEntries(Object.entries(tf)), recurringSource: String(template._id), recurringMonth: month },
+      createdBy: req.user._id,
+    });
+  }
+}
 
 // GET /api/work — Work center overview
 router.get('/', async (req, res, next) => {
@@ -107,6 +153,7 @@ async function resolveWorkType(req, res, next) {
 // GET /api/work/:type — Work list for specific work type
 router.get('/:type', resolveWorkType, async (req, res, next) => {
   try {
+    await ensureMonthlyRecords(req);
     const activeWorkspace = String(req.activeCompanyId);
     const organization = req.user.organization._id;
     const { status, assignedTo, priority, q, view = 'open', month = '', page = 1, pageSize = 100 } = req.query;
@@ -296,6 +343,8 @@ router.post('/:type', resolveWorkType, async (req, res, next) => {
       message: `Work item "${item.title}" created in ${req.workType.name}.`,
     });
 
+    await runRecordAutomation({ record: item, workType: req.workType, trigger: 'record_created' });
+
     const populated = await CustomRecord.findById(item._id)
       .populate('workType assignedTo customer collaborators')
       .lean();
@@ -328,6 +377,9 @@ router.put('/:type/:id', resolveWorkType, async (req, res, next) => {
       return res.status(404).json({ ok: false, error: 'Record not found.' });
     }
 
+    const previousStatus = item.status;
+    const previousOwner = item.assignedTo ? String(item.assignedTo) : null;
+
     if (body.title !== undefined) item.title = String(body.title).trim();
     if (body.status !== undefined) item.status = body.status;
     if (body.priority !== undefined && priorities.includes(body.priority)) item.priority = body.priority;
@@ -350,6 +402,13 @@ router.put('/:type/:id', resolveWorkType, async (req, res, next) => {
     }
 
     await item.save();
+
+    if (String(previousStatus || '') !== String(item.status || '')) {
+      await runRecordAutomation({ record: item, workType: req.workType, trigger: 'status_changed', previousStatus });
+    }
+    if (String(previousOwner || '') !== String(item.assignedTo || '')) {
+      await runRecordAutomation({ record: item, workType: req.workType, trigger: 'owner_changed', previousOwner });
+    }
 
     await logAudit(req, {
       action: 'update',
@@ -391,11 +450,16 @@ router.post('/:type/:id/status', resolveWorkType, async (req, res, next) => {
       return res.status(404).json({ ok: false, error: 'Record not found.' });
     }
 
+    const previousStatus = item.status;
     item.status = status;
     if (isComplete(item) && !item.deliveredAt) {
       item.deliveredAt = new Date();
     }
     await item.save();
+
+    if (String(previousStatus || '') !== String(item.status || '')) {
+      await runRecordAutomation({ record: item, workType: req.workType, trigger: 'status_changed', previousStatus });
+    }
 
     await logAudit(req, {
       action: 'status_change',
@@ -534,7 +598,7 @@ router.post('/:type/import', resolveWorkType, async (req, res, next) => {
         }
       });
 
-      await CustomRecord.create({
+      const item = await CustomRecord.create({
         organization,
         workspace: activeWorkspace,
         module: req.workType._id,
@@ -546,6 +610,8 @@ router.post('/:type/import', resolveWorkType, async (req, res, next) => {
         customFields,
         createdBy: req.user._id,
       });
+
+      await runRecordAutomation({ record: item, workType: req.workType, trigger: 'record_created' });
 
       created += 1;
     }

@@ -35,6 +35,7 @@ import ModuleReportBuilderPage from './pages/reports/ModuleReportBuilderPage';
 import ClientDashboardPage from './pages/clients/ClientDashboardPage';
 import NotFoundPage from './pages/errors/NotFoundPage';
 import ForbiddenPage from './pages/errors/ForbiddenPage';
+import ServerErrorPage from './pages/errors/ServerErrorPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -89,6 +90,7 @@ export default function App() {
             <Route path="/reports/module-builder" element={<ModuleReportBuilderPage />} />
             <Route path="/reports/:reportKey" element={<ReportTablePage />} />
             <Route path="/403" element={<ForbiddenPage />} />
+            <Route path="/500" element={<ServerErrorPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>

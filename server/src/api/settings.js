@@ -324,6 +324,28 @@ router.post('/stages/reorder', async (req, res, next) => {
   }
 });
 
+// POST /api/settings/fields/reorder — Reorder custom fields
+router.post('/fields/reorder', async (req, res, next) => {
+  try {
+    const activeWorkspace = workspace(req, res);
+    if (!activeWorkspace) return;
+    const organization = req.user.organization._id;
+    const { fieldIds } = req.body;
+
+    if (Array.isArray(fieldIds)) {
+      await Promise.all(
+        fieldIds.map((id, index) =>
+          CustomField.updateOne({ _id: id, organization, clientCompany: activeWorkspace, entity: 'customer' }, { order: (index + 1) * 10 })
+        )
+      );
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ==================== CUSTOM FIELDS ====================
 
 // POST /api/settings/fields — Create custom field
