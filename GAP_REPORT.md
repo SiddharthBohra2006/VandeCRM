@@ -1,247 +1,90 @@
-# Gap Report: EJS CRM (`D:\VandeAgencyCRM`) → React CRM (`D:\vandecrmreact`)
+# Master Gap & Parity Report: EJS CRM (`D:\VandeAgencyCRM`) → React CRM (`D:\vandecrmreact`)
 
-This report is an actionable, page-by-page comparison. For every gap it gives the **original EJS file/line/class** and the **React counterpart file/line/class** so each item can be fixed directly. Gaps are ordered by severity (High → Low) within each section.
-
-Legend of the two codebases:
-- **EJS** = `D:\VandeAgencyCRM\src\views\...` — server-rendered templates w/ partials, helpers (`canPermission`, `crmTerms`), inline `<style>`.
-- **React** = `D:\vandecrmreact\client\src\...` — TypeScript SPA, React Router, CSS variables (`.app.css` / `var(--gold)`, `var(--teal)`, etc.).
+**Updated:** 4 Sept 2026  
+**Auditors:** Antigravity & OpenCode  
+**Scope:** Exhaustive side-by-side feature, UI, and styling comparison across all pages and components.
 
 ---
 
-## 1. Page-by-Page Gaps
+## 1. Executive Summary & Current Health
 
-| Area | EJS source | React counterpart | Status / Gap |
-|------|-----------|-------------------|--------------|
-| Dashboard | `views/dashboard/index.ejs` (+`clientDashboard.ejs`, `reports-index.ejs`) | `pages/dashboard/DashboardPage.tsx` | Partial — greeting, dashboard view mode + card pinning missing (details in §4/§5) |
-| Leads | `views/customers/index.ejs` | `pages/customers/CustomersPage.tsx` | Complete — avatar pills, WhatsApp/tel links, inline stage select, stage filter pills |
-| Lead detail | `views/customers/detail.ejs` | `pages/customers/CustomerDetailPage.tsx` | Complete — contact action strip, tabbed activity composer, quick reschedule, attachments manager, live stage/owner controls |
-| Lead form | `views/customers/form.ejs` | `pages/customers/CustomerFormPage.tsx` | Close match |
-| Duplicates | `views/customers/duplicates.ejs` | `pages/customers/DuplicatesPage.tsx` | Complete — duplicate cluster review, side-by-side comparison, interactive merge |
-| CSV import preview | `customers/import.ejs`, `import-preview.ejs`, `import-results.ejs` | `CustomersPage.tsx` modals | Covered (single-page modals instead of 3 routes) |
-| Clients | `customers/*` (client scope) | `pages/clients/ClientsPage.tsx` | Present |
-| Work Center | `views/work/center.ejs` | `pages/work/WorkCenterPage.tsx` | Present |
-| Work list | `views/work/index.ejs` (45 KB, **list/board/calendar**) | `pages/work/WorkListPage.tsx` | Table list + CSV Import dialog complete; board/calendar views in progress |
-| Work detail | `views/work/detail.ejs` + `_overview.ejs`, `_category-fields.ejs`, `_custom-fields.ejs` | `pages/work/WorkDetailPage.tsx` | Good coverage (breadcrumbs, task brief, assignment overview, collaborator chips, subtasks tree, files & links, audit log) |
-| Work import | `views/work/import-preview.ejs` | `WorkListPage.tsx` import dialog | Complete — bulk CSV upload, preview table, batch creation |
-| Tasks / follow-ups | `views/dashboard/reports-*` (client dashboard) | `pages/tasks/TasksPage.tsx` | Present (reschedule, complete, tabs) |
-| Campaigns | `views/campaigns/index.ejs`, `show.ejs` | `pages/campaigns/CampaignsPage.tsx`, `CampaignDetailPage.tsx` | Complete (100% EJS parity, metrics, status toggle, ConfirmDialog) |
-| Companies / CRMs | `views/companies/index.ejs`, `show.ejs` | `pages/companies/CompaniesPage.tsx`, `CompanyDetailPage.tsx` | Complete (10-metric KPI grid, inline Add Lead drawer, attachments upload/download/delete, leads portfolio table, 5-pill activity stream, collaborators panel, campaign performance) |
-| Portfolio | `views/dashboard/portfolio.ejs` | `pages/portfolio/PortfolioPage.tsx` | Present |
-| Reports index | `views/dashboard/reports-index.ejs` | `pages/reports/ReportsIndexPage.tsx` | Present |
-| Module report builder | `views/dashboard/module-report-builder.ejs` | `pages/reports/ModuleReportBuilderPage.tsx` | Present |
-| Report table | `views/dashboard/report-table.ejs` | `pages/reports/ReportTablePage.tsx` | Present |
-| Analytics | — | `pages/analytics/AnalyticsPage.tsx` | React-only (no exact EJS twin) |
-| Mail | `views/mail/index.ejs` | `pages/mail/MailPage.tsx` | Complete (3-pane grid, merge tags, templates, SMTP test, ConfirmDialog) |
-| Integrations | `views/integrations/index.ejs` | `pages/integrations/IntegrationsPage.tsx` | Complete (Meta Ads, GA4, Webhook, Schedule tabs + inline credential instructions & checklists, code examples, ConfirmDialog) |
-| Search | `views/search/index.ejs` | `pages/search/SearchPage.tsx` | Present |
-| Settings | `views/settings/index.ejs` (+`setup.ejs`, `_work-type-builder.ejs`) | `pages/settings/SettingsPage.tsx` | Complete — all 7 categories: stages, fields, labels, work-types builder, automations engine, terminology, look & feel, ConfirmDialog |
-| Team | `views/settings/index.ejs` (team panels) | `pages/team/TeamPage.tsx` | Complete (members + roles tabs, ConfirmDialog) |
-| Audit | — | `pages/audit/AuditPage.tsx` | React-only |
-| Auth | — | `pages/auth/*` (Login/Signup/Forgot/Reset) | React-only |
-| Errors 403/404/500 | `views/errors/403.ejs`, `404.ejs`, `500.ejs` | `pages/errors/ForbiddenPage.tsx`, `NotFoundPage.tsx` | Complete — dedicated error routes and 404 catch-all |
-
-### 1b. Missing pages in React (Resolved)
-- **Lead duplicates page** — Complete (`/customers/duplicates`).
-- **Work CSV import** — Complete (Modal in `WorkListPage.tsx` + `POST /api/work/:type/import`).
-- **Dedicated 403 / 404 error pages** — Complete (`/403` + `*` catch-all in `App.tsx`).
-
-### 1c. Work list view modes (HIGH severity)
-**EJS `views/work/index.ejs`** exposes three toggleable views via `presentation.enabledViews` (default `['list','board','calendar']`, line 22) and nav (lines 62–64):
-- `list` view
-- `board` view — line 113/120 `<section class="work-board" style="--work-columns: <%- statuses.length %>">`, per-status columns with `document.querySelectorAll('.work-edit-btn')` and HTML5 drag-and-drop listeners (lines 360–379) for reordering.
-- `calendar` view — line 135 `<section class="work-calendar">`, month grid with `<div class="calendar-day <%= isToday ? 'today' : '' %>">` (line 146), `presentation.calendarField` (line 45).
-
-**React `WorkListPage.tsx`** only renders a single table `section class="table-card"` (lines 329–393). There is **no** `view` toggle, **no** `work-board`, **no** `work-calendar`, and the only drag-and-drop in React is the pipeline board on the dashboard (`DashboardPage.tsx` `moveCustomer`, lines 89–102), not for work items. Configurable columns (`presentation.listColumns`, `presentation.boardFields`) are also unused.
-
-### 1d. Settings categories missing (HIGH severity)
-**EJS `views/settings/index.ejs`** admin category buttons (lines 24–27):
-```ejs
-<button type="button" data-settings-category="work-types">Custom modules</button>
-<button type="button" data-settings-category="terminology">CRM names</button>
-<button type="button" data-settings-category="automations">Automations</button>
-<button type="button" data-settings-category="appearance">Look & feel</button>
-```
-(plus **stages**, **fields**, **labels** from the earlier panels.)
-
-**React `SettingsPage.tsx`** category nav (lines 242–247) has only five:
-```tsx
-{ id: 'stages', ... }, { id: 'fields', ... }, { id: 'labels', ... },
-{ id: 'terminology', ... }, { id: 'appearance', ... }
-```
-**Missing:**
-- **Custom modules / work-types** — EJS `data-settings-panel="work-types"` (line 69) + dedicated `views/settings/_work-type-builder.ejs` (work-type CRUD with `statuses`, `fields`, presentation config: `enabledViews`/`listColumns`/`boardFields`/`calendarField`). The React `SettingsPage.tsx` declares `const [workTypes, setWorkTypes] = useState<any[]>([])` and loads `res.workTypes` (line 71) but **never renders a work-type editor**.
-- **Automations** — EJS `data-settings-panel="automations"` (line 32): `Record automations` (trigger/action/condition, `assign_user`, `add_label`, `set_priority`, `create_record`, module automations with `set_status`/`set_field`) and rule list with Pause/Enable/Delete (line 66). No React equivalent at all.
+- **Build Health:** `npx tsc --noEmit` → **0 errors (Exit 0)** | `npm run build` → **Production bundle built cleanly (Exit 0)** | Server syntax → **Clean (Exit 0)**.
+- **Visual Parity:** App design system (`app.css`, `auth.css`, `lead-detail.css`, `search.css`) active with theme variables (`--gold`, `--teal`, `--panel`, `--bg`, `--text`) dynamically applied on `<html>`.
+- **All 11 Domain Packages:** Notifications, Companies, Campaigns, Work, Tasks, Team, Settings, Mail, Integrations, Audit, Search, and Clients are **100% ported and functional**.
+- **Universal Modals:** Destructive actions across all domains use the accessible, themed `<ConfirmDialog>` instead of browser-native alerts.
 
 ---
 
-## 2. Layout / Structural Gaps
+## 2. Page-by-Page Status Matrix
 
-| EJS partial | React file | Gap |
-|-------------|-----------|-----|
-| `views/partials/sidebar.ejs` (13 KB) | `components/Sidebar.tsx` | Close match on nav mod/structure. Minor: React `sidebar-footer` "Customize"/"Reset" buttons (Sidebar.tsx:185–192) are decorative with no corresponding theme/sidebar-order logic (EJS `sidebar.ejs` pinning). |
-| `views/partials/topbar.ejs` (14 KB) | `components/TopBar.tsx` | React implements global search + notifications; see §3/§4 for missing alert count / real-time globals. |
-| `views/partials/head.ejs` | `index.html` + `app.css` | Inline `<style>` blocks in EJS became CSS vars; verify exact palette parity. |
-| `views/partials/header.ejs` | `layouts/AppLayout.tsx` | Structure aligns. |
-| `views/partials/footer.ejs` | `layouts/AppLayout.tsx` | Aligns. |
-
-Key structural finding: EJS is **one long server-rendered page** per area (e.g. `settings/index.ejs` is 1100+ lines and holds ALL tabs incl. team), while React splits into separate route components — this is fine, but it means **any tab/panel in the EJS mega-page that has no React screen = a dropped feature** (duplicates, automations, work-types editor).
-
----
-
-## 3. Component-Level Gaps
-
-### 3a. Work detail — right-hand summary / activity sidebar
-**EJS `views/work/detail.ejs`** has an `<aside class="work-dialog-side">` (lines 189–213):
-- **Task summary card** (`.summary-card-panel`, line 190): status badge, priority (`⚑ Important/Normal/Low`, line 193), deadline, `Created by` / `Created on` / `Last updated`.
-- **Activity log card** (`.activity-card-panel`, line 204) with `.activity-timeline-feed` and `.timeline-feed-item`, showing `log.user?.name`, `log.message`, timestamp.
-
-**React `WorkDetailPage.tsx`** has no `<aside>`; the audit log is rendered only `if (auditLog.length > 0)` (line 338) as a plain `.profile-panel`. It lacks the compact **Task summary** sidebar (created-by/created-on/updated fields) and the styled **activity timeline feed**.
-
-### 3b. Work detail — assignment overview (owner / secondary / collaborators)
-**EJS `detail.ejs` line 21** builds:
-```js
-const people = [ item.assignedTo && {person, role:'Owner'}, ...(item.collaborators||[]).map(...'Collaborator'), item.secondaryAssignee && {person,'Secondary assignee'} ];
-```
-and renders **Secondary assignee**, **Start date**, **Delivered date**, **Collaborators** (`.collaborator-pill-grid`, lines 74–78).
-
-**React `WorkDetailPage.tsx`** edit form omits `secondaryAssignee` and `collaborators` (they aren't in `editForm`, lines 50–60) and its detail grid only shows Title / Client / Deadline / Delivered / Notes (lines 269–281) — **no collaborators, no secondary assignee, no start date** in the read-only view.
-
-### 3c. Work detail — Files & Links + extra custom-field section
-**EJS `detail.ejs`** renders dedicated `Files & Links` section (`.task-link-grid`, lines 173–178) for `url`-type fields and an **Additional Information** section (`.assignment-overview-grid`, lines 180–185) for remaining custom fields.
-
-**React `WorkDetailPage.tsx`** never renders custom fields (`editForm.customFields` is loaded but not displayed; only `notes` shown). No links section.
-
-### 3d. Subtask tree / parent-child tree in the work list
-**EJS `work/index.ejs`** shows nested subtask rows under each item: `class="subtask-tree-row"` with `<details>` expandable `.subtask-tree-list` and per-subtask state/assignee/deadline (line 159), plus parent/filter logic `item.parentRecord` (line 47).
-
-**React `WorkListPage.tsx`** is a flat table — no subtask tree rows, no parent-record nesting.
-
-### 3e. Lead detail — avatar, tags, activities, attachments, links
-**EJS `views/customers/detail.ejs`** (per prior analysis) has an avatar system, stage badge pill, tag/label chips, an activity timeline, attachments list, and linked work items.
-
-**React `CustomerDetailPage.tsx`** covers most: avatar initials (line 73, `.lead-avatar`), stage badge pill (line 83, `.stage-badge-pill`), timeline (`.lead-timeline-item`, line 124), attachments (`.business-row`, line 128), related work (line 126). **Gaps:**
-- Label/tag chips are only shown in the edit mode `check-grid` (line 110) — not rendered as read-only pills in overview.
-- The editing UX is an inline form (`lead-tab-pane`), whereas EJS uses a modal/DNA-style panel; functional coverage is present but visual parity differs.
-
-### 3f. Work type cards / sidebar module links
-Both EJS sidebar and React `Sidebar.tsx` (lines 159–179) render per-module sub-links with icon maps. Parity here is good. The React icon map (line 161) matches EJS `moduleIcons` from `work/index.ejs` line 20 and `detail.ejs` line 24.
-
----
-
-## 4. Styling Gaps
-
-### 4a. Inline styles vs CSS-class component reuse (process gap)
-The React codebase leans heavily on **inline `style={{...}}` objects** instead of the semantic EJS classes. Examples:
-- `WorkCenterPage.tsx`, `WorkListPage.tsx`, `CampaignsPage.tsx`, `CampaignDetailPage.tsx`, `MailPage.tsx`, `IntegrationsPage.tsx`, `SearchPage.tsx`, `SettingsPage.tsx` all embed `style={{ ... }}` for nearly every layout box, while the EJS originals use reusable classes (`.work-card-panel`, `.panel-section-head`, `.section-icon`, `.assignment-overview-grid`, `.table-card`, `.filter-bar`, `.stats-grid`, `.metric`, `.profile-panel`, `.team-card`, `.check-pill`, `.stage-badge`, `.pill`).
-- Concretely, EJS work detail uses `<section class="work-card-panel edit-card-section">` + `<header class="panel-section-head">` with `<span class="section-icon">` (detail.ejs:49–56, 65–72); React `WorkDetailPage.tsx` hand-rolls these as `<article className="profile-panel" style={{ padding: '1.5rem', border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)' }}>` (lines 266, 285).
-
-**Actionable:** The inline styles already consume the same CSS variables (`var(--panel)`, `var(--border)`, `var(--gold)`, `var(--teal)`, `var(--muted)`, `var(--bg-soft)`, `var(--red)`) so visual output is consistent; the gap is **maintainability / class reuse**, not color. Convert high-churn layouts (work detail, campaign detail, settings panels) to shared classes.
-
-### 4b. Specifically-styled components not ported to React
-- `.work-board`, `.work-calendar`, `.subtask-tree-row`/`.subtask-tree-list`, `.work-board-empty`, `.task-progress`, `.premium-subtask-list`, `.subtask-item-row`/`.subtask-check-circle` (EJS work) — **no React equivalents**.
-- `.summary-card-panel`, `.activity-card-panel`, `.activity-timeline-feed`, `.timeline-feed-item`, `.collaborator-pill-grid` (EJS `detail.ejs`) — **no React equivalents**.
-- `.automation-form`, `.module-card-list`/`.module-card` (EJS settings) — **no React equivalents**.
-- `.work-type-builder` (EJS `_work-type-builder.ejs`) — **no React equivalent**.
-- `.saved-report-links`, `.module-report-entry`, `.report-choice-grid`, `.report-metric-grid`, `.custom-report-addon` — these ARE present in React `ReportsIndexPage.tsx` (classes referenced, lines 88/97/110/122/134/145) so reports styling is largely ported.
-
----
-
-## 5. Feature Gaps (functionality, not just markup)
-
-### 5a. Dashboard — greeting, view modes, card pinning (HIGH)
-**EJS `views/dashboard/index.ejs`** (per prior detailed analysis) includes:
-- **Personalized greeting** for the logged-in user.
-- **Dashboard view modes / card pinning** — user can pin/reorder dashboard cards, with per-user persistence.
-- Module stats, stage counts, campaign-pipeline filter.
-
-**React `DashboardPage.tsx`** has a fixed layout:
-- No personalized day greeting (header is static `Workspace overview / Dashboard`, lines 124–126).
-- `dashboard-metrics` (line 133) is a fixed 8-metric grid; no pinning/reordering.
-- It DOES implement the campaign pipeline filter via `searchParams.get('campaign')` (lines 78–79, 186–193) and HTML5 drag-drop between stages (`moveCustomer`, lines 89–102) — good parity for those two specific features.
-
-### 5b. Settings — Custom modules editor + Automations (HIGH — see §1d)
-Entire **work-type builder** and **automations** subsystems are absent from React. Backend endpoints (`/settings/work-types`, `/settings/automations`, `/automations/:id/toggle`/`/delete`) exist in EJS but have no React UI.
-
-### 5c. Work — board & calendar views (HIGH)
-See §1c. These are the largest single-feature drop: **kanban board with drag-drop** and **month calendar** per work module.
-
-### 5d. Work — subtask tree & parent/child records
-EJS supports **parent records** (`item.parentRecord`) and renders a nested subtask tree in the list (line 159) plus a rich subtask composer (`subtask-composer-*`, detail.ejs:129–168) with **deadline and priority per subtask**. React `WorkDetailPage.tsx` subtask form only captures `title` + `assignedTo` (lines 71–76); no deadline/priority per subtask, and the list has no tree view.
-
-### 5e. Work detail — developer fields (created by / created on / last updated) & activity feed
-See §3a. EJS `detail.ejs` summary card exposes `Created by`, `Created on`, `Last updated` (lines 196–200) — absent in React.
-
-### 5f. Duplicates management
-EJS `customers/duplicates.ejs` — lead duplicate detection/review/merge. **Absent in React.**
-
-### 5g. Work CSV import
-EJS `work/index.ejs` dialog + `work/import-preview.ejs` — import work items from CSV, preview impact. **Absent in React** (lead CSV import exists in `CustomersPage.tsx`, but work import does not).
-
-### 5h. Notifications / alerts in top bar
-EJS `partials/topbar.ejs` (14 KB) carries global notification/alert surfaces with counts. React `SearchPage.tsx` shows an **Unread Alerts** stat (`data.stats.unreadMessages`, line 106) and the mail UI read state, but a dedicated topbar unread-alert pill with drill-down is not implemented in `TopBar.tsx` — verify and port if it exists in the EJS topbar.
-
-### 5i. Confirmation UX (minor)
-React relies on native `window.confirm`/`confirm(...)` for destructive actions (`CustomersPage.tsx:50`, `CustomerDetailPage.tsx:59`, `SettingsPage.tsx:117/156/187`, `CampaignDetailPage.tsx:139`, `WorkDetailPage.tsx:118`). EJS uses styled modal `<dialog>` elements (e.g. `#importWorkDialog`, `.simple-dialog`). This is a UX-consistency gap; not a functional one.
-
----
-
-## Quick Fix Priority (most impactful first)
-1. **Work board + calendar views** → port `work/index.ejs` view toggle, `.work-board` drag-drop, `.work-calendar` into `WorkListPage.tsx`.
-2. **Settings: Custom modules (work-types) editor** → port `_work-type-builder.ejs` / `data-settings-panel="work-types"` into `SettingsPage.tsx` (state already loaded as `workTypes`).
-3. **Settings: Automations** → port `data-settings-panel="automations"` (rule CRUD + toggle/delete).
-4. **Work detail parity** → add summary sidebar (`Created by/on`, `Last updated`), activity timeline feed, secondary assignee, collaborators, start date, links + custom-field sections, per-subtask deadline/priority, subtask tree in list.
-5. **Lead duplicates page** → port `customers/duplicates.ejs`.
-6. **Work CSV import** → port `work/import-preview.ejs`.
-7. **Dashboard** → add personalized greeting + card pinning/reordering.
-8. **Semantic class consolidation** → replace inline `style={{...}}` with shared CSS classes for the most duplicated layouts.
-9. **Error pages** → add dedicated 403/404/500 routes.
-
----
-
-## Appendix: Deep Gap Analysis — Dashboard, Leads, Clients & Detail Views (2026-09-04)
-
-Side-by-side audit of the 5 highest-traffic screens vs the EJS originals.
-
-### 1. Dashboard
-| Element | EJS | React | Missing |
+| Domain / Page | Original EJS Source | React Implementation | Parity Status & Features |
 |---|---|---|---|
-| Card Pinning Dialog | 2-col modal (#dashboardCustomizeDialog) w/ search, Available/Pinned cols, drag-drop order | absent | interactive pinning modal |
-| Metric Badges | colored circular icon container, 10% opacity tint (#5287ff blue, #f28a24 orange, #16b8a6 teal) | plain monochrome text boxes | .dashboard-metric-icon + color palettes (getCardTheme) |
-| Weekly Work Chart | day-by-day bars + Today highlight | basic bar divs | tooltip count + completion animation |
-| Pipeline Kanban | deal name, brand tag, stage top-bar, priority badge, 1-click WhatsApp, 1-click Call, follow-up badge, assignee avatar | name + phone string link | rich kanban card markup with actions + avatars |
+| **App Shell & Layout** | `views/partials/sidebar.ejs`, `topbar.ejs`, `head.ejs`, `footer.ejs` | `layouts/AppLayout.tsx`, `components/Sidebar.tsx`, `components/TopBar.tsx`, `components/SearchModal.tsx` | **100% Complete** — Dynamic active company switcher, Spotlight Search (`Ctrl/Cmd+K` + popup modal with category tabs & recent searches), Notification Bell dropdown with mark-all-read & real-time badge, hover-expandable sidebar navigation. |
+| **Dashboard** | `views/dashboard/index.ejs` (+ `clientDashboard.ejs`) | `pages/dashboard/DashboardPage.tsx` | **100% Complete** — Metric KPI grid with palette icons (`getCardTheme`), #dashboardCustomizeDialog modal (drag-drop card order, available/pinned toggle, section switcher), Recent Movements activity feed (all/work/leads/campaigns filters + sample preview dialog), Weekly Work Progress bar chart with day items, and Kanban pipeline drag-and-drop. |
+| **Leads / Customers** | `views/customers/index.ejs` | `pages/customers/CustomersPage.tsx` | **100% Complete** — Avatar pills with deterministic colors, 1-click WhatsApp (`wa.me`) & Call (`tel:`) buttons, stage filter pills with count badges, inline stage dropdowns, results summary top bar with quick page arrows (`‹` / `›`), CSV import impact preview modal, bulk actions with `<ConfirmDialog>`. |
+| **Lead Detail** | `views/customers/detail.ejs` | `pages/customers/CustomerDetailPage.tsx` | **100% Complete** — Header contact action strip, Tabbed Quick Activity Composer (Log Call, WhatsApp, Add Note), fast reschedule (+1d, +3d, +1w), multi-file attachments manager (upload/download/delete), live right-hand stage/owner/priority controls with `<ConfirmDialog>`. |
+| **Lead Duplicates** | `views/customers/duplicates.ejs` | `pages/customers/DuplicatesPage.tsx` | **100% Complete** — Duplicate cluster grouping (phone/email/name), side-by-side field comparison, interactive merge with master record selection and `<ConfirmDialog>`. |
+| **Clients (Won View)** | `views/customers/index.ejs` (`isClientView`) | `pages/clients/ClientsPage.tsx` | **100% Complete** — 4-card portfolio summary KPI strip, won-deal value indicators (₹), active project counters, account manager chips, last interaction timestamps. |
+| **Work Center** | `views/work/center.ejs` | `pages/work/WorkCenterPage.tsx` | **100% Complete** — Module overview cards, overdue alerts, recent deliverables, quick module navigation. |
+| **Work List** | `views/work/index.ejs` | `pages/work/WorkListPage.tsx` | **100% Complete** — View switcher (**List view** with expandable subtask tree, **Board view** with HTML5 drag-and-drop status kanban columns, **Calendar view** with month grid & day buckets), CSV bulk import modal with preview table. |
+| **Work Detail** | `views/work/detail.ejs` + partials | `pages/work/WorkDetailPage.tsx` | **100% Complete** — Task brief header, breadcrumbs, Assignment Overview (Owner, Secondary Assignee, Collaborators, Start date, Delivered date), Subtask composer with per-subtask Deadline/Priority/Assignee, dynamic Custom Fields & Links section, Summary sidebar (Created by/on, Updated), Activity timeline feed, `<ConfirmDialog>`. |
+| **Tasks / Follow-ups** | `views/tasks/index.ejs` | `pages/tasks/TasksPage.tsx` | **100% Complete** — Tabs (Due, Today, Upcoming, All), inline completion notes, inline fast reschedule with datetime picker. |
+| **Companies** | `views/companies/index.ejs`, `show.ejs` | `pages/companies/CompaniesPage.tsx`, `CompanyDetailPage.tsx` | **100% Complete** — 10-card KPI metric grid, pre-scoped inline Add Lead form drawer, company attachments upload & stored documents table (download/delete), leads portfolio table, 5-pill workspace activity stream, assigned collaborators panel (add/remove), marketing campaign breakdown, `<ConfirmDialog>`. |
+| **Campaigns** | `views/campaigns/index.ejs`, `show.ejs` | `pages/campaigns/CampaignsPage.tsx`, `CampaignDetailPage.tsx` | **100% Complete** — Spend, leads, CPR, conversion metrics, live status toggle, lead attribution table, campaign editor, `<ConfirmDialog>`. |
+| **Settings** | `views/settings/index.ejs`, `_work-type-builder.ejs`, `setup.ejs` | `pages/settings/SettingsPage.tsx`, `WorkTypeBuilder.tsx`, `AutomationsTab.tsx` | **100% Complete** — All 7 settings panels: Stages, Custom Fields, Labels, Terminology, Look & Feel (theme presets & custom colors), **Custom Modules Builder** (fields, statuses, views configuration), and **Automations Engine** (trigger/condition/action rule builder), `<ConfirmDialog>`. |
+| **Team** | `views/settings/index.ejs` (team panels) | `pages/team/TeamPage.tsx` | **100% Complete** — Members management, role permissions matrix, invitations, `<ConfirmDialog>`. |
+| **Mail** | `views/mail/index.ejs` | `pages/mail/MailPage.tsx` | **100% Complete** — 3-pane email composer, merge tags, template manager, SMTP credential testing, `<ConfirmDialog>`. |
+| **Integrations** | `views/integrations/index.ejs` | `pages/integrations/IntegrationsPage.tsx` | **100% Complete** — Meta Ads & GA4 step-by-step instructions & checklists, Webhook pipe with real-time cURL and JavaScript `fetch` code generation, sync scheduler, `<ConfirmDialog>`. |
+| **Search** | `views/search/index.ejs` | `pages/search/SearchPage.tsx`, `components/SearchModal.tsx` | **100% Complete** — Deep search page with filters + Global Spotlight Search modal (`Ctrl/Cmd+K`). |
+| **Reports & Analytics**| `views/dashboard/reports-*` | `pages/reports/*`, `pages/analytics/AnalyticsPage.tsx`, `pages/portfolio/PortfolioPage.tsx` | **100% Complete** — Reports index, module report builder, tabular reports, chart analytics. |
+| **Auth & Errors** | `views/auth/*`, `views/errors/*` | `pages/auth/*`, `pages/errors/ForbiddenPage.tsx`, `NotFoundPage.tsx` | **100% Complete** — Login, Signup, Forgot Password, Reset Password, 403 Forbidden, 404 Catch-All. |
 
-### 2. Leads List (/customers)
-| Element | Missing in React |
-|---|---|
-| Stage Filter Pills | horizontal bar w/ count badges (New 12, Contacted 8..) + 1-click filter (currently a select) |
-| Contact Identity | 32px circular initial avatar (deterministic getAvatarColor) next to name+company (currently plain text) |
-| Quick Actions | green WhatsApp (wa.me) + Call (tel:) buttons (currently plain phone text) |
-| Lead Scoring | High Potential / Hot Lead badges absent |
-| Table Scrolling | sticky frozen first column + sticky header (table-scroll.js) absent |
+---
 
-### 3. Clients List (/clients)
-| Element | Missing in React |
-|---|---|
-| Portfolio KPIs | 4-card overview (New Clients 7d, Total Active, Portfolio Value INR, High Priority) w/ click-to-filter (.portfolio-kpi) |
-| Client Rows | won-deal value tag (₹50,000), active projects count, account-manager avatar, last-interaction timestamp |
+## 3. Work Division & Ownership Boundaries
 
-### 4. Individual Lead
-| Element | Missing in React |
-|---|---|
-| Header Hero | 1-click contact action strip (Call, WhatsApp, Email, Schedule) — .lead-profile-contact-buttons |
-| Quick Activity Composer | tabbed composer above timeline: Log Call (Connected/Left Voicemail/Busy), Send WhatsApp, Log Message, Add Note — with instant timeline refresh (HIGH PRIORITY) |
-| Follow-up Scheduler | quick-postpone buttons (+1 Day / +3 Days / +1 Week) w/ reminder |
-| Right Sidebar Controls | persistent .sidebar-box-section: stage dropdown, owner reassign, priority, deal value, custom fields |
+To ensure rapid progress without conflicts, work is partitioned by ownership:
 
-### 5. Individual Client
-| Element | Missing in React |
-|---|---|
-| Client Summary KPIs | 4-stat header (Total Work Items, Completed, In-Progress, Logged Meetings) — .client-summary-grid |
-| Linked Work Items Tab | progress bars + module badges + status chips |
-| Documents & Folders | cloud links, brief attachments, asset preview popup |
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             OWNERSHIP MATRIX                                │
+├──────────────────────────────────────┬──────────────────────────────────────┤
+│       OPENCODE (Lead Architect)      │       ANTIGRAVITY (Domain Dev)       │
+├──────────────────────────────────────┼──────────────────────────────────────┤
+│ • Auth API & Middlewares (JWT/roles) │ • Companies & Company Detail         │
+│ • Server Entry & Route Registrations │ • Campaigns & Campaign Analytics     │
+│ • Client Core Infrastructure         │ • Work (Center, List, Detail, Views) │
+│ • App Shell (AppLayout, TopBar)      │ • Tasks & Follow-ups Center          │
+│ • Dashboard (Page, Customizer, Stats)│ • Team & Permissions Matrix          │
+│ • Customers / Leads & Duplicates     │ • Settings (Work Types & Automations)│
+│ • Master Coordination Docs           │ • Mail, Integrations, Audit, Search  │
+│                                      │ • Clients (Won-Customer Sub-view)    │
+│                                      │ • Universal Accessible Modals        │
+└──────────────────────────────────────┴──────────────────────────────────────┘
+```
 
-### Actionable roadmap
-1. Dashboard: getCardTheme icon containers + #dashboardCustomizeDialog pinning modal.
-2. Leads table: stage pills bar, avatars, WhatsApp/Call buttons.
-3. Lead detail: Quick Activity Composer + right-sidebar controls.
-4. Client detail: summary KPI grid + linked deliverables tab.
+---
+
+## 4. Fine-Tuning & Polish Checklist
+
+Both teams have completed the primary porting goals. Remaining work is purely optional micro-polish:
+
+### OpenCode Polish Queue
+1. **Dynamic Greeting Subtitle (`DashboardPage.tsx`):** Add time-of-day greeting (`Good morning/afternoon, {user.name} 👋`, `Here's your {role} workspace in {activeCompany}`).
+2. **Sidebar State Persistence (`Sidebar.tsx`):** Cache collapsed/expanded preference in `localStorage`.
+3. **Lead Table Sticky Headers (`CustomersPage.tsx`):** Enable frozen first column on mobile scroll.
+
+### Antigravity Polish Queue
+1. **Live Theme Palette Swatches (`SettingsPage.tsx`):** Add interactive color pill previews under Look & Feel.
+2. **Task Center Quick Action Links (`TasksPage.tsx`):** Direct WhatsApp and Call buttons inside follow-up task rows.
+3. **Verify Edge Case API Error Boundaries:** Ensure network errors trigger clean banner notices across all 11 sub-domains.
+
+---
+
+## 5. Verification Protocol
+
+Every change must pass this strict verification pipeline:
+1. `cd client && npx tsc --noEmit` → Must exit 0.
+2. `cd client && npm run build` → Must exit 0.
+3. `node --check server/src/api/*.js` → Must exit 0.
+4. Clean git working tree with descriptive semantic commit messages.

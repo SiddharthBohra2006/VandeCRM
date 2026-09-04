@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { customersApi, downloadCustomersCsv, CustomersListResponse, ImportPreviewRow } from '../../api/customers';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const AVATAR_PALETTES = [
   { bg: '#eff6ff', color: '#2563eb' },
@@ -47,6 +48,8 @@ export default function CustomersPage() {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
   const isManager = user && ['admin', 'manager'].includes(user.role);
 
   useEffect(() => {
@@ -67,12 +70,20 @@ export default function CustomersPage() {
     }
   }
 
-  async function runBulkAction() {
+  function handleBulkApply() {
     if (!bulkAction || selectedIds.size === 0) return;
-    if (bulkAction === 'delete' && !confirm(`Delete ${selectedIds.size} selected lead(s)?`)) return;
+    if (bulkAction === 'delete') {
+      setShowBulkDeleteConfirm(true);
+      return;
+    }
+    void executeBulkAction();
+  }
+
+  async function executeBulkAction() {
     try {
       setWorking(true);
       setError('');
+      setShowBulkDeleteConfirm(false);
       const payload: { action: string; selectedIds: string[]; [key: string]: unknown } = {
         action: bulkAction,
         selectedIds: [...selectedIds]
@@ -315,7 +326,7 @@ export default function CustomersPage() {
         {bulkAction === 'transfer' && <select aria-label="New owner" value={bulkValue} onChange={event => setBulkValue(event.target.value)}><option value="">Unassigned</option>{users.map(user => <option value={user._id} key={user._id}>{user.name}</option>)}</select>}
         {bulkAction === 'priority' && <select aria-label="New priority" value={bulkValue} onChange={event => setBulkValue(event.target.value)}><option value="">Choose priority</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select>}
         {['value', 'source'].includes(bulkAction) && <input aria-label={`New ${bulkAction}`} type={bulkAction === 'value' ? 'number' : 'text'} min={bulkAction === 'value' ? 0 : undefined} value={bulkValue} onChange={event => setBulkValue(event.target.value)} />}
-        <button className="btn primary" disabled={working || (bulkAction !== 'delete' && !bulkValue && bulkAction !== 'transfer')} onClick={() => void runBulkAction()}>{working ? 'Applying…' : 'Apply'}</button>
+        <button className="btn primary" disabled={working || (bulkAction !== 'delete' && !bulkValue && bulkAction !== 'transfer')} onClick={handleBulkApply}>{working ? 'Applying…' : 'Apply'}</button>
       </div>}
 
       {/* Table */}
@@ -570,6 +581,16 @@ export default function CustomersPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={showBulkDeleteConfirm}
+        title="Confirm Bulk Delete"
+        message={`Are you sure you want to delete ${selectedIds.size} selected ${selectedIds.size === 1 ? crmTerms.leadSingular.toLowerCase() : crmTerms.leadPlural.toLowerCase()}? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
+        onConfirm={executeBulkAction}
+        onCancel={() => setShowBulkDeleteConfirm(false)}
+      />
     </div>
   );
 }
