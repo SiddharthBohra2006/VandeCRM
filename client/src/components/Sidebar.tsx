@@ -31,12 +31,12 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { path: '/portfolio', label: 'All CRMs', icon: 'layout-grid', navKey: 'nav-portfolio', adminOnly: true, mainOnly: true },
-  { path: '/', label: 'Dashboard', icon: 'layout-dashboard', navKey: 'nav-dashboard' },
-  { path: '/customers', labelKey: 'leadPlural', label: 'Leads', icon: 'users', navKey: 'nav-customers' },
+  { path: '/', label: 'Dashboard', icon: 'layout-dashboard', navKey: 'nav-pipeline' },
+  { path: '/customers', labelKey: 'leadPlural', label: 'Leads', icon: 'users', navKey: 'nav-database' },
   { path: '/clients', labelKey: 'recordPlural', label: 'Clients', icon: 'building-2', navKey: 'nav-clients' },
   { path: '/analytics', label: 'Analytics', icon: 'bar-chart-3', navKey: 'nav-analytics', reportOnly: true },
   { path: '/reports', label: 'Reports', icon: 'file-text', navKey: 'nav-reports', reportOnly: true },
-  { path: '/work', label: 'Work Center', icon: 'list-todo', navKey: 'nav-work' },
+  { path: '/work', label: 'Work Center', icon: 'list-todo', navKey: 'nav-task-center' },
   { path: '/tasks', label: 'Follow-ups', icon: 'list-checks', navKey: 'nav-tasks' },
   { path: '/campaigns', label: 'Ads', icon: 'megaphone', navKey: 'nav-campaigns' },
   { path: '/companies', label: 'CRMs', icon: 'folder-kanban', navKey: 'nav-companies' },
@@ -129,31 +129,34 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
     window.location.reload();
   }
 
-  function handlePrefsDragStart(key: string) {
+  // ---- Sidebar nav drag-to-reorder (matches EJS app.js) ----
+  const navContainerRef = useRef<HTMLElement>(null);
+
+  function onNavDragStart(key: string) {
     return (e: React.DragEvent) => {
-      e.dataTransfer.effectAllowed = 'move';
       setDragNavKey(key);
+      (e.currentTarget as HTMLElement).classList.add('dragging');
+      try { e.dataTransfer.setData('text/plain', key); } catch (_) {}
     };
   }
-  function handlePrefsDragOver(key: string) {
-    return (e: React.DragEvent) => { e.preventDefault(); };
+  function onNavDragEnd() {
+    (document.querySelectorAll('.sidebar-nav .dragging') as NodeListOf<HTMLElement>).forEach(el => el.classList.remove('dragging'));
+    const order: string[] = [];
+    navContainerRef.current?.querySelectorAll('[data-nav-id]').forEach(el => order.push(el.getAttribute('data-nav-id') || ''));
+    saveNavOrder(order);
+    setNavOrder(order);
+    setDragNavKey(null);
   }
-  function handlePrefsDrop(targetKey: string) {
-    return (e: React.DragEvent) => {
-      e.preventDefault();
-      if (!dragNavKey || dragNavKey === targetKey) return;
-      setNavOrder(prev => {
-        const keys = orderedNavItems.map(i => i.navKey).filter(k => !visibleWorkTypes.some(wt => `nav-work-${wt.key}` === k));
-        const wi = keys.indexOf(dragNavKey);
-        const ti = keys.indexOf(targetKey);
-        if (wi === -1 || ti === -1) return prev;
-        keys.splice(wi, 1);
-        keys.splice(ti, 0, dragNavKey);
-        saveNavOrder(keys);
-        return keys;
-      });
-      setDragNavKey(null);
-    };
+  function onNavDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    const dragging = navContainerRef.current?.querySelector('.dragging') as HTMLElement | null;
+    if (!dragging || !navContainerRef.current) return;
+    const afterElement = getDragAfterElement(navContainerRef.current, e.clientY);
+    if (afterElement == null) {
+      navContainerRef.current.appendChild(dragging);
+    } else {
+      navContainerRef.current.insertBefore(dragging, afterElement);
+    }
   }
 
   return (
@@ -224,7 +227,7 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
         </button>
       </div>
 
-      <nav className="sidebar-nav">
+      <nav className="sidebar-nav" ref={navContainerRef} onDragOver={onNavDragOver}>
         {orderedNavItems.map(item => {
           const isActive = item.path === '/'
             ? resolvedPath === '/'
@@ -234,7 +237,11 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
             <Link
               key={item.path}
               to={item.path}
+              data-nav-id={item.navKey}
+              draggable
               className={`nav-item ${isActive ? 'active' : ''}`}
+              onDragStart={onNavDragStart(item.navKey)}
+              onDragEnd={onNavDragEnd}
             >
               <Icon name={item.icon} size={18} />
               <span>{item.labelKey && crmTerms[item.labelKey] ? crmTerms[item.labelKey] : item.label}</span>
@@ -255,8 +262,12 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
             <Link
               key={wt._id}
               to={`/work/${wt.key}`}
+              data-nav-id={`nav-work-${wt.key}`}
+              draggable
               className={`nav-item nav-item-sub ${isWorkActive && resolvedPath.includes(wt.key) ? 'active' : ''}`}
               style={{ '--module-color': wt.color } as React.CSSProperties}
+              onDragStart={onNavDragStart(`nav-work-${wt.key}`)}
+              onDragEnd={onNavDragEnd}
             >
               <Icon name={iconName} size={18} className="nav-item-module-icon" />
               <span>{wt.name}</span>
@@ -312,10 +323,6 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
           navItems={orderedNavItems}
           workTypes={visibleWorkTypes}
           crmTerms={crmTerms}
-          dragNavKey={dragNavKey}
-          onDragStart={handlePrefsDragStart}
-          onDragOver={handlePrefsDragOver}
-          onDrop={handlePrefsDrop}
         />
       )}
     </aside>
@@ -339,6 +346,21 @@ function applyOrder<T extends { navKey: string }>(items: T[], order: string[], g
   });
 }
 
+function getDragAfterElement(container: HTMLElement, y: number): HTMLElement | null {
+  const draggableElements = [...container.querySelectorAll('[data-nav-id]:not(.dragging)')] as HTMLElement[];
+  return draggableElements.reduce<{ offset: number; element: HTMLElement | null }>(
+    (closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset, element: child };
+      }
+      return closest;
+    },
+    { offset: Number.NEGATIVE_INFINITY, element: null }
+  ).element;
+}
+
 // ---- Sidebar Preferences Drawer ----
 
 interface PrefsDrawerProps {
@@ -350,13 +372,9 @@ interface PrefsDrawerProps {
   navItems: NavItem[];
   workTypes: WorkType[];
   crmTerms: CrmTerms;
-  dragNavKey: string | null;
-  onDragStart: (key: string) => (e: React.DragEvent) => void;
-  onDragOver: (key: string) => (e: React.DragEvent) => void;
-  onDrop: (key: string) => (e: React.DragEvent) => void;
 }
 
-function SidebarPrefsDrawer({ hidden, onToggle, onSave, onCancel, saving, navItems, workTypes, crmTerms, dragNavKey, onDragStart, onDragOver, onDrop }: PrefsDrawerProps) {
+function SidebarPrefsDrawer({ hidden, onToggle, onSave, onCancel, saving, navItems, workTypes, crmTerms }: PrefsDrawerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   function getLabel(item: NavItem): string {
@@ -372,27 +390,27 @@ function SidebarPrefsDrawer({ hidden, onToggle, onSave, onCancel, saving, navIte
 
   return (
     <dialog className="sidebar-preferences-drawer" ref={dialogRef} onClose={onCancel}>
-      <div className="sidebar-prefs-panel">
-        <div className="sidebar-prefs-header">
-          <h2>Customize sidebar</h2>
-          <p>Show only the tools you use. Permissions are not affected.</p>
+      <form method="dialog" onSubmit={(e) => { e.preventDefault(); void onSave(); }}>
+        <header>
+          <div>
+            <span className="eyebrow">Navigation</span>
+            <h2>Customize sidebar</h2>
+            <p>Show only the tools you use. Permissions are not affected.</p>
+          </div>
           <button className="modal-close" type="button" onClick={onCancel} aria-label="Close">&times;</button>
-        </div>
-        <div className="sidebar-prefs-list">
+        </header>
+        <div className="sidebar-preference-list">
           {navItems.map(item => {
             const key = item.navKey;
             return (
-              <label
-                key={key}
-                className={`sidebar-pref-row${dragNavKey === key ? ' dragging' : ''}`}
-                draggable
-                onDragStart={onDragStart(key)}
-                onDragOver={onDragOver(key)}
-                onDrop={onDrop(key)}
-              >
-                <span className="sidebar-pref-drag" aria-hidden="true">⠿</span>
-                <Icon name={item.icon} size={16} className="sidebar-pref-icon" />
-                <span className="sidebar-pref-name">{getLabel(item)}</span>
+              <label key={key} className="sidebar-preference-row">
+                <span className="sidebar-preference-icon">
+                  <Icon name={item.icon} size={16} />
+                </span>
+                <span>
+                  <strong>{getLabel(item)}</strong>
+                  <small>Visible in your sidebar</small>
+                </span>
                 <input
                   type="checkbox"
                   checked={!hidden.has(key)}
@@ -404,17 +422,14 @@ function SidebarPrefsDrawer({ hidden, onToggle, onSave, onCancel, saving, navIte
           {workTypes.map(wt => {
             const key = `nav-work-${wt.key}`;
             return (
-              <label
-                key={key}
-                className={`sidebar-pref-row${dragNavKey === key ? ' dragging' : ''}`}
-                draggable
-                onDragStart={onDragStart(key)}
-                onDragOver={onDragOver(key)}
-                onDrop={onDrop(key)}
-              >
-                <span className="sidebar-pref-drag" aria-hidden="true">⠿</span>
-                <Icon name="clipboard-list" size={16} className="sidebar-pref-icon" />
-                <span className="sidebar-pref-name">{wt.name}</span>
+              <label key={key} className="sidebar-preference-row">
+                <span className="sidebar-preference-icon">
+                  <Icon name="clipboard-list" size={16} />
+                </span>
+                <span>
+                  <strong>{wt.name}</strong>
+                  <small>Visible in your sidebar</small>
+                </span>
                 <input
                   type="checkbox"
                   checked={!hidden.has(key)}
@@ -424,13 +439,13 @@ function SidebarPrefsDrawer({ hidden, onToggle, onSave, onCancel, saving, navIte
             );
           })}
         </div>
-        <div className="sidebar-prefs-footer">
+        <footer>
           <button className="btn" type="button" onClick={onCancel}>Cancel</button>
-          <button className="btn primary" type="button" onClick={() => void onSave()} disabled={saving}>
+          <button className="btn primary" type="submit" disabled={saving}>
             {saving ? 'Saving…' : 'Save navigation'}
           </button>
-        </div>
-      </div>
+        </footer>
+      </form>
     </dialog>
   );
 }
