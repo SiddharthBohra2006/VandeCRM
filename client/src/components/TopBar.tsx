@@ -12,10 +12,10 @@ interface TopBarProps {
 }
 
 const THEME_PRESETS = [
-  { name: 'Classic Dark', type: 'dark', gold: '#ffcc00', teal: '#00bcd4', bg: '#090d16', surface: '#121b2d', text: '#f8fafc' },
-  { name: 'OLED Black', type: 'dark', gold: '#ffcc00', teal: '#a855f7', bg: '#000000', surface: '#0e0e11', text: '#eeeeee' },
-  { name: 'Cozy Cream', type: 'light', gold: '#d97706', teal: '#0f766e', bg: '#fcfaf7', surface: '#ffffff', text: '#1c1917' },
-  { name: 'Crystal Light', type: 'light', gold: '#b58d00', teal: '#2563eb', bg: '#f1f5f9', surface: '#ffffff', text: '#0f172a' },
+  { name: 'Classic Dark', description: 'Midnight slate', type: 'dark', gold: '#ffcc00', teal: '#00bcd4', bg: '#090d16', surface: '#121b2d', text: '#f8fafc' },
+  { name: 'OLED Black', description: 'Pure black', type: 'dark', gold: '#ffcc00', teal: '#a855f7', bg: '#000000', surface: '#0e0e11', text: '#eeeeee' },
+  { name: 'Cozy Cream', description: 'Warm light', type: 'light', gold: '#d97706', teal: '#0f766e', bg: '#fcfaf7', surface: '#ffffff', text: '#1c1917' },
+  { name: 'Crystal Light', description: 'Cool light', type: 'light', gold: '#b58d00', teal: '#2563eb', bg: '#f1f5f9', surface: '#ffffff', text: '#0f172a' },
 ];
 
 function applyThemePreset(preset: typeof THEME_PRESETS[number]) {
@@ -197,7 +197,7 @@ export default function TopBar({ user, activeCompany, companies, onSwitchCompany
                 <button
                   key={preset.name}
                   type="button"
-                  title={preset.name}
+                  title={`${preset.name} — ${preset.description}`}
                   className={activeTheme === preset.name ? 'active' : ''}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -210,6 +210,9 @@ export default function TopBar({ user, activeCompany, companies, onSwitchCompany
                   <span>{preset.name}</span>
                 </button>
               ))}
+              {['admin', 'manager'].includes(user.role) && (
+                <a href="/settings" onClick={(e) => { e.stopPropagation(); setShowThemePicker(false); }}>Custom colors</a>
+              )}
             </div>
           )}
         </div>

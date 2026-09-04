@@ -89,6 +89,7 @@ interface DashboardResponse {
   dashboardHiddenSections?: string[];
   recentMovements?: Movement[];
   movementSamples?: Movement[];
+  availableDashboardFields?: { _id: string; key: string; label: string; type: string }[];
 }
 
 interface Movement {
@@ -125,6 +126,7 @@ const SECTION_CHOICES: [string, string][] = [
   ['pipeline', 'Active pipeline'],
   ['attention', 'Needs attention'],
   ['recent', 'Recent movements'],
+  ['activity', 'Activity feed'],
 ];
 
 function getCardTheme(icon: string) {
@@ -217,6 +219,24 @@ export default function DashboardPage() {
     breakdown: `${m.total || 0} total · ${m.completed || 0} delivered`
   });
 
+  const fieldCard = (f: { key: string; label: string }): DashboardMetricCard => {
+    const allCustomers = dashboard.stageCards.flatMap(c => c.customers);
+    const total = allCustomers.filter(c => {
+      const v = (c as any).customData?.get?.(f.key) ?? (c as any).customData?.[f.key];
+      return v !== undefined && v !== null && v !== '' && v !== false;
+    }).length;
+    return {
+      href: '/customers',
+      icon: 'tag',
+      value: String(total),
+      label: f.label,
+      key: `field-${f.key}`,
+      defaultVisible: false,
+      category: 'Custom Fields',
+      breakdown: `Filled across ${crmTerms.leadPlural.toLowerCase()}`
+    };
+  };
+
   const cards: DashboardMetricCard[] = [
     { href: '/customers', icon: 'users', value: String(dashboard.stats.totalLeads), label: `Active ${crmTerms.leadPlural}`, key: 'total-leads', defaultVisible: true, category: 'Leads & Clients', breakdown: `${dashboard.totalCustomers || 0} total records` },
     { href: '/clients', icon: 'building-2', value: String(dashboard.stats.totalClients), label: crmTerms.recordPlural, key: 'total-clients', defaultVisible: true, category: 'Leads & Clients', breakdown: 'Won pipeline' },
@@ -228,7 +248,8 @@ export default function DashboardPage() {
     { href: '/work', icon: 'clipboard-list', value: String(dashboard.stats.openWork), label: 'Open work', key: 'open-work', defaultVisible: true, category: 'Work & Tasks', breakdown: 'In progress' },
     { href: '/work', icon: 'check', value: `${dashboard.stats.deliveredPercent}%`, label: 'Work delivered', key: 'delivered', defaultVisible: true, category: 'Work & Tasks', breakdown: `${dashboard.stats.completedWork} delivered` },
     { href: '/work', icon: 'triangle-alert', value: String(dashboard.stats.overdue), label: 'Overdue work', key: 'overdue', defaultVisible: true, category: 'Work & Tasks', breakdown: 'Past deadline' },
-    ...dashboard.moduleStats.map(moduleCard)
+    ...dashboard.moduleStats.map(moduleCard),
+    ...(dashboard.availableDashboardFields || []).map(fieldCard)
   ];
   const weeklyMax = Math.max(1, ...dashboard.weeklyWorkProgress.map(day => day.count));
 
@@ -329,6 +350,20 @@ export default function DashboardPage() {
   const currentHour = new Date().getHours();
   const timeGreeting = currentHour < 12 ? 'Good morning' : currentHour < 17 ? 'Good afternoon' : 'Good evening';
   const userName = user?.name ? user.name.split(' ')[0] : 'there';
+  const roleLabel = user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'User';
+  const headerDate = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const isEmptyDashboard = dashboard.totalCustomers === 0 && cards.every(card => card.key.startsWith('field-') || Number(card.value) === 0);
+
+  const isManager = !!user && ['admin', 'manager'].includes(user.role);
+  const quickLinks = [
+    { path: '/customers', label: `Add ${crmTerms.leadSingular}`, icon: 'user-plus', show: true },
+    { path: '/clients', label: crmTerms.recordPlural, icon: 'building-2', show: true },
+    { path: '/work', label: 'Work Center', icon: 'list-todo', show: true },
+    { path: '/campaigns', label: 'Create ad campaign', icon: 'megaphone', show: isManager },
+    { path: '/companies', label: 'Manage CRMs', icon: 'folder-kanban', show: isManager },
+    { path: '/team', label: 'Invite team', icon: 'user-plus', show: isManager && user.role === 'admin' },
+  ].filter(link => link.show);
 
   return (
     <div className="page-container">
@@ -337,17 +372,42 @@ export default function DashboardPage() {
           <p className="eyebrow">{timeGreeting}, {userName} 👋</p>
           <h1>Dashboard</h1>
           <p className="page-subtitle">
-            {activeCompany ? `Workspace overview for ${activeCompany.name}. ` : 'Workspace overview. '}
+            {activeCompany ? `${roleLabel} workspace for ${activeCompany.name}. ` : 'Workspace overview. '}
             Track pipeline health, delivery, and the work needing attention.
           </p>
         </div>
-        <div className="dashboard-head-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div className="dashboard-head-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ color: 'var(--muted)', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{headerDate}</span>
           <button className="btn" type="button" onClick={openCustomize}>Pin dashboard cards</button>
           <Link to="/customers/new" className="btn primary">New {crmTerms.leadSingular}</Link>
         </div>
       </section>
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}
+
+      {isEmptyDashboard && (
+        <section className="dashboard-welcome" aria-label="Workspace ready">
+          <h2>Your workspace is ready 🎉</h2>
+          <p className="dashboard-welcome-sub">
+            Everything is set up for <strong>{activeCompany?.name || 'your CRM'}</strong>. You don't have any{' '}
+            {crmTerms.leadPlural.toLowerCase()} records yet.
+          </p>
+          <div className="dashboard-quick-links">
+            {quickLinks.map(link => (
+              <Link key={link.path + link.label} to={link.path} className="dashboard-quick-link">
+                <Icon name={link.icon} size={18} />
+                <span>{link.label}</span>
+              </Link>
+            ))}
+          </div>
+          {user && !['admin', 'manager'].includes(user.role) && (
+            <p className="dashboard-access-note">
+              You're signed in as <strong>{roleLabel}</strong>. Some management tools aren't visible with your access.
+              Ask an admin or manager to invite teammates or manage workspaces.
+            </p>
+          )}
+        </section>
+      )}
 
       {!editSections.has('metrics') && (
         <section className="dashboard-metrics dashboard-reference-grid" aria-label="Dashboard metrics">
@@ -500,7 +560,7 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {fullFeed.length > 0 && (
+      {!editSections.has('activity') && fullFeed.length > 0 && (
         <section className="business-grid dashboard-movement-grid">
           <article className="business-panel movement-panel movement-panel-v2" data-movement-feed>
             <header className="movement-header">
