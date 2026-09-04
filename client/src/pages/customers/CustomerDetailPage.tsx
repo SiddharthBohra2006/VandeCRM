@@ -1,5 +1,5 @@
 import { CSSProperties, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { CustomerDetailResponse, customersApi } from '../../api/customers';
 import { useAuth } from '../../contexts/AuthContext';
 import { CustomerInput } from '../../types';
@@ -209,11 +209,17 @@ export default function CustomerDetailPage() {
   if (error && !detail) return <div className="alert alert-error" role="alert">{error}</div>;
   if (!detail) return <div className="empty-state">{crmTerms.leadSingular} not found.</div>;
 
+  const [searchParams] = useSearchParams();
   const { data: customer, activities, attachments, relatedWork, stages, labels, users, campaigns, fields } = detail;
   const initials = customer.name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'L';
   const avatarPalette = getAvatarColor(customer.name);
   const stageColor = customer.stage?.color || '#3b82f6';
   const cleanPhone = (customer.phone || '').replace(/\D/g, '');
+
+  const isClientProfile = searchParams.get('from') === 'clients' || Boolean(customer.stage?.isWon);
+  const completedWork = relatedWork.filter(w => /completed|done|won/i.test(w.status)).length;
+  const activeWork = relatedWork.length - completedWork;
+  const meetingsCount = activities.filter(a => a.type === 'meeting').length;
 
   let stageBg = '#eff6ff';
   let stageText = '#2563eb';
@@ -237,7 +243,13 @@ export default function CustomerDetailPage() {
 
   return (
     <div className="lead-record-ui">
-      <nav className="lead-detail-breadcrumbs"><Link to="/customers">{crmTerms.leadPlural}</Link><span>/</span><strong>{customer.name}</strong></nav>
+      <nav className="lead-detail-breadcrumbs">
+        <Link to={isClientProfile ? '/clients' : '/customers'}>
+          {isClientProfile ? crmTerms.recordPlural : crmTerms.leadPlural}
+        </Link>
+        <span>/</span>
+        <strong>{customer.name}</strong>
+      </nav>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {success && <div className="alert alert-success" role="alert">{success}</div>}
 
@@ -320,14 +332,30 @@ export default function CustomerDetailPage() {
             <>
               {tab === 'overview' && (
                 <section className="lead-overview-card">
-                  <h2>{crmTerms.leadSingular} information</h2>
+                  <h2>{isClientProfile ? `${crmTerms.recordSingular} information` : `${crmTerms.leadSingular} information`}</h2>
+                  {isClientProfile && (
+                    <div className="client-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', margin: '1rem 0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--panel-muted)' }}>
+                        <div><small style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)' }}>Work items</small><strong style={{ fontSize: '1.15rem' }}>{relatedWork.length}</strong></div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--panel-muted)' }}>
+                        <div><small style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)' }}>Completed</small><strong style={{ fontSize: '1.15rem', color: '#10b981' }}>{completedWork}</strong></div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--panel-muted)' }}>
+                        <div><small style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)' }}>In progress</small><strong style={{ fontSize: '1.15rem', color: '#3b82f6' }}>{activeWork}</strong></div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--panel-muted)' }}>
+                        <div><small style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)' }}>Meetings</small><strong style={{ fontSize: '1.15rem', color: '#8b5cf6' }}>{meetingsCount}</strong></div>
+                      </div>
+                    </div>
+                  )}
                   <div className="lead-facts">
                     <div><small>Phone</small><strong>{customer.phone || 'Not set'}</strong></div>
                     <div><small>Email</small><strong>{customer.email || 'Not set'}</strong></div>
                     <div><small>Organisation</small><strong>{customer.company || 'Not set'}</strong></div>
-                    <div><small>Course / Campaign</small><strong>{customer.campaign?.name || customer.source || 'Direct lead'}</strong></div>
+                    <div><small>{isClientProfile ? 'How they came to you' : 'Course / Campaign'}</small><strong>{customer.campaign?.name || customer.source || (isClientProfile ? 'Direct' : 'Direct lead')}</strong></div>
                     <div><small>Assigned owner</small><strong>{customer.assignedTo?.name || 'Unassigned'}</strong></div>
-                    <div><small>Next follow-up</small><strong>{customer.nextFollowUpAt ? new Date(customer.nextFollowUpAt).toLocaleString('en-IN') : 'Not scheduled'}</strong></div>
+                    <div><small>{isClientProfile ? 'Next planned contact' : 'Next follow-up'}</small><strong>{customer.nextFollowUpAt ? new Date(customer.nextFollowUpAt).toLocaleString('en-IN') : 'Not scheduled'}</strong></div>
                   </div>
                   {customer.notes && <div className="lead-notes"><h3>Internal notes</h3><p>{customer.notes}</p></div>}
                 </section>
