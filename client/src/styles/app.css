@@ -9418,3 +9418,45 @@ button.movement-preview-trigger { padding: 0; border: 0; background: none; text-
 .lead-table-modern tbody tr {
   transition: background-color 0.1s ease;
 }
+
+/* ==========================================================================
+   LEADS TABLE TOP BAR & HORIZONTAL SCROLL
+   ========================================================================== */
+.leads-table-card { position: relative; z-index: 1; background: var(--panel); }
+.leads-table-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 4px 12px;
+}
+.leads-table-pagination-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: .76rem;
+}
+.leads-quick-page-arrows {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.leads-quick-page-arrows button {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: .9rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.leads-quick-page-arrows button:hover:not(:disabled) { border-color: var(--teal); color: var(--teal); }
+.leads-quick-page-arrows button:disabled { opacity: .4; cursor: default; }
+.table-container { overflow-x: auto; }
+.table-container .data-table { min-width: max-content; }

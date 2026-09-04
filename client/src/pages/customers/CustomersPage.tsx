@@ -319,6 +319,27 @@ export default function CustomersPage() {
       </div>}
 
       {/* Table */}
+      <div className="leads-table-top-bar">
+        <div className="leads-table-pagination-summary">
+          <span>
+            Showing {customers.length ? ((pagination.page - 1) * pagination.pageSize) + 1 : 0}-{Math.min(pagination.page * pagination.pageSize, pagination.totalResults)} of {pagination.totalResults} results
+          </span>
+          <div className="leads-quick-page-arrows">
+            <button
+              type="button"
+              aria-label="Previous page"
+              disabled={pagination.page <= 1}
+              onClick={() => { const params = new URLSearchParams(searchParams); params.set('page', String(Math.max(1, pagination.page - 1))); setSearchParams(params); }}
+            >‹</button>
+            <button
+              type="button"
+              aria-label="Next page"
+              disabled={pagination.page >= pagination.totalPages}
+              onClick={() => { const params = new URLSearchParams(searchParams); params.set('page', String(Math.min(pagination.totalPages, pagination.page + 1))); setSearchParams(params); }}
+            >›</button>
+          </div>
+        </div>
+      </div>
       <div className="table-container">
         <table className="data-table">
           <thead>
