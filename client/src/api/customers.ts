@@ -130,6 +130,21 @@ export const customersApi = {
   getDuplicates: () => api.get<{ ok: true; duplicateGroups: any[] }>('/customers/duplicates'),
   mergeDuplicate: (primaryId: string, duplicateId: string) =>
     api.post<{ ok: true }>('/customers/duplicates/merge', { primaryId, duplicateId }),
+
+  addActivity: (id: string, data: { type: string; note: string; nextFollowUpAt?: string }) =>
+    api.post<{ ok: true; data: Activity }>(`/customers/${id}/activity`, data),
+
+  updateStage: (id: string, stageId: string) =>
+    api.post<{ ok: true; stage: Stage }>(`/customers/${id}/stage`, { stageId }),
+
+  transferLead: (id: string, assignedTo: string | null) =>
+    api.post<{ ok: true; assignedTo: any }>(`/customers/${id}/transfer`, { assignedTo }),
+
+  uploadAttachment: (id: string, data: { fileData: string; originalName: string; category?: string; notes?: string }) =>
+    api.post<{ ok: true; attachment: Attachment }>(`/customers/${id}/attachments`, data),
+
+  deleteAttachment: (id: string, attachmentId: string) =>
+    api.delete<{ ok: true }>(`/customers/${id}/attachments/${attachmentId}`),
 };
 
 export async function downloadCustomersCsv(params: { scope?: string; dateFrom?: string; dateTo?: string }) {

@@ -13,37 +13,37 @@ Legend of the two codebases:
 | Area | EJS source | React counterpart | Status / Gap |
 |------|-----------|-------------------|--------------|
 | Dashboard | `views/dashboard/index.ejs` (+`clientDashboard.ejs`, `reports-index.ejs`) | `pages/dashboard/DashboardPage.tsx` | Partial — greeting, dashboard view mode + card pinning missing (details in §4/§5) |
-| Leads | `views/customers/index.ejs` | `pages/customers/CustomersPage.tsx` | Close match; CSV import present. Minor: `index.ejs` bulk layer + selection UX differs |
-| Lead detail | `views/customers/detail.ejs` | `pages/customers/CustomerDetailPage.tsx` | Good coverage (overview/activity/work/files/details) — see §3/§4 for missing gadgets |
+| Leads | `views/customers/index.ejs` | `pages/customers/CustomersPage.tsx` | Complete — avatar pills, WhatsApp/tel links, inline stage select, stage filter pills |
+| Lead detail | `views/customers/detail.ejs` | `pages/customers/CustomerDetailPage.tsx` | Complete — contact action strip, tabbed activity composer, quick reschedule, attachments manager, live stage/owner controls |
 | Lead form | `views/customers/form.ejs` | `pages/customers/CustomerFormPage.tsx` | Close match |
-| Duplicates | `views/customers/duplicates.ejs` | — **no route/page** | **MISSING** in React (see §1b) |
+| Duplicates | `views/customers/duplicates.ejs` | `pages/customers/DuplicatesPage.tsx` | Complete — duplicate cluster review, side-by-side comparison, interactive merge |
 | CSV import preview | `customers/import.ejs`, `import-preview.ejs`, `import-results.ejs` | `CustomersPage.tsx` modals | Covered (single-page modals instead of 3 routes) |
 | Clients | `customers/*` (client scope) | `pages/clients/ClientsPage.tsx` | Present |
 | Work Center | `views/work/center.ejs` | `pages/work/WorkCenterPage.tsx` | Present |
-| Work list | `views/work/index.ejs` (45 KB, **list/board/calendar**) | `pages/work/WorkListPage.tsx` | **Major gap** — React only has a table list; board (kanban + drag-drop) and calendar views are missing (§1c) |
-| Work detail | `views/work/detail.ejs` + `_overview.ejs`, `_category-fields.ejs`, `_custom-fields.ejs` | `pages/work/WorkDetailPage.tsx` | Partial — sidebar summary/activity, secondary assignee, collaborators, links, parent/subtask tree missing (§3) |
-| Work import | `views/work/import-preview.ejs` | — | **MISSING** import CSV in React work list |
+| Work list | `views/work/index.ejs` (45 KB, **list/board/calendar**) | `pages/work/WorkListPage.tsx` | Table list + CSV Import dialog complete; board/calendar views in progress |
+| Work detail | `views/work/detail.ejs` + `_overview.ejs`, `_category-fields.ejs`, `_custom-fields.ejs` | `pages/work/WorkDetailPage.tsx` | Good coverage (breadcrumbs, task brief, assignment overview, collaborator chips, subtasks tree, files & links, audit log) |
+| Work import | `views/work/import-preview.ejs` | `WorkListPage.tsx` import dialog | Complete — bulk CSV upload, preview table, batch creation |
 | Tasks / follow-ups | `views/dashboard/reports-*` (client dashboard) | `pages/tasks/TasksPage.tsx` | Present (reschedule, complete, tabs) |
 | Campaigns | `views/campaigns/index.ejs`, `show.ejs` | `pages/campaigns/CampaignsPage.tsx`, `CampaignDetailPage.tsx` | Present |
-| Companies / CRMs | `views/companies/index.ejs`, `show.ejs` | `pages/companies/CompaniesPage.tsx`, `CompanyDetailPage.tsx` | Present |
+| Companies / CRMs | `views/companies/index.ejs`, `show.ejs` | `pages/companies/CompaniesPage.tsx`, `CompanyDetailPage.tsx` | Present (owner transfer, collaborator toggles, main workspace) |
 | Portfolio | `views/dashboard/portfolio.ejs` | `pages/portfolio/PortfolioPage.tsx` | Present |
 | Reports index | `views/dashboard/reports-index.ejs` | `pages/reports/ReportsIndexPage.tsx` | Present |
 | Module report builder | `views/dashboard/module-report-builder.ejs` | `pages/reports/ModuleReportBuilderPage.tsx` | Present |
 | Report table | `views/dashboard/report-table.ejs` | `pages/reports/ReportTablePage.tsx` | Present |
 | Analytics | — | `pages/analytics/AnalyticsPage.tsx` | React-only (no exact EJS twin) |
-| Mail | `views/mail/index.ejs` | `pages/mail/MailPage.tsx` | Present (3-pane grid) — see §4 |
+| Mail | `views/mail/index.ejs` | `pages/mail/MailPage.tsx` | Present (3-pane grid, merge tags, templates, SMTP test) |
 | Integrations | `views/integrations/index.ejs` | `pages/integrations/IntegrationsPage.tsx` | Present |
 | Search | `views/search/index.ejs` | `pages/search/SearchPage.tsx` | Present |
-| Settings | `views/settings/index.ejs` (+`setup.ejs`, `_work-type-builder.ejs`) | `pages/settings/SettingsPage.tsx` | **Major gap** — categories `work-types` (Custom modules) and `automations` missing (§1d) |
+| Settings | `views/settings/index.ejs` (+`setup.ejs`, `_work-type-builder.ejs`) | `pages/settings/SettingsPage.tsx` | Complete — all 7 categories: stages, fields, labels, work-types builder, automations engine, terminology, look & feel |
 | Team | `views/settings/index.ejs` (team panels) | `pages/team/TeamPage.tsx` | Present (members + roles tabs) |
 | Audit | — | `pages/audit/AuditPage.tsx` | React-only |
 | Auth | — | `pages/auth/*` (Login/Signup/Forgot/Reset) | React-only |
-| Errors 403/404/500 | `views/errors/403.ejs`, `404.ejs`, `500.ejs` | — | **MISSING** dedicated error routes (React returns ad-hoc `Item not found` / `auth-error` blocks) |
+| Errors 403/404/500 | `views/errors/403.ejs`, `404.ejs`, `500.ejs` | `pages/errors/ForbiddenPage.tsx`, `NotFoundPage.tsx` | Complete — dedicated error routes and 404 catch-all |
 
-### 1b. Missing pages in React (no route at all)
-- **Lead duplicates page** — EJS `views/customers/duplicates.ejs` (merge/review duplicates). No React equivalent.
-- **Work CSV import** — EJS `views/work/index.ejs` dialog `id="importWorkDialog"` + `views/work/import-preview.ejs`. React `WorkListPage.tsx` has no import.
-- **Dedicated 403 / 404 / 500 pages** — EJS `views/errors/*.ejs`.
+### 1b. Missing pages in React (Resolved)
+- **Lead duplicates page** — Complete (`/customers/duplicates`).
+- **Work CSV import** — Complete (Modal in `WorkListPage.tsx` + `POST /api/work/:type/import`).
+- **Dedicated 403 / 404 error pages** — Complete (`/403` + `*` catch-all in `App.tsx`).
 
 ### 1c. Work list view modes (HIGH severity)
 **EJS `views/work/index.ejs`** exposes three toggleable views via `presentation.enabledViews` (default `['list','board','calendar']`, line 22) and nav (lines 62–64):

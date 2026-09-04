@@ -41,6 +41,22 @@ export default function CustomerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // Activity Composer State
+  const [activityType, setActivityType] = useState('note');
+  const [activityNote, setActivityNote] = useState('');
+  const [followUpDate, setFollowUpDate] = useState('');
+  const [followUpTime, setFollowUpTime] = useState('10:00');
+  const [timelineSearch, setTimelineSearch] = useState('');
+  const [timelineFilter, setTimelineFilter] = useState('all');
+  const [submittingActivity, setSubmittingActivity] = useState(false);
+
+  // Attachment State
+  const [uploadCategory, setUploadCategory] = useState('proposal');
+  const [uploadNotes, setUploadNotes] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   async function load(customerId: string) {
     try {
@@ -71,6 +87,7 @@ export default function CustomerDetailPage() {
       setError('');
       await customersApi.update(id, form);
       setEditing(false);
+      setSuccess('Lead updated successfully.');
       await load(id);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Update failed');
@@ -89,6 +106,105 @@ export default function CustomerDetailPage() {
     }
   }
 
+  async function handleLogActivity() {
+    if (!id || !activityNote.trim()) {
+      setError('Please enter a note for this activity.');
+      return;
+    }
+    try {
+      setSubmittingActivity(true);
+      setError('');
+      let nextFollowUpAt: string | undefined;
+      if (followUpDate) {
+        nextFollowUpAt = new Date(`${followUpDate}T${followUpTime}:00`).toISOString();
+      }
+      await customersApi.addActivity(id, {
+        type: activityType,
+        note: activityNote.trim(),
+        nextFollowUpAt,
+      });
+      setActivityNote('');
+      setFollowUpDate('');
+      setSuccess('Activity logged successfully.');
+      await load(id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to log activity');
+    } finally {
+      setSubmittingActivity(false);
+    }
+  }
+
+  async function handleQuickFollowUp(days: number) {
+    if (!id) return;
+    try {
+      setError('');
+      const target = new Date();
+      target.setDate(target.getDate() + days);
+      target.setHours(10, 0, 0, 0);
+      await customersApi.addActivity(id, {
+        type: 'task',
+        note: `Follow-up scheduled for +${days} day(s) on ${target.toLocaleDateString('en-IN')}.`,
+        nextFollowUpAt: target.toISOString(),
+      });
+      setSuccess(`Follow-up scheduled for ${target.toLocaleDateString('en-IN')}.`);
+      await load(id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to reschedule follow-up');
+    }
+  }
+
+  async function handleUploadAttachment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!id || !uploadFile) {
+      setError('Please select a file to upload.');
+      return;
+    }
+    if (uploadFile.size > 3 * 1024 * 1024) {
+      setError('File must be 3 MB or smaller.');
+      return;
+    }
+    try {
+      setUploading(true);
+      setError('');
+      const reader = new FileReader();
+      reader.onload = async event => {
+        try {
+          const fileData = String(event.target?.result || '');
+          await customersApi.uploadAttachment(id, {
+            fileData,
+            originalName: uploadFile.name,
+            category: uploadCategory,
+            notes: uploadNotes,
+          });
+          setUploadFile(null);
+          setUploadNotes('');
+          setSuccess('File uploaded successfully.');
+          await load(id);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Upload failed');
+        } finally {
+          setUploading(false);
+        }
+      };
+      reader.readAsDataURL(uploadFile);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Upload failed');
+      setUploading(false);
+    }
+  }
+
+  async function handleDeleteAttachment(attachmentId: string) {
+    if (!id || !window.confirm('Delete this attachment?')) return;
+    try {
+      setError('');
+      await customersApi.deleteAttachment(id, attachmentId);
+      setSuccess('Attachment deleted.');
+      await load(id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to delete attachment');
+    }
+  }
+
   if (loading && !detail) return <div className="loading">Loading…</div>;
   if (error && !detail) return <div className="alert alert-error" role="alert">{error}</div>;
   if (!detail) return <div className="empty-state">{crmTerms.leadSingular} not found.</div>;
@@ -97,6 +213,7 @@ export default function CustomerDetailPage() {
   const initials = customer.name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'L';
   const avatarPalette = getAvatarColor(customer.name);
   const stageColor = customer.stage?.color || '#3b82f6';
+  const cleanPhone = (customer.phone || '').replace(/\D/g, '');
 
   let stageBg = '#eff6ff';
   let stageText = '#2563eb';
@@ -108,17 +225,28 @@ export default function CustomerDetailPage() {
 
   const isManager = user && ['admin', 'manager'].includes(user.role);
 
+  // Filter activities
+  const filteredActivities = activities.filter(a => {
+    if (timelineFilter !== 'all' && a.type !== timelineFilter) return false;
+    if (timelineSearch.trim()) {
+      const q = timelineSearch.toLowerCase();
+      return (a.note || '').toLowerCase().includes(q) || (a.user?.name || '').toLowerCase().includes(q);
+    }
+    return true;
+  });
+
   return (
     <div className="lead-record-ui">
       <nav className="lead-detail-breadcrumbs"><Link to="/customers">{crmTerms.leadPlural}</Link><span>/</span><strong>{customer.name}</strong></nav>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
+      {success && <div className="alert alert-success" role="alert">{success}</div>}
 
       {/* Header card */}
       <section className="lead-detail-head" style={{ '--stage-color': stageColor } as CSSProperties}>
         <div className="lead-identity">
           <span className="lead-avatar" style={{ background: avatarPalette.bg, color: avatarPalette.color }}>{initials}</span>
           <div>
-            <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <h1>{customer.name}</h1>
               <span className="stage-badge-pill" style={{ background: stageBg, color: stageText }}>{customer.stage?.name || 'Unassigned'}</span>
             </div>
@@ -130,9 +258,30 @@ export default function CustomerDetailPage() {
             </div>
           </div>
         </div>
-        <div className="actions">
-          <button className="btn secondary" onClick={() => setEditing(value => !value)}>{editing ? 'Cancel edit' : 'Edit'}</button>
-          <button className="btn danger" onClick={() => void remove()}>Delete</button>
+
+        {/* Quick Contact & Action strip */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+          {customer.phone && (
+            <>
+              <a className="btn btn-secondary" href={`tel:${customer.phone}`}>
+                📞 Call
+              </a>
+              {cleanPhone && (
+                <a className="btn btn-secondary" href={`https://wa.me/${cleanPhone}`} target="_blank" rel="noreferrer">
+                  💬 WhatsApp
+                </a>
+              )}
+            </>
+          )}
+          {customer.email && (
+            <Link className="btn btn-secondary" to={`/mail?customer=${customer._id}`}>
+              ✉️ Send email
+            </Link>
+          )}
+          <button className="btn btn-secondary" onClick={() => setEditing(value => !value)}>
+            {editing ? 'Cancel edit' : 'Edit'}
+          </button>
+          <button className="btn btn-danger" onClick={() => void remove()}>Delete</button>
         </div>
       </section>
 
@@ -186,17 +335,116 @@ export default function CustomerDetailPage() {
 
               {tab === 'activity' && (
                 <section className="lead-tab-pane">
+                  {/* Activity Composer Box */}
+                  <div className="lead-overview-card" style={{ marginBottom: '1.5rem' }}>
+                    <h2 style={{ fontSize: '0.92rem', marginBottom: '0.75rem' }}>Log activity & follow-up</h2>
+                    <div style={{ display: 'flex', gap: '6px', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', overflowX: 'auto' }}>
+                      {[
+                        { key: 'note', label: 'Note' },
+                        { key: 'call', label: 'Call' },
+                        { key: 'email', label: 'Email' },
+                        { key: 'whatsapp', label: 'WhatsApp' },
+                        { key: 'meeting', label: 'Meeting' },
+                        { key: 'task', label: 'Task' },
+                      ].map(type => (
+                        <button
+                          key={type.key}
+                          type="button"
+                          onClick={() => setActivityType(type.key)}
+                          style={{
+                            background: activityType === type.key ? 'var(--gold, #ea580c)' : 'transparent',
+                            color: activityType === type.key ? '#fff' : 'var(--muted)',
+                            border: 'none',
+                            padding: '4px 12px',
+                            borderRadius: 6,
+                            fontSize: '0.76rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {type.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <textarea
+                      rows={3}
+                      placeholder={`Write a ${activityType} note...`}
+                      value={activityNote}
+                      onChange={e => setActivityNote(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', marginBottom: '0.75rem', fontSize: '0.82rem' }}
+                    />
+
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted)' }}>Next follow-up:</label>
+                      <input
+                        type="date"
+                        value={followUpDate}
+                        onChange={e => setFollowUpDate(e.target.value)}
+                        style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.76rem' }}
+                      />
+                      <input
+                        type="time"
+                        value={followUpTime}
+                        onChange={e => setFollowUpTime(e.target.value)}
+                        style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.76rem' }}
+                      />
+                      <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Quick reschedule:</span>
+                      <button type="button" className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.72rem' }} onClick={() => handleQuickFollowUp(1)}>+1 Day</button>
+                      <button type="button" className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.72rem' }} onClick={() => handleQuickFollowUp(3)}>+3 Days</button>
+                      <button type="button" className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.72rem' }} onClick={() => handleQuickFollowUp(7)}>+1 Week</button>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        className="btn btn-primary"
+                        type="button"
+                        disabled={submittingActivity || !activityNote.trim()}
+                        onClick={handleLogActivity}
+                      >
+                        {submittingActivity ? 'Saving...' : 'Save Activity'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Activity Timeline */}
                   <div className="lead-overview-card">
-                    <h2>Activity timeline</h2>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '8px' }}>
+                      <h2>Activity timeline</h2>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                          type="text"
+                          placeholder="Search history..."
+                          value={timelineSearch}
+                          onChange={e => setTimelineSearch(e.target.value)}
+                          style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.76rem' }}
+                        />
+                        <select
+                          value={timelineFilter}
+                          onChange={e => setTimelineFilter(e.target.value)}
+                          style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.76rem' }}
+                        >
+                          <option value="all">All types</option>
+                          <option value="note">Notes</option>
+                          <option value="call">Calls</option>
+                          <option value="email">Emails</option>
+                          <option value="whatsapp">WhatsApp</option>
+                          <option value="meeting">Meetings</option>
+                          <option value="task">Tasks</option>
+                          <option value="stage_changed">Stage changes</option>
+                        </select>
+                      </div>
+                    </div>
+
                     <div className="lead-timeline-list">
-                      {activities.length === 0 ? (
-                        <div className="empty-state">No activity yet.</div>
-                      ) : activities.map(activity => (
+                      {filteredActivities.length === 0 ? (
+                        <div className="empty-state">No matching activity yet.</div>
+                      ) : filteredActivities.map(activity => (
                         <article className="lead-timeline-item" key={activity._id}>
                           <span className="lead-timeline-icon" />
                           <div className="lead-timeline-content">
                             <div className="lead-timeline-meta">
-                              <strong>{activity.type.replace('_', ' ')}</strong>
+                              <strong>{activity.type.replace('_', ' ').toUpperCase()}</strong>
                               <span>{new Date(activity.createdAt).toLocaleString('en-IN')}</span>
                             </div>
                             <p className="lead-timeline-text">{activity.note}</p>
@@ -231,17 +479,76 @@ export default function CustomerDetailPage() {
 
               {tab === 'files' && (
                 <section className="lead-tab-pane">
+                  <div className="lead-overview-card" style={{ marginBottom: '1.5rem' }}>
+                    <h2>Upload attachment</h2>
+                    <form onSubmit={handleUploadAttachment} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <select
+                          value={uploadCategory}
+                          onChange={e => setUploadCategory(e.target.value)}
+                          style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.78rem' }}
+                        >
+                          <option value="proposal">Proposal</option>
+                          <option value="contract">Contract</option>
+                          <option value="invoice">Invoice</option>
+                          <option value="brief">Brief</option>
+                          <option value="screenshot">Screenshot</option>
+                          <option value="other">Other</option>
+                        </select>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.txt,.csv"
+                          onChange={e => setUploadFile(e.target.files?.[0] || null)}
+                          style={{ fontSize: '0.78rem' }}
+                        />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Notes (optional)..."
+                        value={uploadNotes}
+                        onChange={e => setUploadNotes(e.target.value)}
+                        style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.78rem' }}
+                      />
+                      <button className="btn btn-primary" type="submit" disabled={uploading || !uploadFile} style={{ alignSelf: 'flex-start' }}>
+                        {uploading ? 'Uploading...' : 'Upload File'}
+                      </button>
+                    </form>
+                  </div>
+
                   <div className="lead-overview-card">
-                    <h2>Attachments</h2>
+                    <h2>Attachments ({attachments.length})</h2>
                     {attachments.length === 0 ? (
                       <div className="empty-state">No attachments uploaded yet.</div>
                     ) : (
-                      attachments.map(file => (
-                        <article className="business-row" key={file._id}>
-                          <strong>{file.originalName}</strong>
-                          <span>{file.category} · {Math.ceil((file.size || 0) / 1024)} KB</span>
-                        </article>
-                      ))
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {attachments.map(file => (
+                          <article className="business-row" key={file._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <strong>{file.originalName}</strong>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
+                                {file.category} · {Math.ceil((file.size || 0) / 1024)} KB · {new Date(file.createdAt).toLocaleDateString('en-IN')}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <a
+                                className="btn btn-secondary"
+                                style={{ padding: '2px 8px', fontSize: '0.72rem' }}
+                                href={`/api/customers/${customer._id}/attachments/${file._id}/download`}
+                                download
+                              >
+                                Download
+                              </a>
+                              <button
+                                className="btn btn-danger"
+                                style={{ padding: '2px 8px', fontSize: '0.72rem' }}
+                                onClick={() => handleDeleteAttachment(file._id)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </section>
@@ -285,7 +592,13 @@ export default function CustomerDetailPage() {
               <div className="stack-form">
                 <select value={customer.stage?._id || ''} onChange={async event => {
                   const next = event.target.value;
-                  try { await customersApi.update(id!, { ...form, stage: next }); await load(id!); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Update failed'); }
+                  try {
+                    await customersApi.updateStage(id!, next);
+                    setSuccess('Stage updated.');
+                    await load(id!);
+                  } catch (caught) {
+                    setError(caught instanceof Error ? caught.message : 'Update failed');
+                  }
                 }}>
                   {stages.filter(stage => stage.isActive || stage._id === customer.stage?._id).map(stage => <option key={stage._id} value={stage._id}>{stage.name}</option>)}
                 </select>
@@ -297,7 +610,13 @@ export default function CustomerDetailPage() {
                 <h3>Assigned owner</h3>
                 <div className="stack-form">
                   <select value={customer.assignedTo?._id || ''} onChange={async event => {
-                    try { await customersApi.update(id!, { ...form, assignedTo: event.target.value || undefined }); await load(id!); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Update failed'); }
+                    try {
+                      await customersApi.transferLead(id!, event.target.value || null);
+                      setSuccess('Owner updated.');
+                      await load(id!);
+                    } catch (caught) {
+                      setError(caught instanceof Error ? caught.message : 'Update failed');
+                    }
                   }}>
                     <option value="">Unassigned</option>
                     {users.map(u => <option key={u._id} value={u._id}>{u.name}</option>)}

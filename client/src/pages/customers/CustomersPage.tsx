@@ -3,6 +3,28 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { customersApi, downloadCustomersCsv, CustomersListResponse, ImportPreviewRow } from '../../api/customers';
 
+const AVATAR_PALETTES = [
+  { bg: '#eff6ff', color: '#2563eb' },
+  { bg: '#ecfdf5', color: '#059669' },
+  { bg: '#faf5ff', color: '#7c3aed' },
+  { bg: '#f0fdfa', color: '#0d9488' },
+  { bg: '#fdf2f8', color: '#db2777' },
+  { bg: '#fff7ed', color: '#ea580c' },
+  { bg: '#fffbeb', color: '#d97706' }
+];
+
+function getAvatarColor(str: string) {
+  let hash = 0;
+  for (let i = 0; i < (str || '').length; i++) hash = (hash << 5) - hash + str.charCodeAt(i);
+  return AVATAR_PALETTES[Math.abs(hash) % AVATAR_PALETTES.length];
+}
+
+function initialsOf(name: string) {
+  return (name || 'L').split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'L';
+}
+
+const PRIORITY_MOD = { high: 'High', medium: 'Medium', low: 'Low' } as const;
+
 export default function CustomersPage() {
   const { crmTerms, user, activeCompany } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -191,6 +213,11 @@ export default function CustomersPage() {
       <div className="page-header">
         <h1>{crmTerms.leadPlural} <span style={{ fontSize: '0.75rem', background: '#ffedd5', color: '#ea580c', padding: '2px 8px', borderRadius: 999, fontWeight: 800 }}>{leadStats.totalLeads}</span></h1>
         <div className="header-actions">
+          {isManager && (
+            <Link to="/customers/duplicates" className="btn btn-secondary">
+              Duplicates
+            </Link>
+          )}
           {isManager && <button className="btn btn-secondary" onClick={() => setShowCsvModal(true)}>Import</button>}
           <button className="btn btn-secondary" onClick={handleExport}>Export</button>
           <Link to="/customers/new" className="btn btn-primary">+ New {crmTerms.leadSingular}</Link>
@@ -274,8 +301,8 @@ export default function CustomersPage() {
       </div>
 
       <nav className="view-tabs" aria-label="Lead views">
-        {['all', 'recent', 'new', 'potential', 'qualified', 'overdue', 'assigned'].map(view => (
-          <button key={view} className={(searchParams.get('view') || 'all') === view ? 'active' : ''} onClick={() => handleFilterChange('view', view === 'all' ? '' : view)}>{view.replace('-', ' ')}</button>
+        {[['all', 'All'], ['new', 'New'], ['assigned', 'Assigned to me'], ['qualified', 'Qualified'], ['recent', 'Recently updated'], ['potential', 'High Potential'], ['overdue', 'Overdue']].map(([view, label]) => (
+          <button key={view} className={(searchParams.get('view') || 'all') === view ? 'active' : ''} onClick={() => handleFilterChange('view', view === 'all' ? '' : view)}>{label}</button>
         ))}
       </nav>
 
@@ -298,33 +325,123 @@ export default function CustomersPage() {
             <tr>
               <th><input type="checkbox" checked={selectedIds.size === customers.length && customers.length > 0} onChange={selectAll} /></th>
               <th>Name</th>
-              <th>Email</th>
               <th>Phone</th>
+              <th>Email</th>
               <th>Stage</th>
+              <th>Priority</th>
               <th>Value</th>
               <th>Assigned To</th>
               <th>Created</th>
             </tr>
           </thead>
           <tbody>
-            {customers.map(customer => (
-              <tr key={customer._id}>
-                <td><input type="checkbox" checked={selectedIds.has(customer._id)} onChange={() => toggleSelect(customer._id)} /></td>
-                <td><Link to={`/customers/${customer._id}`}>{customer.name}</Link></td>
-                <td>{customer.email}</td>
-                <td>{customer.phone}</td>
-                <td>
-                  <span className="stage-badge" style={{ backgroundColor: customer.stage?.color || '#64748b' }}>
-                    {customer.stage?.name || 'No stage'}
-                  </span>
-                </td>
-                <td>₹{customer.value?.toLocaleString('en-IN') || 0}</td>
-                <td>{customer.assignedTo?.name || 'Unassigned'}</td>
-                <td>{new Date(customer.createdAt).toLocaleDateString('en-IN')}</td>
-              </tr>
-            ))}
+            {customers.map(customer => {
+              const pal = getAvatarColor(customer.name);
+              const cleanPhone = (customer.phone || '').replace(/\D/g, '');
+              const priority = (customer.priority || 'medium').toLowerCase();
+              return (
+                <tr key={customer._id}>
+                  <td><input type="checkbox" checked={selectedIds.has(customer._id)} onChange={() => toggleSelect(customer._id)} /></td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+                      <span className="lead-avatar-pill" style={{ background: pal.bg, color: pal.color, width: 28, height: 28, borderRadius: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 750, fontSize: '0.7rem' }}>
+                        {initialsOf(customer.name)}
+                      </span>
+                      <div>
+                        <Link to={`/customers/${customer._id}`} style={{ fontWeight: 700, color: 'var(--text)', textDecoration: 'none' }}>
+                          {customer.name}
+                        </Link>
+                        {customer.company ? <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{customer.company}</div> : null}
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                      {customer.phone ? (
+                        <>
+                          <a href={`tel:${customer.phone}`} style={{ color: 'var(--text)', textDecoration: 'none', fontWeight: 500, fontSize: '0.78rem' }}>
+                            {customer.phone}
+                          </a>
+                          {cleanPhone && (
+                            <a
+                              href={`https://wa.me/${cleanPhone}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              title="Message on WhatsApp"
+                              style={{ color: '#10b981', display: 'inline-flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 700 }}
+                            >
+                              WA
+                            </a>
+                          )}
+                        </>
+                      ) : (
+                        <span style={{ color: 'var(--muted)', fontSize: '0.76rem' }}>—</span>
+                      )}
+                    </div>
+                  </td>
+                  <td>
+                    {customer.email ? (
+                      <a href={`mailto:${customer.email}`} style={{ color: 'var(--muted)', textDecoration: 'none', fontSize: '0.76rem' }}>
+                        {customer.email}
+                      </a>
+                    ) : (
+                      <span style={{ color: 'var(--muted)', fontSize: '0.76rem' }}>—</span>
+                    )}
+                  </td>
+                  <td>
+                    <select
+                      className="lead-stage-pill-select"
+                      value={customer.stage?._id || ''}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        border: '1px solid var(--border)',
+                        background: 'var(--panel)',
+                        color: customer.stage?.color || 'var(--text)',
+                        fontWeight: 700,
+                        fontSize: '0.72rem',
+                        cursor: 'pointer',
+                      }}
+                      onChange={async e => {
+                        const newStageId = e.target.value;
+                        if (!newStageId) return;
+                        try {
+                          await customersApi.updateStage(customer._id, newStageId);
+                          await loadData();
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : 'Failed to update stage');
+                        }
+                      }}
+                    >
+                      {stages.map(s => (
+                        <option key={s._id} value={s._id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        textTransform: 'capitalize',
+                        background: priority === 'high' ? '#fee2e2' : priority === 'low' ? '#f0fdf4' : '#fef3c7',
+                        color: priority === 'high' ? '#dc2626' : priority === 'low' ? '#16a34a' : '#d97706',
+                      }}
+                    >
+                      {priority}
+                    </span>
+                  </td>
+                  <td>₹{(customer.value || 0).toLocaleString('en-IN')}</td>
+                  <td>{customer.assignedTo?.name || 'Unassigned'}</td>
+                </tr>
+              );
+            })}
             {customers.length === 0 && (
-              <tr><td colSpan={8} className="empty-state">No {crmTerms.leadPlural.toLowerCase()} found.</td></tr>
+              <tr><td colSpan={9} className="empty-state">No {crmTerms.leadPlural.toLowerCase()} found.</td></tr>
             )}
           </tbody>
         </table>

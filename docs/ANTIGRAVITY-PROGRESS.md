@@ -124,4 +124,10 @@
   - Built `getDuplicates` and `mergeDuplicate` in `client/src/api/customers.ts`.
   - Built `client/src/pages/customers/DuplicatesPage.tsx` matching `views/customers/duplicates.ejs` (empty state, duplicate cards grid, interactive primary/duplicate selection, and confirmation merge).
   - Registered route `/customers/duplicates` in `client/src/App.tsx`.
+- **Leads List & Detail Complete Parity:**
+  - Added endpoints in `server/src/api/customers.js`: `POST /:id/activity` (note/call/email/whatsapp/meeting/task logging + follow-up scheduling), `POST /:id/stage` (inline stage switching), `POST /:id/transfer` (inline lead owner transfer), `POST /:id/attachments` (upload attachment base64 payload), `GET /:id/attachments/:attachmentId/download`, and `DELETE /:id/attachments/:attachmentId`.
+  - Updated `client/src/api/customers.ts` with `addActivity`, `updateStage`, `transferLead`, `uploadAttachment`, `deleteAttachment`.
+  - Enhanced `client/src/pages/customers/CustomersPage.tsx`: Lead initials avatar with deterministic palette, direct `tel:...` and `https://wa.me/...` contact links, 1-click inline stage dropdown update, priority color badges, currency formatting, and Duplicates page navigation button.
+  - Enhanced `client/src/pages/customers/CustomerDetailPage.tsx`: Header contact action strip (Call, WhatsApp, Email, Edit, Delete), comprehensive tabbed Activity Composer (Note, Call, Email, WhatsApp, Meeting, Task) with follow-up date/time picker, quick reschedule buttons (+1 Day, +3 Days, +1 Week), timeline search & category filters, full attachment file uploader & downloader/remover, and live sidebar stage & owner controls.
 - **ALL ASSIGNED FUNCTIONAL DOMAINS + PARITY GAPS COMPLETE & VERIFIED (tsc exit 0, vite build exit 0, node syntax exit 0).**
+

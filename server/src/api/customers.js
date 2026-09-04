@@ -504,6 +504,244 @@ router.put('/:id', permits('businesses.update'), async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+// POST /api/customers/:id/activity — Log an activity (note, call, email, whatsapp, meeting, task)
+router.post('/:id/activity', permits('businesses.update'), async (req, res, next) => {
+  try {
+    if (!workspace(req, res)) return;
+    const organization = req.user.organization._id;
+    const customer = await Customer.findOne(scope(req, { _id: req.params.id }));
+    if (!customer) return res.status(404).json({ ok: false, error: 'Lead not found.' });
+
+    const activity = await Activity.create({
+      organization,
+      customer: customer._id,
+      user: req.user._id,
+      type: req.body.type || 'note',
+      note: req.body.note || '',
+      nextFollowUpAt: req.body.nextFollowUpAt || null,
+    });
+
+    customer.lastContactedAt = new Date();
+    if (req.body.nextFollowUpAt) {
+      customer.nextFollowUpAt = new Date(req.body.nextFollowUpAt);
+    }
+    await customer.save();
+
+    await logAudit(req, {
+      action: 'activity_create',
+      entityType: 'customer',
+      entityId: customer._id,
+      entityName: customer.name,
+      message: `${activity.type} activity logged for "${customer.name}".`,
+    });
+
+    res.json({ ok: true, data: await activity.populate('user', 'name') });
+  } catch (error) { next(error); }
+});
+
+// POST /api/customers/:id/stage — Inline change lead stage
+router.post('/:id/stage', permits('businesses.update'), async (req, res, next) => {
+  try {
+    if (!workspace(req, res)) return;
+    const organization = req.user.organization._id;
+    const customer = await Customer.findOne(scope(req, { _id: req.params.id })).populate('stage');
+    if (!customer) return res.status(404).json({ ok: false, error: 'Lead not found.' });
+
+    const stage = await CrmStage.findOne({ _id: req.body.stageId, organization, clientCompany: req.activeCompanyId, isActive: true });
+    if (!stage) return res.status(400).json({ ok: false, error: 'Invalid stage selected.' });
+
+    const previousStageName = customer.stage?.name || 'None';
+    const previousStageId = customer.stage?._id || customer.stage;
+    customer.stage = stage._id;
+    await customer.save();
+
+    if (String(previousStageId || '') !== String(stage._id)) {
+      await runLeadAutomation({ customer, trigger: 'stage_changed', previousStage: previousStageId });
+    }
+
+    await Activity.create({
+      organization,
+      customer: customer._id,
+      user: req.user._id,
+      type: 'stage_changed',
+      note: `Stage changed from ${previousStageName} to ${stage.name}.`,
+    });
+
+    await logAudit(req, {
+      action: 'stage_change',
+      entityType: 'customer',
+      entityId: customer._id,
+      entityName: customer.name,
+      message: `Stage changed from ${previousStageName} to ${stage.name}.`,
+    });
+
+    res.json({ ok: true, stage });
+  } catch (error) { next(error); }
+});
+
+// POST /api/customers/:id/transfer — Inline transfer lead owner
+router.post('/:id/transfer', permits('businesses.update'), async (req, res, next) => {
+  try {
+    if (!workspace(req, res)) return;
+    if (!isManager(req.user)) return res.status(403).json({ ok: false, error: 'Access denied.' });
+    const organization = req.user.organization._id;
+    const customer = await Customer.findOne(scope(req, { _id: req.params.id })).populate('assignedTo');
+    if (!customer) return res.status(404).json({ ok: false, error: 'Lead not found.' });
+
+    const newAssigneeId = req.body.assignedTo || null;
+    let newAssigneeName = 'Unassigned';
+    if (newAssigneeId) {
+      const newUser = await User.findOne({ _id: newAssigneeId, organization, isActive: true });
+      if (newUser) newAssigneeName = newUser.name;
+    }
+
+    const previousOwnerName = customer.assignedTo?.name || 'Unassigned';
+    const previousOwnerId = customer.assignedTo?._id || customer.assignedTo;
+    customer.assignedTo = newAssigneeId;
+    await customer.save();
+
+    if (String(previousOwnerId || '') !== String(newAssigneeId || '')) {
+      await runLeadAutomation({ customer, trigger: 'owner_changed' });
+    }
+
+    await Activity.create({
+      organization,
+      customer: customer._id,
+      user: req.user._id,
+      type: 'note',
+      note: `Lead ownership transferred from ${previousOwnerName} to ${newAssigneeName}.`,
+    });
+
+    await logAudit(req, {
+      action: 'transfer',
+      entityType: 'customer',
+      entityId: customer._id,
+      entityName: customer.name,
+      message: `Lead transferred from ${previousOwnerName} to ${newAssigneeName}.`,
+    });
+
+    res.json({ ok: true, assignedTo: customer.assignedTo });
+  } catch (error) { next(error); }
+});
+
+function parseAttachmentPayload(body) {
+  const rawData = String(body.fileData || '');
+  const match = rawData.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return { ok: false, message: 'Please select a valid file before uploading.' };
+  const buffer = Buffer.from(match[2], 'base64');
+  if (!buffer.length) return { ok: false, message: 'Selected file is empty.' };
+  if (buffer.length > 3 * 1024 * 1024) return { ok: false, message: 'Attachment must be 3 MB or smaller.' };
+  const originalName = String(body.originalName || 'attachment').replace(/[\\/:*?"<>|]+/g, '-').trim();
+  return {
+    ok: true,
+    buffer,
+    mimeType: match[1] || 'application/octet-stream',
+    originalName: originalName || 'attachment',
+    category: ['proposal', 'contract', 'invoice', 'brief', 'screenshot', 'other'].includes(body.category) ? body.category : 'other',
+    notes: String(body.notes || '').trim(),
+  };
+}
+
+// POST /api/customers/:id/attachments — Upload file attachment
+router.post('/:id/attachments', permits('businesses.update'), async (req, res, next) => {
+  try {
+    if (!workspace(req, res)) return;
+    const organization = req.user.organization._id;
+    const customer = await Customer.findOne(scope(req, { _id: req.params.id }));
+    if (!customer) return res.status(404).json({ ok: false, error: 'Lead not found.' });
+
+    const payload = parseAttachmentPayload(req.body);
+    if (!payload.ok) return res.status(400).json({ ok: false, error: payload.message });
+
+    const attachment = await Attachment.create({
+      organization,
+      customer: customer._id,
+      clientCompany: customer.clientCompany || null,
+      uploadedBy: req.user._id,
+      category: payload.category,
+      originalName: payload.originalName,
+      mimeType: payload.mimeType,
+      size: payload.buffer.length,
+      notes: payload.notes,
+      data: payload.buffer,
+    });
+
+    await Activity.create({
+      organization,
+      customer: customer._id,
+      user: req.user._id,
+      type: 'note',
+      note: `Attachment uploaded: ${attachment.originalName}.`,
+    });
+
+    await logAudit(req, {
+      action: 'attachment_upload',
+      entityType: 'customer',
+      entityId: customer._id,
+      entityName: customer.name,
+      message: `Attachment "${attachment.originalName}" uploaded to lead "${customer.name}".`,
+    });
+
+    res.status(201).json({
+      ok: true,
+      attachment: {
+        _id: attachment._id,
+        originalName: attachment.originalName,
+        category: attachment.category,
+        size: attachment.size,
+        notes: attachment.notes,
+        createdAt: attachment.createdAt,
+        uploadedBy: { _id: req.user._id, name: req.user.name },
+      },
+    });
+  } catch (error) { next(error); }
+});
+
+// GET /api/customers/:id/attachments/:attachmentId/download — Download file attachment
+router.get('/:id/attachments/:attachmentId/download', async (req, res, next) => {
+  try {
+    if (!workspace(req, res)) return;
+    const organization = req.user.organization._id;
+    const customer = await Customer.findOne(scope(req, { _id: req.params.id }));
+    if (!customer) return res.status(404).json({ ok: false, error: 'Lead not found.' });
+
+    const attachment = await Attachment.findOne({ _id: req.params.attachmentId, organization, customer: customer._id });
+    if (!attachment) return res.status(404).json({ ok: false, error: 'Attachment not found.' });
+
+    res.setHeader('Content-Type', attachment.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Length', attachment.size || attachment.data.length);
+    res.setHeader('Content-Disposition', `attachment; filename="${attachment.originalName.replace(/"/g, '')}"`);
+    res.send(attachment.data);
+  } catch (error) { next(error); }
+});
+
+// DELETE /api/customers/:id/attachments/:attachmentId — Delete file attachment
+router.delete('/:id/attachments/:attachmentId', permits('businesses.update'), async (req, res, next) => {
+  try {
+    if (!workspace(req, res)) return;
+    const organization = req.user.organization._id;
+    const customer = await Customer.findOne(scope(req, { _id: req.params.id }));
+    if (!customer) return res.status(404).json({ ok: false, error: 'Lead not found.' });
+
+    const attachment = await Attachment.findOne({ _id: req.params.attachmentId, organization, customer: customer._id });
+    if (!attachment) return res.status(404).json({ ok: false, error: 'Attachment not found.' });
+
+    const canDelete = isManager(req.user) || String(attachment.uploadedBy || '') === String(req.user._id);
+    if (!canDelete) return res.status(403).json({ ok: false, error: 'Access denied.' });
+
+    await Attachment.deleteOne({ _id: attachment._id, organization });
+    await logAudit(req, {
+      action: 'attachment_delete',
+      entityType: 'customer',
+      entityId: customer._id,
+      entityName: customer.name,
+      message: `Attachment "${attachment.originalName}" removed from lead "${customer.name}".`,
+    });
+
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
 router.delete('/:id', permits('businesses.delete'), async (req, res, next) => {
   try {
     if (!isManager(req.user)) return res.status(403).json({ ok: false, error: 'Access denied' });
