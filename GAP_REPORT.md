@@ -70,9 +70,10 @@ To ensure rapid progress without conflicts, work is partitioned by ownership:
 Both teams have completed the primary porting goals. Remaining work is purely optional micro-polish:
 
 ### OpenCode Polish Queue
-1. **Dynamic Greeting Subtitle (`DashboardPage.tsx`):** Add time-of-day greeting (`Good morning/afternoon, {user.name} 👋`, `Here's your {role} workspace in {activeCompany}`).
-2. **Sidebar State Persistence (`Sidebar.tsx`):** Cache collapsed/expanded preference in `localStorage`.
-3. **Lead Table Sticky Headers (`CustomersPage.tsx`):** Enable frozen first column on mobile scroll.
+1. **Dynamic Greeting Subtitle (`DashboardPage.tsx`):** ✅ Done — time-of-day greeting (`Good morning/afternoon, {user.name} 👋`), `Here's your {role} workspace in {activeCompany}`, header date before "Pin dashboard cards", activity section toggle.
+2. **Sidebar State Persistence (`Sidebar.tsx`):** ✅ Done — collapsed/expanded cached in `localStorage` (`vande_sidebar_open`, in `AppLayout.tsx`); **Customize drawer** (hide/show nav items per user via `sidebarHiddenItems`, drag-to-reorder persisted in `localStorage('sidebar-nav-order')`, "Save navigation" via `POST /dashboard/preferences/sidebar`); Reset button clears stored order + hidden items.
+3. **Sidebar custom-field metric cards (`DashboardPage.tsx`):** ✅ Done — consumes `availableDashboardFields` to render custom-field counter cards in the metrics grid (category "Custom Fields", togglable via Pin dashboard cards).
+4. **Dashboard empty state (`DashboardPage.tsx`):** ✅ Done — "Your workspace is ready" welcome panel with permission-aware module quick links and role-based access note when no data exists (uses `.dashboard-welcome` styles).
 
 ### Antigravity Polish Queue
 1. **Live Theme Palette Swatches (`SettingsPage.tsx`):** Add interactive color pill previews under Look & Feel.
