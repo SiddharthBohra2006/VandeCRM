@@ -46,6 +46,8 @@
 - Contexts (if any new): e.g. `NotificationContext`
 - `docs/ANTIGRAVITY-PROGRESS.md`
 
+> ⚠️ **2026-09-04 one-off:** OpenCode edited `client/src/pages/work/WorkListPage.tsx` (added board + calendar views to Antigravity's flat list page) and `server/src/api/work.js` (added `month` filter, `pageSize` 100, `parentRecord` populate) for the board/calendar parity port. Ownership stays with Antigravity; please review the diff (commit `0beba29`). See SYNC.md UI PARITY TRACKER.
+
 ## Strict No-Touch Rule
 - Nobody edits `server/src/{models,services,utils,config,middleware,routes}` — these are copied from the original and are shared reference only.
 - Nobody edits another developer's owned files (see tables above).

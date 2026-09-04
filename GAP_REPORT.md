@@ -195,3 +195,53 @@ React relies on native `window.confirm`/`confirm(...)` for destructive actions (
 7. **Dashboard** → add personalized greeting + card pinning/reordering.
 8. **Semantic class consolidation** → replace inline `style={{...}}` with shared CSS classes for the most duplicated layouts.
 9. **Error pages** → add dedicated 403/404/500 routes.
+
+---
+
+## Appendix: Deep Gap Analysis — Dashboard, Leads, Clients & Detail Views (2026-09-04)
+
+Side-by-side audit of the 5 highest-traffic screens vs the EJS originals.
+
+### 1. Dashboard
+| Element | EJS | React | Missing |
+|---|---|---|---|
+| Card Pinning Dialog | 2-col modal (#dashboardCustomizeDialog) w/ search, Available/Pinned cols, drag-drop order | absent | interactive pinning modal |
+| Metric Badges | colored circular icon container, 10% opacity tint (#5287ff blue, #f28a24 orange, #16b8a6 teal) | plain monochrome text boxes | .dashboard-metric-icon + color palettes (getCardTheme) |
+| Weekly Work Chart | day-by-day bars + Today highlight | basic bar divs | tooltip count + completion animation |
+| Pipeline Kanban | deal name, brand tag, stage top-bar, priority badge, 1-click WhatsApp, 1-click Call, follow-up badge, assignee avatar | name + phone string link | rich kanban card markup with actions + avatars |
+
+### 2. Leads List (/customers)
+| Element | Missing in React |
+|---|---|
+| Stage Filter Pills | horizontal bar w/ count badges (New 12, Contacted 8..) + 1-click filter (currently a select) |
+| Contact Identity | 32px circular initial avatar (deterministic getAvatarColor) next to name+company (currently plain text) |
+| Quick Actions | green WhatsApp (wa.me) + Call (tel:) buttons (currently plain phone text) |
+| Lead Scoring | High Potential / Hot Lead badges absent |
+| Table Scrolling | sticky frozen first column + sticky header (table-scroll.js) absent |
+
+### 3. Clients List (/clients)
+| Element | Missing in React |
+|---|---|
+| Portfolio KPIs | 4-card overview (New Clients 7d, Total Active, Portfolio Value INR, High Priority) w/ click-to-filter (.portfolio-kpi) |
+| Client Rows | won-deal value tag (₹50,000), active projects count, account-manager avatar, last-interaction timestamp |
+
+### 4. Individual Lead
+| Element | Missing in React |
+|---|---|
+| Header Hero | 1-click contact action strip (Call, WhatsApp, Email, Schedule) — .lead-profile-contact-buttons |
+| Quick Activity Composer | tabbed composer above timeline: Log Call (Connected/Left Voicemail/Busy), Send WhatsApp, Log Message, Add Note — with instant timeline refresh (HIGH PRIORITY) |
+| Follow-up Scheduler | quick-postpone buttons (+1 Day / +3 Days / +1 Week) w/ reminder |
+| Right Sidebar Controls | persistent .sidebar-box-section: stage dropdown, owner reassign, priority, deal value, custom fields |
+
+### 5. Individual Client
+| Element | Missing in React |
+|---|---|
+| Client Summary KPIs | 4-stat header (Total Work Items, Completed, In-Progress, Logged Meetings) — .client-summary-grid |
+| Linked Work Items Tab | progress bars + module badges + status chips |
+| Documents & Folders | cloud links, brief attachments, asset preview popup |
+
+### Actionable roadmap
+1. Dashboard: getCardTheme icon containers + #dashboardCustomizeDialog pinning modal.
+2. Leads table: stage pills bar, avatars, WhatsApp/Call buttons.
+3. Lead detail: Quick Activity Composer + right-sidebar controls.
+4. Client detail: summary KPI grid + linked deliverables tab.
