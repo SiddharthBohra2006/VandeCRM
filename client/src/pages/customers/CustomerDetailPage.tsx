@@ -44,6 +44,7 @@ export default function CustomerDetailPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [confirmAction, setConfirmAction] = useState<{ kind: 'delete' } | { kind: 'deleteAttachment'; attachmentId: string } | null>(null);
+  const [searchParams] = useSearchParams();
 
   // Activity Composer State
   const [activityType, setActivityType] = useState('note');
@@ -224,7 +225,6 @@ export default function CustomerDetailPage() {
   if (error && !detail) return <div className="alert alert-error" role="alert">{error}</div>;
   if (!detail) return <div className="empty-state">{crmTerms.leadSingular} not found.</div>;
 
-  const [searchParams] = useSearchParams();
   const { data: customer, activities, attachments, relatedWork, stages, labels, users, campaigns, fields } = detail;
   const initials = customer.name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'L';
   const avatarPalette = getAvatarColor(customer.name);

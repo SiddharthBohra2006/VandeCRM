@@ -9824,6 +9824,7 @@ button.movement-preview-trigger { padding: 0; border: 0; background: none; text-
    ========================================================================== */
 
 /* Clean, lightweight UI transitions */
+/* Clean, lightweight UI transitions */
 .data-table tbody tr,
 .lead-table-modern tbody tr {
   transition: background-color 0.1s ease;
@@ -9870,3 +9871,241 @@ button.movement-preview-trigger { padding: 0; border: 0; background: none; text-
 .leads-quick-page-arrows button:disabled { opacity: .4; cursor: default; }
 .table-container { overflow-x: auto; }
 .table-container .data-table { min-width: max-content; }
+
+/* ==========================================================================
+   EXACT EJS LEAD / CLIENT DETAIL 2-COLUMN PARITY & SIDEBAR POLISH
+   ========================================================================== */
+.lead-record-ui {
+  --lead-card-radius: 14px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.lead-record-ui .lead-detail-breadcrumbs {
+  margin-bottom: 12px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.lead-record-ui .lead-detail-breadcrumbs a {
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.15s;
+}
+.lead-record-ui .lead-detail-breadcrumbs a:hover {
+  color: var(--gold, #ea580c);
+}
+.lead-record-ui .lead-detail-breadcrumbs strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.lead-record-ui .lead-detail-head {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--lead-card-radius, 14px);
+  padding: 24px 28px 0 28px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03);
+  margin-bottom: 20px;
+  display: block;
+}
+
+.lead-record-ui .lead-identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.lead-record-ui .lead-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 1.25rem;
+  font-weight: 800;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+.lead-record-ui .lead-identity h1 {
+  font-size: 1.35rem;
+  font-weight: 800;
+  margin: 0;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.lead-record-ui .stage-badge-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.lead-record-ui .lead-contact-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 0 18px;
+}
+
+.lead-record-ui .lead-section-nav {
+  display: flex;
+  gap: 2rem;
+  border-top: 1px solid var(--border);
+  margin: 0;
+  padding: 0;
+}
+.lead-record-ui .lead-section-nav button {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0.75rem 0 1rem 0;
+  color: var(--sub);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s ease;
+}
+.lead-record-ui .lead-section-nav button:hover {
+  color: var(--text);
+}
+.lead-record-ui .lead-section-nav button.active {
+  color: var(--gold, #ea580c);
+}
+.lead-record-ui .lead-section-nav button.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--gold, #ea580c);
+}
+
+.lead-record-ui .lead-profile-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.95fr) minmax(280px, 1fr) !important;
+  gap: 20px !important;
+  align-items: start !important;
+  margin-bottom: 24px !important;
+}
+
+.lead-record-ui .lead-main-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.lead-record-ui .lead-overview-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--lead-card-radius, 14px);
+  padding: 22px 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+.lead-record-ui .lead-overview-card h2 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0 0 1rem 0;
+  color: var(--text);
+}
+
+.lead-record-ui .lead-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 16px;
+  margin-top: 1rem;
+}
+.lead-record-ui .lead-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.75rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-muted);
+}
+.lead-record-ui .lead-facts small {
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.lead-record-ui .lead-facts strong {
+  font-size: 0.85rem;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.lead-record-ui .lead-side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.lead-record-ui .lead-controls-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.lead-record-ui :is(.lead-stage-card, .lead-owner-card, .lead-quick-card, .lead-followup-panel) {
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--lead-card-radius, 14px);
+  background: var(--panel);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.02);
+}
+.lead-record-ui :is(.lead-stage-card, .lead-owner-card, .lead-quick-card, .lead-followup-panel) h3 {
+  margin: 0 0 10px 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.lead-record-ui .lead-quick-card dl {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 8px 12px;
+  font-size: 0.76rem;
+  margin: 0;
+}
+.lead-record-ui .lead-quick-card dt {
+  color: var(--muted);
+  font-weight: 600;
+}
+.lead-record-ui .lead-quick-card dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.lead-record-ui .lead-followup-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lead-record-ui .lead-scheduled-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: #ecfdf5;
+  color: #059669;
+  font-size: 0.65rem;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+@media (max-width: 900px) {
+  .lead-record-ui .lead-profile-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

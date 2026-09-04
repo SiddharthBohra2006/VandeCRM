@@ -229,9 +229,20 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
 
       <nav className="sidebar-nav" ref={navContainerRef} onDragOver={onNavDragOver}>
         {orderedNavItems.map(item => {
-          const isActive = item.path === '/'
-            ? resolvedPath === '/'
-            : resolvedPath.startsWith(item.path);
+          const isClientsPath = item.path === '/clients';
+          const isCustomersPath = item.path === '/customers';
+          const isFromClients = location.search.includes('from=clients') || location.pathname.startsWith('/clients');
+
+          let isActive = false;
+          if (item.path === '/') {
+            isActive = resolvedPath === '/';
+          } else if (isClientsPath) {
+            isActive = resolvedPath.startsWith('/clients') || (resolvedPath.startsWith('/customers') && isFromClients);
+          } else if (isCustomersPath) {
+            isActive = resolvedPath.startsWith('/customers') && !isFromClients;
+          } else {
+            isActive = resolvedPath.startsWith(item.path);
+          }
 
           return (
             <Link
