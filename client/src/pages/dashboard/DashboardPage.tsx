@@ -87,6 +87,24 @@ interface DashboardResponse {
   dashboardHiddenCards?: string[];
   dashboardCardOrder?: string[];
   dashboardHiddenSections?: string[];
+  recentMovements?: Movement[];
+  movementSamples?: Movement[];
+}
+
+interface Movement {
+  id: string;
+  actor: string;
+  title: string;
+  message: string;
+  category: string;
+  group: string;
+  action?: string;
+  icon?: string;
+  status?: string;
+  tone?: string;
+  href?: string;
+  sample?: boolean;
+  createdAt: string;
 }
 
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
@@ -119,6 +137,22 @@ function initials(name?: string | null) {
   return name.split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase();
 }
 
+function relativeTime(iso: string) {
+  const dateValue = new Date(iso);
+  const minutes = Math.max(0, Math.floor((Date.now() - dateValue.getTime()) / 60000));
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
+  return dateValue.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
+
+function movementTone(group: string, tone?: string) {
+  if (tone) return tone;
+  if (group === 'leads') return 'amber';
+  if (group === 'campaigns') return 'violet';
+  return 'blue';
+}
+
 export default function DashboardPage() {
   const { crmTerms } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -135,6 +169,8 @@ export default function DashboardPage() {
   const [pinSearch, setPinSearch] = useState('');
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [dragKey, setDragKey] = useState<string | null>(null);
+  const [movementFilter, setMovementFilter] = useState<'all' | 'work' | 'leads' | 'campaigns'>('all');
+  const [previewMovement, setPreviewMovement] = useState<Movement | null>(null);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -206,6 +242,15 @@ export default function DashboardPage() {
     }),
   ];
   const visibleCards = orderedCards.filter(card => !hiddenCards.has(card.key));
+
+  const movementSampleFeed = dashboard.movementSamples || [];
+  const movementFeedRaw = dashboard.recentMovements || [];
+  const isSampleFeed = movementFeedRaw.length === 0;
+  const fullFeed = isSampleFeed ? movementSampleFeed : movementFeedRaw;
+  const movementGroups = new Set(fullFeed.map(m => m.group));
+  const visibleMovementGroups = movementFilter === 'all' ? movementGroups : new Set([movementFilter]);
+  const movementCounts = (key: 'all' | 'work' | 'leads' | 'campaigns') => key === 'all' ? fullFeed.length : fullFeed.filter(m => m.group === key).length;
+  const shownMovements = fullFeed.filter(m => movementFilter === 'all' || m.group === movementFilter);
 
   const openCustomize = () => {
     setEditHidden(new Set(dashboard.dashboardHiddenCards || []));
@@ -448,6 +493,70 @@ export default function DashboardPage() {
         </section>
       )}
 
+      {fullFeed.length > 0 && (
+        <section className="business-grid dashboard-movement-grid">
+          <article className="business-panel movement-panel movement-panel-v2" data-movement-feed>
+            <header className="movement-header">
+              <div className="movement-heading">
+                <span className="movement-heading-icon"><Icon name="activity" size={21} /></span>
+                <div><h2>Recent movements</h2><p>What your team has been working on.</p></div>
+              </div>
+              <span className={`movement-count${isSampleFeed ? ' movement-sample-badge' : ''}`}>{isSampleFeed ? 'Sample activity' : `${fullFeed.length} latest updates`}</span>
+            </header>
+            <div className="movement-toolbar">
+              <div className="movement-tabs" role="group" aria-label="Filter recent movements">
+                {(['all', 'work', 'leads', 'campaigns'] as const).filter(group => group === 'all' || visibleMovementGroups.has(group)).map(group => (
+                  <button
+                    type="button"
+                    aria-pressed={movementFilter === group}
+                    key={group}
+                    onClick={() => setMovementFilter(group)}
+                  >
+                    {group === 'all' ? 'All activity' : group.charAt(0).toUpperCase() + group.slice(1)}<span>{movementCounts(group)}</span>
+                  </button>
+                ))}
+              </div>
+              <span className="movement-period"><Icon name="clock" size={13} />Latest first</span>
+            </div>
+            {isSampleFeed && <p className="movement-demo-note"><Icon name="flask-conical" size={14} />Preview data · These examples will be replaced by real activity as your team works.</p>}
+            {shownMovements.length === 0 ? (
+              <div className="movement-empty"><p>No activity recorded yet. Updates will appear here when accessible records change.</p></div>
+            ) : (
+              <ol className="movement-list">
+                {shownMovements.map(movement => (
+                  <li className="movement-item" data-movement-group={movement.group} data-tone={movementTone(movement.group, movement.tone)} key={movement.id}>
+                    <div className="movement-avatar-wrap">
+                      <span className="movement-avatar" aria-hidden="true">{initials(movement.actor)}</span>
+                      <span className="movement-action-icon"><Icon name={movement.icon || 'users'} size={10} /></span>
+                    </div>
+                    <div className="movement-content">
+                      <div className="movement-meta"><strong>{movement.actor}</strong><span>{movement.action || 'made an update'}</span></div>
+                      {movement.href ? (
+                        <Link className="movement-record" to={movement.href}>{movement.title}<Icon name="arrow-up-right" size={12} /></Link>
+                      ) : movement.sample ? (
+                        <button type="button" className="movement-record movement-preview-trigger" onClick={() => setPreviewMovement(movement)}>{movement.title}<Icon name="arrow-up-right" size={12} /></button>
+                      ) : (
+                        <strong className="movement-record">{movement.title}</strong>
+                      )}
+                      <p>{movement.message}</p>
+                      <div className="movement-tags">
+                        <span className="movement-category">{movement.category}</span>
+                        {movement.status && <span className="movement-status"><span aria-hidden="true" />{movement.status}</span>}
+                      </div>
+                    </div>
+                    <time dateTime={movement.createdAt} title={new Date(movement.createdAt).toLocaleString('en-IN')}>{relativeTime(movement.createdAt)}<small>{new Date(movement.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</small></time>
+                  </li>
+                ))}
+              </ol>
+            )}
+            <footer className="movement-footer">
+              <span><Icon name={isSampleFeed ? 'info' : 'shield-check'} size={12} />{isSampleFeed ? 'Sample names and events · No records added to your CRM' : 'Activity from records you can access in this CRM'}</span>
+              <a href="/" onClick={event => { event.preventDefault(); void loadDashboard(); }}>Refresh activity<Icon name="refresh-cw" size={12} /></a>
+            </footer>
+          </article>
+        </section>
+      )}
+
       {!editSections.has('recent') && (
         <section className="dashboard-summary-grid">
           <article className="dashboard-summary-card">
@@ -604,6 +713,28 @@ export default function DashboardPage() {
                   {savingPrefs ? 'Saving…' : 'Save changes'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {previewMovement && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: '#10182870', backdropFilter: 'blur(3px)' }} onClick={event => { if (event.target === event.currentTarget) setPreviewMovement(null); }}>
+          <div className="movement-preview-dialog" style={{ width: 'min(480px, calc(100vw - 32px))', padding: 24, border: '1px solid var(--border)', borderRadius: 14, background: 'var(--panel)', color: 'var(--text)', boxShadow: '0 24px 80px rgba(0,0,0,0.2)' }}>
+            <div className="movement-preview-top" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)' }}>Sample activity preview</span>
+              <button type="button" onClick={() => setPreviewMovement(null)} aria-label="Close preview" style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: '1.2rem', cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+            </div>
+            <h2 style={{ margin: '18px 0 10px', fontSize: '1.15rem', lineHeight: 1.45 }}>{previewMovement.title}</h2>
+            <p className="movement-preview-actor" style={{ margin: 0, color: 'var(--muted)', fontSize: '0.78rem' }}>{previewMovement.actor}</p>
+            <p className="movement-preview-message" style={{ margin: '12px 0 0', color: 'var(--sub)', fontSize: '0.82rem', lineHeight: 1.6 }}>{previewMovement.message}</p>
+            <div className="movement-preview-tags" style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              {previewMovement.category && <span className="movement-category" style={{ padding: '3px 7px', borderRadius: 5, border: '1px solid var(--border)', fontSize: '0.62rem', color: 'var(--muted)' }}>{previewMovement.category}</span>}
+              {previewMovement.status && <span className="movement-status" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.63rem' }}><span aria-hidden="true" />{previewMovement.status}</span>}
+            </div>
+            <p className="movement-preview-note" style={{ margin: '14px 0 0', fontSize: '0.7rem', color: 'var(--muted)' }}>This is a fictional example. Real activity opens the linked CRM record.</p>
+            <div style={{ marginTop: 18, textAlign: 'right' }}>
+              <button className="btn" type="button" onClick={() => setPreviewMovement(null)}>Back to dashboard</button>
             </div>
           </div>
         </div>

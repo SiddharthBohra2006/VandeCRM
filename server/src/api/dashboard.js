@@ -10,7 +10,9 @@ const CustomField = require('../models/CustomField');
 const CustomRecord = require('../models/CustomRecord');
 const DashboardView = require('../models/DashboardView');
 const WorkType = require('../models/WorkType');
+const AuditLog = require('../models/AuditLog');
 const { logAudit } = require('../utils/audit');
+const { movementAuditFilter, dashboardMovements, sampleMovements } = require('../utils/dashboardMovements');
 const { isClosed, isComplete } = require('../utils/workCompletion');
 const { getWonStageIdSet } = require('../services/crmStages');
 const { getDateRangeFilter } = require('../utils/reporting');
@@ -116,6 +118,14 @@ router.get('/', async (req, res, next) => {
       return { label, date, count: items.length, isToday: date.toDateString() === now.toDateString(), items: items.slice(0, 6).map(item => ({ _id: item._id, title: item.title, module: item.workType?.name || 'Work', type: item.workType?.key || 'task', completedAt: item.deliveredAt || item.updatedAt, status: item.status })) };
     });
     const attentionCustomers = [...followupsDue, ...staleCustomers].filter((item, index, list) => list.findIndex(other => String(other._id) === String(item._id)) === index).slice(0, 6);
+    const recentActivities = await Activity.find({
+      organization,
+      ...(isRestrictedUser(req.user) ? { customer: { $in: customers.map(customer => customer._id) } } : {})
+    }).populate('customer user').sort({ createdAt: -1 }).limit(30);
+    const auditFilter = movementAuditFilter(organization, workItems, campaigns);
+    const movementAudits = auditFilter ? await AuditLog.find(auditFilter).populate('user', 'name').sort({ createdAt: -1 }).limit(30) : [];
+    const recentMovements = dashboardMovements(hasPermission(req.user, 'businesses.view') ? recentActivities : [], movementAudits, visibleWorkTypes);
+    const movementSamples = sampleMovements(visibleWorkTypes, hasPermission(req.user, 'businesses.view'), canViewAds, now);
     res.json({
       ok: true,
       stats: { totalLeads: activeCustomers.length, totalClients: wonCustomers.length, newThisWeek: activeCustomers.filter(item => item.createdAt >= weekAgo).length, followupsDue: followupsDue.length, staleCustomers: staleCustomers.length, openWork: workItems.filter(isOpenWork).length, completedWork: workItems.filter(isComplete).length, overdue: workItems.filter(item => isOpenWork(item) && item.deadline && item.deadline < now).length, adSpend: campaigns.reduce((sum, item) => sum + (item.spent || 0), 0), deliveredPercent: workItems.length ? Math.round(workItems.filter(isComplete).length / workItems.length * 100) : 0 },
@@ -129,7 +139,9 @@ router.get('/', async (req, res, next) => {
       dashboardCardsCustomized: req.user.dashboardCardsCustomized || false,
       dashboardHiddenCards: req.user.dashboardHiddenCards || [],
       dashboardCardOrder: req.user.dashboardCardOrder || [],
-      dashboardHiddenSections: req.user.dashboardHiddenSections || []
+      dashboardHiddenSections: req.user.dashboardHiddenSections || [],
+      recentMovements,
+      movementSamples
     });
   } catch (error) { next(error); }
 });
