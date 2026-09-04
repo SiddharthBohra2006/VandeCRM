@@ -47,6 +47,10 @@
 - **Baseline:** OpenCode set up git, copied backend, fixed server entry (`.js`), fixed priority type junction, created DashboardPage placeholder, added `requireApiPermission`, verified green boot + typecheck.
 - **Styling Foundation:** OpenCode imported the original design system into the React client (styles + theme application) and added the EJS-class-name parity rule to REACT-PATTERNS.md.
 - **UI Parity structural fixes (2026-09-04):** OpenCode fixed AppLayout `.main-wrap`, hover-expand sidebar, lead-detail `.lead-record-ui` styling, work list **board + calendar** views, and Spotlight SearchModal (`Ctrl/Cmd+K`).
+- **Migration-completion final pass (2026-09-04, OpenCode + Antigravity):** Closed the last backend/UX gaps from a full 41-view EJS↔React parity sweep (see GAP_REPORT.md §4b):
+  - OpenCode: work record automation (`runRecordAutomation`), recurring monthly records (`ensureMonthlyRecords`), dashboard view save endpoint, customer import template endpoint, 500 error page + global `ErrorBoundary`, customer import duplicate-rule UI, `User.customRole` type.
+  - Antigravity: exact EJS visual parity for **Leads** and **Clients** pages (KPI grids, view tabs, column visibility modal, advanced filters, pagination) + team CSV import/export/template + settings field reorder.
+  - All verified: `npx tsc --noEmit` exit 0, `npm run build` exit 0, `node --check` on all api/*.js exit 0.
 - **Companies, Integrations, and ConfirmDialog Parity (Antigravity, 2026-09-04):**
   - Section 5: Built full Company Detail page with 10-card metric KPI grid, pre-scoped inline Add Lead form, company attachments uploader and stored documents table (with download & delete), leads portfolio table, 5-pill workspace activity stream, assigned collaborators panel with quick add/remove, and marketing campaign performance breakdown. Added server endpoints for attachment upload, download, delete and collaborator management.
   - Section 6: Enhanced Integrations page with side-by-side instructional help panels for Meta Ads & GA4, setup checklists, live cURL and fetch code examples for Webhooks, and clear credentials actions.

@@ -71,9 +71,6 @@ Both teams have completed the primary porting goals. Remaining work is purely op
 
 ### OpenCode Polish Queue
 1. **Dynamic Greeting Subtitle (`DashboardPage.tsx`):** ✅ Done — time-of-day greeting (`Good morning/afternoon, {user.name} 👋`), `Here's your {role} workspace in {activeCompany}`, header date before "Pin dashboard cards", activity section toggle.
-2. **Sidebar State Persistence (`Sidebar.tsx`):** ✅ Done — collapsed/expanded cached in `localStorage` (`vande_sidebar_open`, in `AppLayout.tsx`). **Customize drawer** (`sidebar-preferences-drawer` `<dialog>`, exactly matching EJS `sidebar.ejs` + `app.css`): each nav item renders as `sidebar-preference-row` (icon pill + label + "Visible in your sidebar" + checkbox), show/hide persists per-user via `sidebarHiddenItems` saved through `POST /dashboard/preferences/sidebar` then `refreshUser()`. **Drag-to-reorder happens directly on the sidebar nav items** (matching EJS `app.js`): nav `<Link>`s are `draggable` with `data-nav-id`, `dragover` on `.sidebar-nav` reorders via a getElementAfter Y-axis calculation, and order is persisted to `localStorage('sidebar-nav-order')` (array of nav ids) on `dragend`. **Reset button** clears `sidebar-nav-order` + reloads. **Nav IDs match EJS exactly** (`nav-pipeline` for Dashboard, `nav-database` for Leads, `nav-task-center` for Work, plus `nav-clients/nav-tasks/nav-analytics/nav-reports/nav-mail/nav-companies/nav-campaigns/nav-team/nav-settings/nav-audit/nav-portfolio` and `nav-work-{key}`), so server-side `allowed` filtering in `POST /preferences/sidebar` accepts all stored ids.
-3. **Sidebar custom-field metric cards (`DashboardPage.tsx`):** ✅ Done — consumes `availableDashboardFields` to render custom-field counter cards in the metrics grid (category "Custom Fields", togglable via Pin dashboard cards).
-4. **Dashboard empty state (`DashboardPage.tsx`):** ✅ Done — "Your workspace is ready" welcome panel with permission-aware module quick links and role-based access note when no data exists (uses `.dashboard-welcome` styles).
 
 ### Antigravity Polish Queue
 1. **Live Theme Palette Swatches (`SettingsPage.tsx`):** Add interactive color pill previews under Look & Feel.
@@ -81,6 +78,30 @@ Both teams have completed the primary porting goals. Remaining work is purely op
 3. **Verify Edge Case API Error Boundaries:** Ensure network errors trigger clean banner notices across all 11 sub-domains.
 
 ---
+
+## 4b. Final Migration-Completion Gaps (Closed 2026-09-04)
+
+A final EJS↔React parity sweep (all 41 EJS views mapped) found and closed these backend/UX gaps:
+
+### Backend (OpenCode + coordinated with Antigravity)
+- **Work record automation** ✅ — `runRecordAutomation` now wired into `server/src/api/work.js` create, update (status_changed/owner_changed), quick status-change, and CSV import handlers (`record_created`).
+- **Recurring monthly records** ✅ — `ensureMonthlyRecords` (billing month for `payment` module + recurring task copies) now ported into `server/src/api/work.js` and called from `GET /:type`.
+- **Dashboard view saving** ✅ — `POST /api/dashboard/preferences/dashboard/views` added (upserts `DashboardView` with `hiddenSections`/`cardOrder`/`customFieldMetrics`, matching EJS).
+- **Team CSV import/export** ✅ — `POST /api/team/import`, `GET /api/team/template.csv`, `GET /api/team/export.csv` added to `server/src/api/team.js` (role normalization + custom-role auto-creation + company assignment).
+- **Settings field reorder** ✅ — `POST /api/settings/fields/reorder` added (mirrors `/stages/reorder`).
+- **Customer import template** ✅ — `GET /api/customers/import-template.csv` (generates CSV with custom-field columns + sample row).
+
+### Frontend (OpenCode)
+- **500 Server Error page** ✅ — new `client/src/pages/errors/ServerErrorPage.tsx` + `/500` route + `client/src/components/ErrorBoundary.tsx` wrapping `<App />` in `main.tsx` (uncaught errors now render the friendly 500 page).
+- **Customer import UI** ✅ — `CustomersPage.tsx` CSV modal now has a **Download import template** button and an **On duplicate match** selector (update/skip/create) wired through preview + import.
+- **`customRole` type** ✅ — added to `User` in `client/src/api/auth.ts` (legit backend field used for role labels).
+
+### Confirmed already present (false-positive gaps from audit)
+- **Report PDF export** — `GET /api/reports/:reportKey/export.pdf` already wired (uses `createSimpleReportPdf`); `module-builder/export-{csv,raw.csv}` both present (EJS has no module-builder PDF).
+- **Import duplicate-rule support** — server-side `duplicateRule` (update/skip/create) already in `POST /api/customers/import/preview` + `/import`; only the UI selector was missing.
+
+---
+
 
 ## 5. Verification Protocol
 
