@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { teamApi, TeamMember, CustomRole, TeamSummary, TeamMemberInput } from '../../api/team';
 import { Company } from '../../api/companies';
 import { useAuth } from '../../contexts/AuthContext';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 export default function TeamPage() {
   const { user } = useAuth();
@@ -23,6 +24,18 @@ export default function TeamPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    action: () => Promise<void> | void;
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    action: () => {},
+  });
 
   // Search/filter state
   const searchQuery = searchParams.get('q') || '';
@@ -167,15 +180,23 @@ export default function TeamPage() {
     }
   }
 
-  async function handleDeleteMember(memberId: string, memberName: string) {
-    if (!window.confirm(`Delete team member "${memberName}"? This cannot be undone.`)) return;
-    try {
-      await teamApi.delete(memberId);
-      setSuccess(`Team member "${memberName}" deleted.`);
-      await loadTeamData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete member');
-    }
+  function handleDeleteMember(memberId: string, memberName: string) {
+    setConfirmState({
+      open: true,
+      title: 'Delete Team Member',
+      message: `Delete team member "${memberName}"? This cannot be undone.`,
+      action: async () => {
+        try {
+          await teamApi.delete(memberId);
+          setSuccess(`Team member "${memberName}" deleted.`);
+          await loadTeamData();
+        } catch (err: any) {
+          setError(err.message || 'Failed to delete member');
+        } finally {
+          setConfirmState(prev => ({ ...prev, open: false }));
+        }
+      },
+    });
   }
 
   function openCreateRole() {
@@ -225,16 +246,24 @@ export default function TeamPage() {
     }
   }
 
-  async function handleDeleteRole(roleId: string, roleName: string) {
-    if (!window.confirm(`Delete role "${roleName}"? Assigned users will lose its permissions.`)) return;
-    try {
-      await teamApi.deleteRole(roleId);
-      setSuccess(`Role "${roleName}" deleted.`);
-      setShowRoleModal(false);
-      await loadTeamData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete role');
-    }
+  function handleDeleteRole(roleId: string, roleName: string) {
+    setConfirmState({
+      open: true,
+      title: 'Delete Role',
+      message: `Delete role "${roleName}"? Assigned users will lose its permissions.`,
+      action: async () => {
+        try {
+          await teamApi.deleteRole(roleId);
+          setSuccess(`Role "${roleName}" deleted.`);
+          setShowRoleModal(false);
+          await loadTeamData();
+        } catch (err: any) {
+          setError(err.message || 'Failed to delete role');
+        } finally {
+          setConfirmState(prev => ({ ...prev, open: false }));
+        }
+      },
+    });
   }
 
   if (loading && users.length === 0) {
@@ -818,6 +847,16 @@ export default function TeamPage() {
           </form>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmState.open}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmText="Delete"
+        variant="danger"
+        onConfirm={confirmState.action}
+        onCancel={() => setConfirmState(prev => ({ ...prev, open: false }))}
+      />
     </div>
   );
 }

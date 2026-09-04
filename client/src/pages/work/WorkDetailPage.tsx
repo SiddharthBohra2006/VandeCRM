@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { workApi, WorkType, WorkItem, WorkSubtask } from '../../api/work';
 import { useAuth } from '../../contexts/AuthContext';
 import Icon from '../../components/Icons';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 function formatDate(val?: string | Date | null): string {
   if (!val) return 'Not set';
@@ -182,13 +183,21 @@ export default function WorkDetailPage() {
     }
   }
 
-  async function handleDeleteTask() {
-    if (!type || !id || !window.confirm(`Delete "${item?.title}" permanently?`)) return;
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function executeDeleteTask() {
+    if (!type || !id) return;
     try {
+      setDeleting(true);
+      setError('');
       await workApi.delete(type, id);
       navigate(`/work/${type}`);
     } catch (err: any) {
       setError(err.message || 'Failed to delete task');
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
     }
   }
 
@@ -501,7 +510,7 @@ export default function WorkDetailPage() {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-                  <button type="button" className="btn danger" onClick={handleDeleteTask}>
+                  <button type="button" className="btn danger" onClick={() => setShowDeleteConfirm(true)}>
                     <Icon name="trash-2" size={14} /> Delete task
                   </button>
                   <div style={{ display: 'flex', gap: '8px' }}>
@@ -852,6 +861,17 @@ export default function WorkDetailPage() {
           )}
         </aside>
       </main>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Delete Task"
+        message={`Delete "${item?.title}" permanently? This action cannot be undone.`}
+        confirmText="Delete Task"
+        variant="danger"
+        loading={deleting}
+        onConfirm={executeDeleteTask}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }

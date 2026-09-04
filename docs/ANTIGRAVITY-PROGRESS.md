@@ -132,7 +132,16 @@
 - **Clients (Won Customers) Sub-View & Detail Parity Complete:**
   - Enhanced `client/src/pages/clients/ClientsPage.tsx` with deterministic avatar color circles, 1-click WhatsApp (`https://wa.me/...`) and direct phone call links, priority badges, formatted currency (`₹...`), won date formatting, and 4-card portfolio KPI metrics matching EJS client view.
   - Enhanced `client/src/pages/customers/CustomerDetailPage.tsx` with dynamic client breadcrumb navigation and Client Profile overview summary cards (Work items count, Completed work, In progress work, Meetings count).
-- **ALL ASSIGNED FUNCTIONAL DOMAINS + CLIENTS SUB-VIEW COMPLETE & VERIFIED (tsc exit 0, vite build exit 0, node syntax exit 0).**
+- **Company Detail Page & Attachments Parity Complete (Section 5):**
+  - Added server endpoints in `server/src/api/companies.js`: `POST /:id/attachments` (upload base64 company attachment), `GET /:id/attachments/:attachmentId/download` (file download), `DELETE /:id/attachments/:attachmentId` (file deletion), `POST /:id/collaborators/add` and `POST /:id/collaborators/remove`.
+  - Added client API methods in `client/src/api/companies.ts`: `uploadAttachment`, `deleteAttachment`, `addCollaborator`, `removeCollaborator`.
+  - Fully enhanced `client/src/pages/companies/CompanyDetailPage.tsx` to 100% EJS parity: 10-card metric KPI grid, pre-scoped inline "Add Lead to Company" drawer, company attachments upload & stored documents list with download/delete actions, leads portfolio table with stage badges, filterable workspace activity stream (5-pill filter bar: All/Notes/Stages/Calls/Emails), collaborators panel with avatar badges & quick add/remove, and campaign performance aggregation.
+- **Integrations Page Parity Complete (Section 6):**
+  - Enhanced `client/src/pages/integrations/IntegrationsPage.tsx`: Added side-by-side instructional help panels for Meta Ads ("How to get Meta Credentials", "Meta Setup Checklist"), GA4 ("How to get Google credentials", "GA4 Setup Checklist"), live Webhook code snippets (cURL & JavaScript Fetch), and clear credentials / sync all actions.
+- **ConfirmDialog Modal Implementation Complete (Section 7):**
+  - Built accessible, reusable `<ConfirmDialog>` component in `client/src/components/ConfirmDialog.tsx` with danger/warning/primary variants, keyboard Escape listener, and backdrop click handlers.
+  - Replaced native `window.confirm()` calls across all Antigravity domain pages: `CampaignDetailPage.tsx`, `CompanyDetailPage.tsx`, `MailPage.tsx`, `settings/AutomationsTab.tsx`, `SettingsPage.tsx`, `settings/WorkTypeBuilder.tsx`, `TeamPage.tsx`, `WorkDetailPage.tsx`.
+- **ALL ASSIGNED FUNCTIONAL DOMAINS + SECTION 5, 6, 7 COMPLETE & VERIFIED (tsc exit 0, vite build exit 0, node syntax exit 0).**
 
 
 

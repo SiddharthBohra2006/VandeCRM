@@ -334,6 +334,128 @@ router.post('/:id/main', async (req, res, next) => {
   }
 });
 
+function parseAttachmentPayload(body) {
+  const rawData = String(body.fileData || '');
+  const match = rawData.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return { ok: false, message: 'Please select a valid file before uploading.' };
+
+  const buffer = Buffer.from(match[2], 'base64');
+  if (!buffer.length) return { ok: false, message: 'Selected file is empty.' };
+  if (buffer.length > 5 * 1024 * 1024) return { ok: false, message: 'Attachment must be 5 MB or smaller.' };
+
+  const originalName = String(body.originalName || 'attachment').replace(/[\\/:*?"<>|]+/g, '-').trim();
+  return {
+    ok: true,
+    buffer,
+    mimeType: match[1] || 'application/octet-stream',
+    originalName: originalName || 'attachment',
+    category: ['proposal', 'contract', 'invoice', 'brief', 'screenshot', 'other'].includes(body.category) ? body.category : 'other',
+    notes: String(body.notes || '').trim()
+  };
+}
+
+// POST /api/companies/:id/attachments — Upload company attachment
+router.post('/:id/attachments', async (req, res, next) => {
+  try {
+    if (!hasPermission(req.user, 'businesses.update')) {
+      return res.status(403).json({ ok: false, error: 'Permission denied.' });
+    }
+    const orgId = req.user.organization._id;
+    const company = await ClientCompany.findOne({ _id: req.params.id, organization: orgId }).populate('assignedUsers');
+    if (!company) return res.status(404).json({ ok: false, error: 'Company not found.' });
+    if (!canAccessCompany(req.user, company)) {
+      return res.status(403).json({ ok: false, error: 'Access denied to this company.' });
+    }
+
+    const payload = parseAttachmentPayload(req.body);
+    if (!payload.ok) {
+      return res.status(400).json({ ok: false, error: payload.message });
+    }
+
+    const attachment = await Attachment.create({
+      organization: orgId,
+      clientCompany: company._id,
+      uploadedBy: req.user._id,
+      category: payload.category,
+      originalName: payload.originalName,
+      mimeType: payload.mimeType,
+      size: payload.buffer.length,
+      notes: payload.notes,
+      data: payload.buffer
+    });
+
+    await logAudit(req, {
+      action: 'attachment_upload',
+      entityType: 'client_company',
+      entityId: company._id,
+      entityName: company.name,
+      message: `Attachment "${attachment.originalName}" uploaded to company "${company.name}".`,
+      metadata: { attachmentId: attachment._id, category: attachment.category, size: attachment.size }
+    });
+
+    const populated = await Attachment.findById(attachment._id).populate('uploadedBy', 'name email role');
+    res.status(201).json({ ok: true, data: populated });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/companies/:id/attachments/:attachmentId/download — Download attachment
+router.get('/:id/attachments/:attachmentId/download', async (req, res, next) => {
+  try {
+    const orgId = req.user.organization._id;
+    const company = await ClientCompany.findOne({ _id: req.params.id, organization: orgId }).populate('assignedUsers');
+    if (!company) return res.status(404).json({ ok: false, error: 'Company not found.' });
+    if (!canAccessCompany(req.user, company)) {
+      return res.status(403).json({ ok: false, error: 'Access denied to this company.' });
+    }
+
+    const attachment = await Attachment.findOne({ _id: req.params.attachmentId, organization: orgId, clientCompany: company._id, customer: null });
+    if (!attachment) return res.status(404).json({ ok: false, error: 'Attachment not found.' });
+
+    res.setHeader('Content-Type', attachment.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Length', attachment.size || attachment.data.length);
+    res.setHeader('Content-Disposition', `attachment; filename="${attachment.originalName.replace(/"/g, '')}"`);
+    res.send(attachment.data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/companies/:id/attachments/:attachmentId — Delete attachment
+router.delete('/:id/attachments/:attachmentId', async (req, res, next) => {
+  try {
+    if (!hasPermission(req.user, 'businesses.update')) {
+      return res.status(403).json({ ok: false, error: 'Permission denied.' });
+    }
+    const orgId = req.user.organization._id;
+    const company = await ClientCompany.findOne({ _id: req.params.id, organization: orgId }).populate('assignedUsers');
+    if (!company) return res.status(404).json({ ok: false, error: 'Company not found.' });
+    if (!canAccessCompany(req.user, company)) {
+      return res.status(403).json({ ok: false, error: 'Access denied to this company.' });
+    }
+
+    const attachment = await Attachment.findOne({ _id: req.params.attachmentId, organization: orgId, clientCompany: company._id, customer: null });
+    if (!attachment) return res.status(404).json({ ok: false, error: 'Attachment not found.' });
+    const canDelete = ['admin', 'manager'].includes(req.user.role) || String(attachment.uploadedBy || '') === String(req.user._id);
+    if (!canDelete) return res.status(403).json({ ok: false, error: 'Access denied.' });
+
+    await Attachment.deleteOne({ _id: attachment._id, organization: orgId });
+    await logAudit(req, {
+      action: 'attachment_delete',
+      entityType: 'client_company',
+      entityId: company._id,
+      entityName: company.name,
+      message: `Attachment "${attachment.originalName}" deleted from company "${company.name}".`,
+      metadata: { attachmentId: attachment._id }
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/companies/:id/collaborators — Update collaborators
 router.post('/:id/collaborators', async (req, res, next) => {
   try {
@@ -347,6 +469,50 @@ router.post('/:id/collaborators', async (req, res, next) => {
     await ClientCompany.updateOne(
       { _id: req.params.id, organization: orgId },
       { assignedUsers: validAssignedUsers }
+    );
+
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/companies/:id/collaborators/add — Add single collaborator
+router.post('/:id/collaborators/add', async (req, res, next) => {
+  try {
+    if (!hasPermission(req.user, 'businesses.update')) {
+      return res.status(403).json({ ok: false, error: 'Permission denied.' });
+    }
+    const orgId = req.user.organization._id;
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ ok: false, error: 'User ID required.' });
+    const validUsers = await getValidUserIds(orgId, [userId]);
+    if (!validUsers.length) return res.status(400).json({ ok: false, error: 'Invalid user.' });
+
+    await ClientCompany.updateOne(
+      { _id: req.params.id, organization: orgId },
+      { $addToSet: { assignedUsers: validUsers[0] } }
+    );
+
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/companies/:id/collaborators/remove — Remove single collaborator
+router.post('/:id/collaborators/remove', async (req, res, next) => {
+  try {
+    if (!hasPermission(req.user, 'businesses.update')) {
+      return res.status(403).json({ ok: false, error: 'Permission denied.' });
+    }
+    const orgId = req.user.organization._id;
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ ok: false, error: 'User ID required.' });
+
+    await ClientCompany.updateOne(
+      { _id: req.params.id, organization: orgId },
+      { $pull: { assignedUsers: userId } }
     );
 
     res.json({ ok: true });

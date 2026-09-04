@@ -4,6 +4,7 @@ import { campaignsApi, Campaign, CampaignMetrics } from '../../api/campaigns';
 import { Company } from '../../api/companies';
 import { Customer } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +21,8 @@ export default function CampaignDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -135,13 +138,18 @@ export default function CampaignDetailPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!id || !window.confirm('Delete this campaign? Only campaigns without linked leads can be deleted.')) return;
+  async function executeDelete() {
+    if (!id) return;
     try {
+      setDeleting(true);
+      setError('');
       await campaignsApi.delete(id);
       navigate('/campaigns');
     } catch (err: any) {
       setError(err.message || 'Failed to delete campaign');
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
     }
   }
 
@@ -193,7 +201,7 @@ export default function CampaignDetailPage() {
             <button
               type="button"
               className="btn small danger"
-              onClick={handleDelete}
+              onClick={() => setShowDeleteConfirm(true)}
             >
               Delete
             </button>
@@ -424,6 +432,17 @@ export default function CampaignDetailPage() {
           </tbody>
         </table>
       </section>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Delete Campaign"
+        message="Delete this campaign? Only campaigns without linked leads can be deleted."
+        confirmText="Delete"
+        variant="danger"
+        loading={deleting}
+        onConfirm={executeDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }

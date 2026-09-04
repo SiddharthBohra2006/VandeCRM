@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { settingsApi, AutomationRule } from '../../api/settings';
 import { Stage, Label } from '../../types';
 import { WorkType } from '../../api/work';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 interface Props {
   stages: Stage[];
@@ -162,12 +163,38 @@ export default function AutomationsTab({ stages, labels, workTypes, users, autom
     }
   }
 
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    action: () => Promise<void> | void;
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    action: () => {},
+  });
+
   async function toggleRule(id: string) {
     try { await settingsApi.toggleAutomation(id); onChanged(); } catch (err: any) { setError(err.message || 'Could not update rule'); }
   }
-  async function deleteRule(id: string) {
-    if (!window.confirm('Delete this automation rule?')) return;
-    try { await settingsApi.deleteAutomation(id); onChanged(); } catch (err: any) { setError(err.message || 'Could not delete rule'); }
+
+  function deleteRule(id: string) {
+    setConfirmState({
+      open: true,
+      title: 'Delete Automation Rule',
+      message: 'Delete this automation rule? It will no longer trigger on future updates.',
+      action: async () => {
+        try {
+          await settingsApi.deleteAutomation(id);
+          onChanged();
+        } catch (err: any) {
+          setError(err.message || 'Could not delete rule');
+        } finally {
+          setConfirmState(prev => ({ ...prev, open: false }));
+        }
+      },
+    });
   }
 
   return (
@@ -257,6 +284,16 @@ export default function AutomationsTab({ stages, labels, workTypes, users, autom
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmState.open}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmText="Delete Rule"
+        variant="danger"
+        onConfirm={confirmState.action}
+        onCancel={() => setConfirmState(prev => ({ ...prev, open: false }))}
+      />
     </div>
   );
 }

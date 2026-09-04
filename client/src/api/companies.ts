@@ -41,12 +41,37 @@ export interface Company {
   updatedAt: string;
 }
 
+export interface CompanyAttachment {
+  _id: string;
+  originalName: string;
+  category: 'proposal' | 'contract' | 'invoice' | 'brief' | 'screenshot' | 'other';
+  mimeType?: string;
+  size: number;
+  notes?: string;
+  uploadedBy?: {
+    _id: string;
+    name: string;
+    email?: string;
+    role?: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CompanyMetrics {
   totalLeads: number;
   pipelineValue: number;
-  wonRevenue: number;
+  wonValue?: number;
+  wonRevenue?: number;
   activeCampaigns: number;
-  conversionRate: number;
+  winRate?: number;
+  conversionRate?: number;
+  activeCount?: number;
+  lostCount?: number;
+  spend?: number;
+  costPerLead?: number;
+  roi?: number;
+  overdueFollowups?: number;
 }
 
 export interface CompanyDetailResponse {
@@ -57,7 +82,7 @@ export interface CompanyDetailResponse {
   labels: Label[];
   campaigns: any[];
   activities: any[];
-  attachments: any[];
+  attachments: CompanyAttachment[];
   metrics: CompanyMetrics;
   users: AssignedUser[];
 }
@@ -99,5 +124,13 @@ export const companiesApi = {
   setMain: (id: string) => api.post<{ ok: true }>(`/companies/${id}/main`, {}),
   updateCollaborators: (id: string, userIds: string[]) =>
     api.post<{ ok: true }>(`/companies/${id}/collaborators`, { userIds }),
+  addCollaborator: (id: string, userId: string) =>
+    api.post<{ ok: true }>(`/companies/${id}/collaborators/add`, { userId }),
+  removeCollaborator: (id: string, userId: string) =>
+    api.post<{ ok: true }>(`/companies/${id}/collaborators/remove`, { userId }),
+  uploadAttachment: (id: string, data: { category: string; originalName: string; fileData: string; notes?: string }) =>
+    api.post<{ ok: true; data: CompanyAttachment }>(`/companies/${id}/attachments`, data),
+  deleteAttachment: (id: string, attachmentId: string) =>
+    api.delete<{ ok: true }>(`/companies/${id}/attachments/${attachmentId}`),
   regenerateApiKey: (id: string) => api.post<{ ok: true; apiKey: string }>(`/companies/${id}/api-key/regenerate`, {}),
 };

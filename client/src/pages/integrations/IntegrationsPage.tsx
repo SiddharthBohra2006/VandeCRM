@@ -2,10 +2,9 @@ import { useState, useEffect } from 'react';
 import {
   integrationsApi,
   IntegrationsResponse,
-  SyncLog,
-  CompanyIntegrationSetup,
 } from '../../api/integrations';
 import { useAuth } from '../../contexts/AuthContext';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 export default function IntegrationsPage() {
   const { user } = useAuth();
@@ -21,13 +20,30 @@ export default function IntegrationsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Confirm dialog state
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    variant?: 'danger' | 'warning' | 'primary';
+    action: () => Promise<void> | void;
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    action: () => {},
+  });
+
   // Form states for selected company
   const [metaAdAccountId, setMetaAdAccountId] = useState('');
   const [metaAccessToken, setMetaAccessToken] = useState('');
+  const [metaTokenExpiresAt, setMetaTokenExpiresAt] = useState('');
   const [ga4PropertyId, setGa4PropertyId] = useState('');
   const [ga4ServiceAccountJson, setGa4ServiceAccountJson] = useState('');
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncInterval, setSyncInterval] = useState(360);
+  const [apiKeyStatus, setApiKeyStatus] = useState<'active' | 'disabled'>('active');
 
   useEffect(() => {
     loadIntegrations();
@@ -58,10 +74,12 @@ export default function IntegrationsPage() {
   function populateForms(company: any) {
     setMetaAdAccountId(company.metaAdAccountId || '');
     setMetaAccessToken('');
+    setMetaTokenExpiresAt(company.metaTokenExpiresAt ? company.metaTokenExpiresAt.slice(0, 10) : '');
     setGa4PropertyId(company.ga4PropertyId || '');
     setGa4ServiceAccountJson('');
     setSyncEnabled(Boolean(company.integrationSyncEnabled));
     setSyncInterval(company.integrationSyncIntervalMinutes || 360);
+    setApiKeyStatus(company.apiKeyStatus || 'active');
   }
 
   function handleSelectCompany(id: string) {
@@ -89,6 +107,60 @@ export default function IntegrationsPage() {
     } finally {
       setSavingCredentials(false);
     }
+  }
+
+  function promptClearMetaCredentials() {
+    setConfirmState({
+      open: true,
+      title: 'Clear Meta Credentials',
+      message: 'Clear saved Meta Ads credentials for this brand? Automatic Meta syncing will stop.',
+      confirmText: 'Clear Credentials',
+      variant: 'danger',
+      action: async () => {
+        if (!selectedCompanyId) return;
+        try {
+          await integrationsApi.saveCredentials(selectedCompanyId, {
+            metaAdAccountId: '',
+            metaAccessToken: '',
+          });
+          setMetaAdAccountId('');
+          setMetaAccessToken('');
+          setSuccess('Meta credentials cleared.');
+          await loadIntegrations();
+        } catch (err: any) {
+          setError(err.message || 'Failed to clear Meta credentials');
+        } finally {
+          setConfirmState(prev => ({ ...prev, open: false }));
+        }
+      },
+    });
+  }
+
+  function promptClearGa4Credentials() {
+    setConfirmState({
+      open: true,
+      title: 'Clear GA4 Credentials',
+      message: 'Clear saved Google Analytics 4 credentials for this brand? Automatic GA4 syncing will stop.',
+      confirmText: 'Clear Credentials',
+      variant: 'danger',
+      action: async () => {
+        if (!selectedCompanyId) return;
+        try {
+          await integrationsApi.saveCredentials(selectedCompanyId, {
+            ga4PropertyId: '',
+            ga4ServiceAccountJson: '',
+          });
+          setGa4PropertyId('');
+          setGa4ServiceAccountJson('');
+          setSuccess('GA4 credentials cleared.');
+          await loadIntegrations();
+        } catch (err: any) {
+          setError(err.message || 'Failed to clear GA4 credentials');
+        } finally {
+          setConfirmState(prev => ({ ...prev, open: false }));
+        }
+      },
+    });
   }
 
   async function handleSaveSchedule(e: React.FormEvent) {
@@ -125,24 +197,34 @@ export default function IntegrationsPage() {
     }
   }
 
-  async function handleSyncAll() {
-    try {
-      setSyncing(true);
-      setError('');
-      const res = await integrationsApi.syncAll();
-      setSuccess(`Organization sync completed. Meta: ${res.summary.metaSuccess}, GA4: ${res.summary.ga4Success}, Failures: ${res.summary.failures}`);
-      await loadIntegrations();
-    } catch (err: any) {
-      setError(err.message || 'Sync failed');
-    } finally {
-      setSyncing(false);
-    }
+  function promptSyncAll() {
+    setConfirmState({
+      open: true,
+      title: 'Sync All Brands',
+      message: 'Run full sync query across all configured brands and platforms? This might take a moment.',
+      confirmText: 'Sync All',
+      variant: 'primary',
+      action: async () => {
+        try {
+          setSyncing(true);
+          setError('');
+          const res = await integrationsApi.syncAll();
+          setSuccess(`Organization sync completed. Meta: ${res.summary.metaSuccess}, GA4: ${res.summary.ga4Success}, Failures: ${res.summary.failures}`);
+          await loadIntegrations();
+        } catch (err: any) {
+          setError(err.message || 'Sync failed');
+        } finally {
+          setSyncing(false);
+          setConfirmState(prev => ({ ...prev, open: false }));
+        }
+      },
+    });
   }
 
-  async function handleRetryLog(id: string) {
+  async function handleRetryLog(logId: string) {
     try {
       setError('');
-      await integrationsApi.retryLog(id);
+      await integrationsApi.retryLog(logId);
       setSuccess('Retry triggered.');
       await loadIntegrations();
     } catch (err: any) {
@@ -156,6 +238,7 @@ export default function IntegrationsPage() {
 
   const selectedSetup = data?.setupChecklist.find(c => c.company._id === selectedCompanyId);
   const selectedCompany = selectedSetup?.company;
+  const webhookUrl = `${window.location.origin}/api/v1/leads`;
 
   return (
     <div className="page-container">
@@ -164,16 +247,21 @@ export default function IntegrationsPage() {
 
       <section className="page-head" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <p className="eyebrow">Data Sync</p>
-          <h1 style={{ margin: 0 }}>API & Webhook Integrations</h1>
-          <p className="page-subtitle">Configure Meta Ads, Google Analytics 4, and universal webhook pipes.</p>
+          <p className="eyebrow" style={{ margin: 0, fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 800 }}>Data Sync</p>
+          <h1 style={{ margin: '0.2rem 0', fontSize: '1.5rem', fontFamily: 'var(--font-display)' }}>API & Webhook Integrations</h1>
+          <p className="page-subtitle" style={{ margin: 0, fontSize: '0.82rem', color: 'var(--muted)' }}>
+            Configure Meta Ads, Google Analytics 4, and universal webhook pipes.
+          </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <label style={{ fontSize: '0.74rem', fontWeight: 850, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Client Brand:
+          </label>
           <select
             value={selectedCompanyId}
             onChange={e => handleSelectCompany(e.target.value)}
-            style={{ padding: '6px 12px', borderRadius: '6px', fontWeight: 800, background: 'var(--panel)', color: 'var(--text)' }}
+            style={{ minWidth: '220px', height: '36px', borderRadius: '6px', fontWeight: 800, background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)', padding: '0 10px', cursor: 'pointer' }}
           >
             {data?.setupChecklist.map(entry => {
               const c = entry.company;
@@ -190,7 +278,7 @@ export default function IntegrationsPage() {
             type="button"
             className="btn outline"
             disabled={syncing}
-            onClick={handleSyncAll}
+            onClick={promptSyncAll}
           >
             {syncing ? 'Syncing...' : 'Sync All Brands'}
           </button>
@@ -200,10 +288,10 @@ export default function IntegrationsPage() {
       {/* Macro Platform Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
         {[
-          { id: 'meta', title: 'Meta Ads Manager', tag: 'META ADS', desc: 'Sync spend figures, clicks, and lead forms.', color: '#1877f2' },
-          { id: 'ga4', title: 'Google Analytics 4', tag: 'GA4 INGESTION', desc: 'Pull traffic volumes and conversion counts.', color: '#f4b400' },
-          { id: 'webhook', title: 'Inbound Webhook Pipe', tag: 'WEBHOOK API', desc: 'Universal API route accepting leads from any website.', color: 'var(--gold)' },
-          { id: 'schedule', title: 'Schedules & Logs', tag: 'DIAGNOSTICS', desc: 'Set sync timers and read real-time logs.', color: 'var(--teal)' },
+          { id: 'meta', title: 'Meta Ads Manager', tag: 'META ADS FORM', desc: 'Sync spend figures, clicks, and ingest Meta lead forms.', color: '#1877f2', icon: 'f' },
+          { id: 'ga4', title: 'Google Analytics 4', tag: 'GA4 INGESTION', desc: 'Pulls campaign traffic volume and GA4 conversion counts.', color: '#f4b400', icon: 'G' },
+          { id: 'webhook', title: 'Inbound Webhook Pipe', tag: 'API ENDPOINT', desc: 'A universal inbound API route accepting leads from any website.', color: 'var(--gold)', icon: '⚡' },
+          { id: 'schedule', title: 'Schedules & Logs', tag: 'DIAGNOSTICS', desc: 'Set automated sync timers, check health status, and read logs.', color: 'var(--teal)', icon: '⏱' },
         ].map(card => (
           <div
             key={card.id}
@@ -217,14 +305,47 @@ export default function IntegrationsPage() {
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              minHeight: '120px',
+              minHeight: '130px',
+              boxShadow: activeTab === card.id ? `0 0 12px ${card.color}25` : 'none',
+              transition: 'all 0.15s ease',
             }}
           >
             <div>
-              <strong style={{ display: 'block', fontSize: '0.95rem', marginBottom: '0.35rem' }}>{card.title}</strong>
-              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--muted)', lineHeight: 1.4 }}>{card.desc}</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.5rem' }}>
+                <span
+                  style={{
+                    background: card.color,
+                    color: '#fff',
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '6px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '0.9rem',
+                    fontFamily: 'var(--font-display)',
+                  }}
+                >
+                  {card.icon}
+                </span>
+                <strong style={{ fontSize: '0.9rem', fontFamily: 'var(--font-display)' }}>{card.title}</strong>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.74rem', color: 'var(--muted)', lineHeight: 1.4 }}>{card.desc}</p>
             </div>
-            <span style={{ fontSize: '0.65rem', fontWeight: 800, color: card.color, marginTop: '0.75rem' }}>
+            <span
+              style={{
+                fontSize: '0.64rem',
+                fontWeight: 700,
+                color: card.color,
+                background: `${card.color}15`,
+                border: `1px solid ${card.color}30`,
+                padding: '2px 8px',
+                borderRadius: '4px',
+                width: 'fit-content',
+                marginTop: '0.75rem',
+              }}
+            >
               {card.tag}
             </span>
           </div>
@@ -236,9 +357,12 @@ export default function IntegrationsPage() {
         {selectedCompany && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
             <div>
-              <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.15rem' }}>{selectedCompany.name}</h2>
+              <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.15rem', fontFamily: 'var(--font-display)' }}>{selectedCompany.name}</h2>
               <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
-                Sync interval: {selectedCompany.integrationSyncIntervalMinutes || 360} mins · Status: {selectedCompany.integrationSyncEnabled ? 'Enabled' : 'Disabled'}
+                Sync interval: {selectedCompany.integrationSyncIntervalMinutes || 360} mins · Status:{' '}
+                <strong style={{ color: selectedCompany.integrationSyncEnabled ? 'var(--green)' : 'var(--muted)' }}>
+                  {selectedCompany.integrationSyncEnabled ? 'Enabled' : 'Disabled'}
+                </strong>
               </span>
             </div>
             <button
@@ -252,124 +376,329 @@ export default function IntegrationsPage() {
           </div>
         )}
 
-        {/* META TAB */}
+        {/* TAB 1: META ADS */}
         {activeTab === 'meta' && (
-          <form onSubmit={handleSaveCredentials} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '600px' }}>
-            <h3 style={{ margin: 0, fontSize: '1rem' }}>Meta Ads Integration Credentials</h3>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Meta Ad Account ID (digits only, without act_)
-              <input
-                placeholder="e.g. 123456789012345"
-                value={metaAdAccountId}
-                onChange={e => setMetaAdAccountId(e.target.value)}
-              />
-            </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem', alignItems: 'start' }}>
+            {/* Left Column: Form */}
+            <form onSubmit={handleSaveCredentials} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: '1.05rem', color: 'var(--gold)', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                Meta Ads Integration Settings
+              </h3>
 
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Meta System User / Long-Lived Access Token
-              <input
-                type="password"
-                placeholder={selectedCompany?.hasMetaToken ? '•••••••• (token saved and encrypted)' : 'Paste EAAB... token'}
-                value={metaAccessToken}
-                onChange={e => setMetaAccessToken(e.target.value)}
-              />
-            </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
+                Meta Ad Account ID
+                <input
+                  placeholder="e.g. 1234567890 (numbers only, no act_ prefix)"
+                  value={metaAdAccountId}
+                  onChange={e => setMetaAdAccountId(e.target.value)}
+                />
+              </label>
 
-            <button className="btn primary" type="submit" disabled={savingCredentials} style={{ alignSelf: 'flex-start', marginTop: '0.5rem' }}>
-              {savingCredentials ? 'Saving & Encrypting...' : 'Save Meta Credentials'}
-            </button>
-          </form>
-        )}
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
+                Meta Access Token
+                <input
+                  type="password"
+                  placeholder={selectedCompany?.hasMetaToken ? '•••••••• (token saved and encrypted)' : 'Paste EAAB... token'}
+                  value={metaAccessToken}
+                  onChange={e => setMetaAccessToken(e.target.value)}
+                />
+                <small style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>
+                  Leave blank to preserve existing encrypted token.
+                </small>
+              </label>
 
-        {/* GA4 TAB */}
-        {activeTab === 'ga4' && (
-          <form onSubmit={handleSaveCredentials} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '600px' }}>
-            <h3 style={{ margin: 0, fontSize: '1rem' }}>Google Analytics 4 Credentials</h3>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              GA4 Property ID (numeric only)
-              <input
-                placeholder="e.g. 392817291"
-                value={ga4PropertyId}
-                onChange={e => setGa4PropertyId(e.target.value)}
-              />
-            </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
+                Meta Token Expiry Date
+                <input
+                  type="date"
+                  value={metaTokenExpiresAt}
+                  onChange={e => setMetaTokenExpiresAt(e.target.value)}
+                />
+              </label>
 
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Google Service Account JSON Key
-              <textarea
-                rows={6}
-                placeholder={selectedCompany?.hasGa4Json ? '•••••••• (Service account JSON saved and encrypted)' : '{"type": "service_account", "client_email": "...", "private_key": "..."}'}
-                value={ga4ServiceAccountJson}
-                onChange={e => setGa4ServiceAccountJson(e.target.value)}
-              />
-            </label>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                <button className="btn primary" type="submit" disabled={savingCredentials}>
+                  {savingCredentials ? 'Saving & Encrypting...' : 'Save Meta Settings'}
+                </button>
+                <button
+                  type="button"
+                  className="btn outline"
+                  style={{ color: 'var(--red)', borderColor: 'rgba(220, 38, 38, 0.35)' }}
+                  onClick={promptClearMetaCredentials}
+                >
+                  Clear Credentials
+                </button>
+              </div>
+            </form>
 
-            <button className="btn primary" type="submit" disabled={savingCredentials} style={{ alignSelf: 'flex-start', marginTop: '0.5rem' }}>
-              {savingCredentials ? 'Saving & Encrypting...' : 'Save GA4 Credentials'}
-            </button>
-          </form>
-        )}
-
-        {/* WEBHOOK TAB */}
-        {activeTab === 'webhook' && (
-          <div style={{ maxWidth: '650px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <h3 style={{ margin: 0, fontSize: '1rem' }}>Universal Inbound Webhook Pipe</h3>
-            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)', lineHeight: 1.5 }}>
-              Push leads from website landing pages, Webflow, WordPress, or Zapier directly into this CRM workspace.
-            </p>
-
-            <div style={{ background: 'var(--bg-soft, rgba(255,255,255,0.02))', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              <div style={{ marginBottom: '0.75rem' }}>
-                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase' }}>Webhook URL:</span>
-                <code style={{ display: 'block', padding: '0.4rem 0.6rem', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '4px', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                  {window.location.origin}/api/v1/leads
-                </code>
+            {/* Right Column: Instructional Guide & Checklist */}
+            <div>
+              <div style={{ background: 'var(--bg-soft)', border: '1px solid var(--border)', borderRadius: '8px', padding: '1.25rem', fontSize: '0.76rem', lineHeight: 1.5, color: 'var(--sub)', marginBottom: '1.25rem' }}>
+                <h4 style={{ margin: '0 0 0.5rem', color: 'var(--text)', fontFamily: 'var(--font-display)', fontSize: '0.84rem' }}>
+                  How to get Meta Credentials:
+                </h4>
+                <ol style={{ margin: 0, paddingLeft: '1.1rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <li>Go to your <strong>Meta Business Manager</strong> &rarr; <strong>Ad Accounts</strong>. Copy the numeric <strong>Ad Account ID</strong> (do not include the <code>act_</code> prefix).</li>
+                  <li>Go to <strong>Business Settings</strong> &rarr; <strong>Users</strong> &rarr; <strong>System Users</strong>. Create a System User and assign it the <strong>Ad Account</strong> with full control.</li>
+                  <li>Click <strong>Generate Token</strong>, select the <code>ads_management</code> and <code>ads_read</code> permissions, and copy the generated token.</li>
+                </ol>
               </div>
 
-              <div>
-                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase' }}>Brand API Key Header:</span>
-                <code style={{ display: 'block', padding: '0.4rem 0.6rem', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '4px', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                  X-API-Key: {selectedCompany?.apiKey || 'No active API key for this workspace'}
-                </code>
+              <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '1.1rem', background: 'var(--surface)' }}>
+                <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontFamily: 'var(--font-display)', color: 'var(--text)' }}>
+                  Meta Setup Checklist:
+                </h4>
+                <div style={{ display: 'grid', gap: '0.45rem', fontSize: '0.74rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{metaAdAccountId ? '✅' : '⚪'}</span>
+                    <span>Ad Account ID Configured</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{selectedCompany?.hasMetaToken || metaAccessToken ? '✅' : '⚪'}</span>
+                    <span>System User Access Token Stored</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{selectedCompany?.integrationSyncEnabled ? '✅' : '⚪'}</span>
+                    <span>Automatic Sync Enabled</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* SCHEDULE TAB */}
+        {/* TAB 2: GA4 */}
+        {activeTab === 'ga4' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem', alignItems: 'start' }}>
+            {/* Left Column: Form */}
+            <form onSubmit={handleSaveCredentials} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: '1.05rem', color: 'var(--gold)', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                Google Analytics 4 Settings
+              </h3>
+
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
+                GA4 Property ID (numeric only)
+                <input
+                  placeholder="e.g. 987654321"
+                  value={ga4PropertyId}
+                  onChange={e => setGa4PropertyId(e.target.value)}
+                />
+              </label>
+
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
+                Google Service Account JSON Key
+                <textarea
+                  rows={6}
+                  placeholder={selectedCompany?.hasGa4Json ? '•••••••• (Service account JSON saved and encrypted)' : 'Paste private Service Account JSON key contents here'}
+                  value={ga4ServiceAccountJson}
+                  onChange={e => setGa4ServiceAccountJson(e.target.value)}
+                  style={{ fontFamily: 'monospace', fontSize: '0.74rem' }}
+                />
+                <small style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>
+                  Leave blank to preserve existing encrypted key.
+                </small>
+              </label>
+
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                <button className="btn primary" type="submit" disabled={savingCredentials}>
+                  {savingCredentials ? 'Saving & Encrypting...' : 'Save GA4 Settings'}
+                </button>
+                <button
+                  type="button"
+                  className="btn outline"
+                  style={{ color: 'var(--red)', borderColor: 'rgba(220, 38, 38, 0.35)' }}
+                  onClick={promptClearGa4Credentials}
+                >
+                  Clear Credentials
+                </button>
+              </div>
+            </form>
+
+            {/* Right Column: Instructions */}
+            <div>
+              <div style={{ background: 'var(--bg-soft)', border: '1px solid var(--border)', borderRadius: '8px', padding: '1.25rem', fontSize: '0.76rem', lineHeight: 1.5, color: 'var(--sub)', marginBottom: '1.25rem' }}>
+                <h4 style={{ margin: '0 0 0.5rem', color: 'var(--text)', fontFamily: 'var(--font-display)', fontSize: '0.84rem' }}>
+                  How to get Google credentials:
+                </h4>
+                <ol style={{ margin: 0, paddingLeft: '1.1rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <li>In Google Analytics, go to <strong>Admin</strong> &rarr; <strong>Property Settings</strong> and copy the <strong>Property ID</strong>.</li>
+                  <li>Go to the <strong>Google Cloud Console</strong>, create a project, and create a <strong>Service Account</strong>.</li>
+                  <li>Inside the Service Account, go to <strong>Keys</strong> &rarr; <strong>Add Key</strong> &rarr; <strong>Create JSON</strong>, download the file, and paste its full text contents here.</li>
+                  <li><strong>Crucial Step</strong>: Copy the <code>client_email</code> address inside that JSON, go to your GA4 property &rarr; <strong>Property Access Management</strong>, add the email, and assign the <strong>Viewer</strong> role.</li>
+                </ol>
+              </div>
+
+              <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '1.1rem', background: 'var(--surface)' }}>
+                <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontFamily: 'var(--font-display)', color: 'var(--text)' }}>
+                  GA4 Setup Checklist:
+                </h4>
+                <div style={{ display: 'grid', gap: '0.45rem', fontSize: '0.74rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{ga4PropertyId ? '✅' : '⚪'}</span>
+                    <span>GA4 Property ID Configured</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{selectedCompany?.hasGa4Json || ga4ServiceAccountJson ? '✅' : '⚪'}</span>
+                    <span>Service Account JSON Stored</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{selectedCompany?.integrationSyncEnabled ? '✅' : '⚪'}</span>
+                    <span>Automatic Sync Enabled</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: WEBHOOK */}
+        {activeTab === 'webhook' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem', alignItems: 'start' }}>
+            <div>
+              <h3 style={{ margin: '0 0 1.25rem', fontFamily: 'var(--font-display)', fontSize: '1.05rem', color: 'var(--gold)', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                Inbound Webhook Pipe
+              </h3>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '4px', color: 'var(--muted)' }}>
+                  Webhook Endpoint URL
+                </label>
+                <div style={{ display: 'flex', gap: '0.35rem' }}>
+                  <input
+                    type="text"
+                    readOnly
+                    value={webhookUrl}
+                    style={{ flex: 1, height: '36px', fontSize: '0.74rem', padding: '0 10px', fontFamily: 'monospace' }}
+                    onClick={e => (e.target as HTMLInputElement).select()}
+                  />
+                  <button
+                    type="button"
+                    className="btn small outline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(webhookUrl);
+                      setSuccess('Copied Webhook URL!');
+                    }}
+                  >
+                    Copy URL
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '4px', color: 'var(--muted)' }}>
+                  Workspace Inbound API Key
+                </label>
+                <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                  <code style={{ flex: 1, padding: '0.45rem 0.75rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.78rem', color: 'var(--gold)' }}>
+                    {selectedCompany?.apiKey || 'No active API key generated'}
+                  </code>
+                  <button
+                    type="button"
+                    className="btn small outline"
+                    onClick={() => {
+                      if (selectedCompany?.apiKey) {
+                        navigator.clipboard.writeText(selectedCompany.apiKey);
+                        setSuccess('Copied API Key!');
+                      }
+                    }}
+                  >
+                    Copy Key
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ background: 'var(--bg-soft)', border: '1px solid var(--border)', borderRadius: '8px', padding: '1.25rem', fontSize: '0.76rem', lineHeight: 1.5, color: 'var(--sub)' }}>
+              <h4 style={{ margin: '0 0 0.5rem', color: 'var(--text)', fontFamily: 'var(--font-display)', fontSize: '0.84rem' }}>
+                How to integrate lead capture:
+              </h4>
+              <p style={{ margin: '0 0 0.75rem' }}>Send an HTTP <code>POST</code> request containing lead fields in the JSON payload.</p>
+
+              <strong style={{ color: 'var(--text)', display: 'block', marginBottom: '4px', fontSize: '0.74rem' }}>
+                cURL Example:
+              </strong>
+              <pre style={{ background: 'var(--surface)', padding: '8px', borderRadius: '6px', fontSize: '0.68rem', overflowX: 'auto', color: 'var(--muted)', margin: '0 0 0.75rem 0', border: '1px solid var(--border)', fontFamily: 'monospace' }}>
+{`curl -X POST ${webhookUrl} \\
+  -H "Content-Type: application/json" \\
+  -H "X-API-Key: ${selectedCompany?.apiKey || 'YOUR_API_KEY'}" \\
+  -d '{
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "phone": "+919876543210",
+    "notes": "Interested in Premium Package"
+  }'`}
+              </pre>
+
+              <strong style={{ color: 'var(--text)', display: 'block', marginBottom: '4px', fontSize: '0.74rem' }}>
+                JavaScript Fetch Example:
+              </strong>
+              <pre style={{ background: 'var(--surface)', padding: '8px', borderRadius: '6px', fontSize: '0.68rem', overflowX: 'auto', color: 'var(--muted)', margin: 0, border: '1px solid var(--border)', fontFamily: 'monospace' }}>
+{`await fetch("${webhookUrl}", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "X-API-Key": "${selectedCompany?.apiKey || 'YOUR_API_KEY'}"
+  },
+  body: JSON.stringify({
+    name: "Jane Doe",
+    email: "jane@example.com",
+    phone: "+919876543210"
+  })
+});`}
+              </pre>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: SCHEDULE & DIAGNOSTICS */}
         {activeTab === 'schedule' && (
-          <form onSubmit={handleSaveSchedule} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '500px' }}>
-            <h3 style={{ margin: 0, fontSize: '1rem' }}>Automated Synchronization Schedule</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem', alignItems: 'start' }}>
+            <form onSubmit={handleSaveSchedule} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: '1.05rem', color: 'var(--gold)', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                Sync Schedule Configuration
+              </h3>
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
-              <input
-                type="checkbox"
-                checked={syncEnabled}
-                onChange={e => setSyncEnabled(e.target.checked)}
-              />
-              Enable Automatic Background Sync
-            </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={syncEnabled}
+                  onChange={e => setSyncEnabled(e.target.checked)}
+                />
+                Enable Automatic Background Sync
+              </label>
 
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Sync Interval (Minutes, minimum 15)
-              <input
-                type="number"
-                min={15}
-                value={syncInterval}
-                onChange={e => setSyncInterval(Number(e.target.value) || 360)}
-              />
-            </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
+                Sync Interval (Minutes, minimum 15)
+                <input
+                  type="number"
+                  min={15}
+                  value={syncInterval}
+                  onChange={e => setSyncInterval(Number(e.target.value) || 360)}
+                />
+              </label>
 
-            <button className="btn primary" type="submit" disabled={savingSchedule} style={{ alignSelf: 'flex-start', marginTop: '0.5rem' }}>
-              {savingSchedule ? 'Saving Schedule...' : 'Save Sync Schedule'}
-            </button>
-          </form>
+              <button className="btn primary" type="submit" disabled={savingSchedule} style={{ alignSelf: 'flex-start', marginTop: '0.5rem' }}>
+                {savingSchedule ? 'Saving Schedule...' : 'Save Sync Schedule'}
+              </button>
+            </form>
+
+            <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '1.25rem', background: 'var(--surface)' }}>
+              <h4 style={{ margin: '0 0 1rem', fontSize: '0.95rem', fontFamily: 'var(--font-display)', color: 'var(--gold)', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                Ingestion Diagnostics
+              </h4>
+              <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.76rem', color: 'var(--sub)' }}>
+                <div>Last Sync Run: <strong style={{ color: 'var(--text)' }}>{selectedCompany?.lastIntegrationSyncAt ? new Date(selectedCompany.lastIntegrationSyncAt).toLocaleString() : 'Never'}</strong></div>
+                <div>Last Sync Status: <strong style={{ color: selectedSetup?.latestLog?.status === 'success' ? 'var(--green)' : selectedSetup?.latestLog?.status === 'failed' ? 'var(--red)' : 'var(--muted)' }}>{(selectedSetup?.latestLog?.status || 'never').toUpperCase()}</strong></div>
+                <div>API Key Suffix: <strong style={{ color: 'var(--text)' }}>{selectedCompany?.apiKey ? selectedCompany.apiKey.slice(-6) : 'N/A'}</strong></div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
       {/* Diagnostics & History Logs */}
       <section style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)', padding: '1.5rem' }}>
-        <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '1rem' }}>Recent Sync Logs & Diagnostics</h2>
+        <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '1rem', fontFamily: 'var(--font-display)' }}>Recent Sync Logs & Diagnostics</h2>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
             <thead>
@@ -409,8 +738,11 @@ export default function IntegrationsPage() {
                       <span
                         className="stage-badge"
                         style={{
-                          backgroundColor: log.status === 'success' ? 'var(--teal)' : log.status === 'failed' ? 'var(--red)' : 'var(--muted)',
+                          backgroundColor: log.status === 'success' ? 'var(--green)' : log.status === 'failed' ? 'var(--red)' : 'var(--muted)',
+                          color: '#fff',
                           fontSize: '0.65rem',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
                         }}
                       >
                         {log.status.toUpperCase()}
@@ -437,6 +769,17 @@ export default function IntegrationsPage() {
           </table>
         </div>
       </section>
+
+      {/* Confirmation Dialog Modal */}
+      <ConfirmDialog
+        open={confirmState.open}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmText={confirmState.confirmText}
+        variant={confirmState.variant}
+        onConfirm={confirmState.action}
+        onCancel={() => setConfirmState(prev => ({ ...prev, open: false }))}
+      />
     </div>
   );
 }

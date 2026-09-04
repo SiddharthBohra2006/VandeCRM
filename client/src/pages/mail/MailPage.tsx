@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { mailApi, EmailAccount, EmailTemplate, EmailMessage } from '../../api/mail';
 import { Customer } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 export default function MailPage() {
   const { user } = useAuth();
@@ -24,6 +25,20 @@ export default function MailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    variant?: 'danger' | 'warning' | 'primary';
+    action: () => Promise<void> | void;
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    action: () => {},
+  });
 
   // Compose State
   const [composeCustomerId, setComposeCustomerId] = useState('');
@@ -163,16 +178,26 @@ export default function MailPage() {
     }
   }
 
-  async function handleDeleteTemplate(id: string, name: string) {
-    if (!window.confirm(`Delete template "${name}"?`)) return;
-    try {
-      await mailApi.deleteTemplate(id);
-      setSuccess('Template deleted.');
-      if (selectedTemplate?._id === id) setSelectedTemplate(null);
-      await loadMailData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete template');
-    }
+  function handleDeleteTemplate(id: string, name: string) {
+    setConfirmState({
+      open: true,
+      title: 'Delete Template',
+      message: `Delete email template "${name}"?`,
+      confirmText: 'Delete',
+      variant: 'danger',
+      action: async () => {
+        try {
+          await mailApi.deleteTemplate(id);
+          setSuccess('Template deleted.');
+          if (selectedTemplate?._id === id) setSelectedTemplate(null);
+          await loadMailData();
+        } catch (err: any) {
+          setError(err.message || 'Failed to delete template');
+        } finally {
+          setConfirmState(prev => ({ ...prev, open: false }));
+        }
+      },
+    });
   }
 
   if (loading && messages.length === 0 && customers.length === 0) {
@@ -637,6 +662,16 @@ export default function MailPage() {
           </form>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmState.open}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmText={confirmState.confirmText}
+        variant={confirmState.variant}
+        onConfirm={confirmState.action}
+        onCancel={() => setConfirmState(prev => ({ ...prev, open: false }))}
+      />
     </div>
   );
 }

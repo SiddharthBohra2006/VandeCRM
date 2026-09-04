@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import WorkTypeBuilder from './WorkTypeBuilder';
 import AutomationsTab from './AutomationsTab';
 import Icon from '../../components/Icons';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 export default function SettingsPage() {
   const { user, activeCompany } = useAuth();
@@ -22,6 +23,18 @@ export default function SettingsPage() {
   const [users, setUsers] = useState<{ _id: string; name: string; role: string }[]>([]);
   const [builderTarget, setBuilderTarget] = useState<WorkType | null>(null);
   const [builderOpen, setBuilderOpen] = useState(false);
+
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    action: () => Promise<void> | void;
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    action: () => {},
+  });
   const [terminology, setTerminology] = useState<Terminology>({
     leadSingular: 'Lead',
     leadPlural: 'Leads',
@@ -123,15 +136,23 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleDeleteStage(id: string, name: string) {
-    if (!window.confirm(`Delete stage "${name}"?`)) return;
-    try {
-      await settingsApi.deleteStage(id);
-      setSuccess(`Stage "${name}" deleted.`);
-      await loadSettings();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete stage');
-    }
+  function handleDeleteStage(id: string, name: string) {
+    setConfirmState({
+      open: true,
+      title: 'Delete Stage',
+      message: `Delete stage "${name}"? Leads currently in this stage should be moved first.`,
+      action: async () => {
+        try {
+          await settingsApi.deleteStage(id);
+          setSuccess(`Stage "${name}" deleted.`);
+          await loadSettings();
+        } catch (err: any) {
+          setError(err.message || 'Failed to delete stage');
+        } finally {
+          setConfirmState(prev => ({ ...prev, open: false }));
+        }
+      },
+    });
   }
 
   // Field actions
@@ -162,15 +183,23 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleDeleteField(id: string, label: string) {
-    if (!window.confirm(`Delete custom field "${label}"?`)) return;
-    try {
-      await settingsApi.deleteField(id);
-      setSuccess(`Field "${label}" deleted.`);
-      await loadSettings();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete field');
-    }
+  function handleDeleteField(id: string, label: string) {
+    setConfirmState({
+      open: true,
+      title: 'Delete Custom Field',
+      message: `Delete custom field "${label}"?`,
+      action: async () => {
+        try {
+          await settingsApi.deleteField(id);
+          setSuccess(`Field "${label}" deleted.`);
+          await loadSettings();
+        } catch (err: any) {
+          setError(err.message || 'Failed to delete field');
+        } finally {
+          setConfirmState(prev => ({ ...prev, open: false }));
+        }
+      },
+    });
   }
 
   // Label actions
@@ -193,15 +222,23 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleDeleteLabel(id: string, name: string) {
-    if (!window.confirm(`Delete tag "${name}"?`)) return;
-    try {
-      await settingsApi.deleteLabel(id);
-      setSuccess(`Tag "${name}" deleted.`);
-      await loadSettings();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete tag');
-    }
+  function handleDeleteLabel(id: string, name: string) {
+    setConfirmState({
+      open: true,
+      title: 'Delete Tag',
+      message: `Delete tag "${name}"?`,
+      action: async () => {
+        try {
+          await settingsApi.deleteLabel(id);
+          setSuccess(`Tag "${name}" deleted.`);
+          await loadSettings();
+        } catch (err: any) {
+          setError(err.message || 'Failed to delete tag');
+        } finally {
+          setConfirmState(prev => ({ ...prev, open: false }));
+        }
+      },
+    });
   }
 
   // Terminology
@@ -714,6 +751,16 @@ export default function SettingsPage() {
           onChanged={loadSettings}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmState.open}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmText="Delete"
+        variant="danger"
+        onConfirm={confirmState.action}
+        onCancel={() => setConfirmState(prev => ({ ...prev, open: false }))}
+      />
     </div>
   );
 }

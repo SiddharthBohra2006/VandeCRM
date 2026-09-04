@@ -24,18 +24,18 @@ Legend of the two codebases:
 | Work detail | `views/work/detail.ejs` + `_overview.ejs`, `_category-fields.ejs`, `_custom-fields.ejs` | `pages/work/WorkDetailPage.tsx` | Good coverage (breadcrumbs, task brief, assignment overview, collaborator chips, subtasks tree, files & links, audit log) |
 | Work import | `views/work/import-preview.ejs` | `WorkListPage.tsx` import dialog | Complete — bulk CSV upload, preview table, batch creation |
 | Tasks / follow-ups | `views/dashboard/reports-*` (client dashboard) | `pages/tasks/TasksPage.tsx` | Present (reschedule, complete, tabs) |
-| Campaigns | `views/campaigns/index.ejs`, `show.ejs` | `pages/campaigns/CampaignsPage.tsx`, `CampaignDetailPage.tsx` | Present |
-| Companies / CRMs | `views/companies/index.ejs`, `show.ejs` | `pages/companies/CompaniesPage.tsx`, `CompanyDetailPage.tsx` | Present (owner transfer, collaborator toggles, main workspace) |
+| Campaigns | `views/campaigns/index.ejs`, `show.ejs` | `pages/campaigns/CampaignsPage.tsx`, `CampaignDetailPage.tsx` | Complete (100% EJS parity, metrics, status toggle, ConfirmDialog) |
+| Companies / CRMs | `views/companies/index.ejs`, `show.ejs` | `pages/companies/CompaniesPage.tsx`, `CompanyDetailPage.tsx` | Complete (10-metric KPI grid, inline Add Lead drawer, attachments upload/download/delete, leads portfolio table, 5-pill activity stream, collaborators panel, campaign performance) |
 | Portfolio | `views/dashboard/portfolio.ejs` | `pages/portfolio/PortfolioPage.tsx` | Present |
 | Reports index | `views/dashboard/reports-index.ejs` | `pages/reports/ReportsIndexPage.tsx` | Present |
 | Module report builder | `views/dashboard/module-report-builder.ejs` | `pages/reports/ModuleReportBuilderPage.tsx` | Present |
 | Report table | `views/dashboard/report-table.ejs` | `pages/reports/ReportTablePage.tsx` | Present |
 | Analytics | — | `pages/analytics/AnalyticsPage.tsx` | React-only (no exact EJS twin) |
-| Mail | `views/mail/index.ejs` | `pages/mail/MailPage.tsx` | Present (3-pane grid, merge tags, templates, SMTP test) |
-| Integrations | `views/integrations/index.ejs` | `pages/integrations/IntegrationsPage.tsx` | Present |
+| Mail | `views/mail/index.ejs` | `pages/mail/MailPage.tsx` | Complete (3-pane grid, merge tags, templates, SMTP test, ConfirmDialog) |
+| Integrations | `views/integrations/index.ejs` | `pages/integrations/IntegrationsPage.tsx` | Complete (Meta Ads, GA4, Webhook, Schedule tabs + inline credential instructions & checklists, code examples, ConfirmDialog) |
 | Search | `views/search/index.ejs` | `pages/search/SearchPage.tsx` | Present |
-| Settings | `views/settings/index.ejs` (+`setup.ejs`, `_work-type-builder.ejs`) | `pages/settings/SettingsPage.tsx` | Complete — all 7 categories: stages, fields, labels, work-types builder, automations engine, terminology, look & feel |
-| Team | `views/settings/index.ejs` (team panels) | `pages/team/TeamPage.tsx` | Present (members + roles tabs) |
+| Settings | `views/settings/index.ejs` (+`setup.ejs`, `_work-type-builder.ejs`) | `pages/settings/SettingsPage.tsx` | Complete — all 7 categories: stages, fields, labels, work-types builder, automations engine, terminology, look & feel, ConfirmDialog |
+| Team | `views/settings/index.ejs` (team panels) | `pages/team/TeamPage.tsx` | Complete (members + roles tabs, ConfirmDialog) |
 | Audit | — | `pages/audit/AuditPage.tsx` | React-only |
 | Auth | — | `pages/auth/*` (Login/Signup/Forgot/Reset) | React-only |
 | Errors 403/404/500 | `views/errors/403.ejs`, `404.ejs`, `500.ejs` | `pages/errors/ForbiddenPage.tsx`, `NotFoundPage.tsx` | Complete — dedicated error routes and 404 catch-all |

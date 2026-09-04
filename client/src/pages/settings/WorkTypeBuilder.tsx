@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { settingsApi } from '../../api/settings';
 import { WorkType, WorkTypeStatus } from '../../api/work';
 import Icon from '../../components/Icons';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 export interface StatusDraft {
   key: string;
@@ -136,9 +137,10 @@ export default function WorkTypeBuilder({ workType, onClose, onChanged }: Props)
     };
   }
 
-  async function handleDelete() {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  async function executeDelete() {
     if (!workType) return;
-    if (!window.confirm(`Delete module "${workType.name}" and all of its work records? This cannot be undone.`)) return;
     setSaving(true);
     setError('');
     try {
@@ -149,6 +151,7 @@ export default function WorkTypeBuilder({ workType, onClose, onChanged }: Props)
       setError(err.message || 'Could not delete module');
     } finally {
       setSaving(false);
+      setShowDeleteConfirm(false);
     }
   }
 
@@ -417,7 +420,7 @@ export default function WorkTypeBuilder({ workType, onClose, onChanged }: Props)
         </div>
 
         <div className="form-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
-          {!isNew ? <button className="btn danger" type="button" onClick={() => void handleDelete()} disabled={saving}>Delete</button> : <span />}
+          {!isNew ? <button className="btn danger" type="button" onClick={() => setShowDeleteConfirm(true)} disabled={saving}>Delete</button> : <span />}
           <span className="module-builder-nav-actions" style={{ display: 'flex', gap: '.5rem', marginLeft: 'auto' }}>
             <button className="btn" type="button" onClick={() => setTab(tab === 'workflow' ? 'workflow' : tab === 'fields' ? 'workflow' : 'fields')}>{tab !== 'workflow' ? 'Previous' : ''}</button>
             {tab !== 'display'
@@ -426,6 +429,17 @@ export default function WorkTypeBuilder({ workType, onClose, onChanged }: Props)
           </span>
         </div>
       </form>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Delete Module"
+        message={`Delete module "${workType?.name}" and all of its work records? This cannot be undone.`}
+        confirmText="Delete Module"
+        variant="danger"
+        loading={saving}
+        onConfirm={executeDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }
