@@ -333,6 +333,139 @@ router.post('/', permits('businesses.create'), async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+function addDuplicate(groups, key, reason, customer) {
+  if (!key) return;
+  if (!groups.has(key)) groups.set(key, { key, reason, customers: [] });
+  groups.get(key).customers.push(customer);
+}
+
+async function mergeDuplicateCustomer({ organization, primary, duplicate, user }) {
+  if (!primary.company && duplicate.company) primary.company = duplicate.company;
+  if (!primary.email && duplicate.email) primary.email = duplicate.email;
+  if (!primary.phone && duplicate.phone) primary.phone = duplicate.phone;
+  if (!primary.source && duplicate.source) primary.source = duplicate.source;
+  if (!primary.clientCompany && duplicate.clientCompany) primary.clientCompany = duplicate.clientCompany;
+  if (!primary.campaign && duplicate.campaign) primary.campaign = duplicate.campaign;
+  if (!primary.assignedTo && duplicate.assignedTo) primary.assignedTo = duplicate.assignedTo;
+  if (!primary.lastContactedAt && duplicate.lastContactedAt) primary.lastContactedAt = duplicate.lastContactedAt;
+  if (!primary.nextFollowUpAt && duplicate.nextFollowUpAt) primary.nextFollowUpAt = duplicate.nextFollowUpAt;
+  primary.value = Math.max(Number(primary.value || 0), Number(duplicate.value || 0));
+
+  const primaryLabels = new Set((primary.labels || []).map(l => String(l._id || l)));
+  (duplicate.labels || []).forEach(l => {
+    const lid = String(l._id || l);
+    if (!primaryLabels.has(lid)) primary.labels.push(l);
+  });
+
+  const mergedCustomData = {};
+  if (primary.customData) {
+    const entries = typeof primary.customData.entries === 'function' ? primary.customData.entries() : Object.entries(primary.customData);
+    for (const [k, v] of entries) mergedCustomData[k] = v;
+  }
+  if (duplicate.customData) {
+    const entries = typeof duplicate.customData.entries === 'function' ? duplicate.customData.entries() : Object.entries(duplicate.customData);
+    for (const [k, v] of entries) {
+      if (mergedCustomData[k] === undefined || mergedCustomData[k] === '') {
+        mergedCustomData[k] = v;
+      }
+    }
+  }
+  primary.customData = mergedCustomData;
+
+  if (duplicate.notes) {
+    primary.notes = primary.notes
+      ? `${primary.notes}\n---\nMerged duplicate note from ${duplicate.name}: ${duplicate.notes}`
+      : `Merged duplicate note from ${duplicate.name}: ${duplicate.notes}`;
+  }
+
+  await Activity.updateMany({ organization, customer: duplicate._id }, { $set: { customer: primary._id } });
+  await Attachment.updateMany({ organization, customer: duplicate._id }, { $set: { customer: primary._id } });
+  await primary.save();
+  await Customer.deleteOne({ _id: duplicate._id, organization });
+
+  await Activity.create({
+    organization,
+    customer: primary._id,
+    user: user._id,
+    type: 'note',
+    note: `Merged duplicate lead "${duplicate.name}" into this profile.`,
+  });
+}
+
+// GET /api/customers/duplicates — List duplicate lead groups
+router.get('/duplicates', async (req, res, next) => {
+  try {
+    if (!isManager(req.user)) {
+      return res.status(403).json({ ok: false, error: 'Access denied.' });
+    }
+    const organization = req.user.organization._id;
+    const customers = await Customer.find({ organization })
+      .populate('stage labels assignedTo clientCompany campaign')
+      .sort({ updatedAt: -1 });
+
+    const groups = new Map();
+    customers.forEach(customer => {
+      addDuplicate(groups, customer.email ? `email:${customer.email.toLowerCase()}` : '', 'Same email', customer);
+      addDuplicate(groups, normalizePhone(customer.phone) ? `phone:${normalizePhone(customer.phone)}` : '', 'Same phone', customer);
+    });
+
+    const duplicateGroups = Array.from(groups.values())
+      .filter(group => group.customers.length > 1)
+      .map(group => ({
+        ...group,
+        customers: group.customers.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+      }))
+      .sort((a, b) => b.customers.length - a.customers.length);
+
+    res.json({ ok: true, duplicateGroups });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/customers/duplicates/merge — Merge duplicate lead
+router.post('/duplicates/merge', permits('businesses.update'), async (req, res, next) => {
+  try {
+    if (!isManager(req.user)) {
+      return res.status(403).json({ ok: false, error: 'Access denied.' });
+    }
+    const organization = req.user.organization._id;
+    const { primaryId, duplicateId } = req.body;
+    if (!primaryId || !duplicateId || String(primaryId) === String(duplicateId)) {
+      return res.status(400).json({ ok: false, error: 'Choose two different leads to merge.' });
+    }
+
+    const [primary, duplicate] = await Promise.all([
+      Customer.findOne({ _id: primaryId, organization }),
+      Customer.findOne({ _id: duplicateId, organization }),
+    ]);
+
+    if (!primary || !duplicate) {
+      return res.status(404).json({ ok: false, error: 'One of the selected leads could not be found.' });
+    }
+
+    const sameEmail = primary.email && duplicate.email && primary.email.toLowerCase() === duplicate.email.toLowerCase();
+    const samePhone = normalizePhone(primary.phone) && normalizePhone(primary.phone) === normalizePhone(duplicate.phone);
+    if (!sameEmail && !samePhone) {
+      return res.status(400).json({ ok: false, error: 'Selected leads do not share the same email or phone.' });
+    }
+
+    await mergeDuplicateCustomer({ organization, primary, duplicate, user: req.user });
+    await logAudit(req, {
+      action: 'merge',
+      entityType: 'customer',
+      entityId: primary._id,
+      entityName: primary.name,
+      message: `Merged duplicate lead "${duplicate.name}" into "${primary.name}".`,
+      metadata: { duplicateId },
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/:id', async (req, res, next) => {
   try {
     if (!workspace(req, res)) return;

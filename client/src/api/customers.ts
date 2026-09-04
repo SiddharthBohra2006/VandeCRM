@@ -126,6 +126,10 @@ export const customersApi = {
     if (!res.ok || !result.ok) throw new Error(result.error || 'Import failed');
     return result;
   },
+
+  getDuplicates: () => api.get<{ ok: true; duplicateGroups: any[] }>('/customers/duplicates'),
+  mergeDuplicate: (primaryId: string, duplicateId: string) =>
+    api.post<{ ok: true }>('/customers/duplicates/merge', { primaryId, duplicateId }),
 };
 
 export async function downloadCustomersCsv(params: { scope?: string; dateFrom?: string; dateTo?: string }) {
