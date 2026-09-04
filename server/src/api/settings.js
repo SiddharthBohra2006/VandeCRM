@@ -18,6 +18,9 @@ const crmPresets = require('../config/crmPresets');
 
 const router = express.Router();
 router.use(requireApiAuth);
+const apiPermission = require('./middleware/permission');
+router.use(apiPermission('settings.view'));
+router.use((req, res, next) => ['GET', 'HEAD'].includes(req.method) ? next() : apiPermission('settings.update')(req, res, next));
 
 function workspace(req, res) {
   if (req.activeCompanyId) return String(req.activeCompanyId);

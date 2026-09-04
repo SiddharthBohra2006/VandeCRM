@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -23,15 +24,67 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
+
   useEffect(() => {
     if (!open) return;
+
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const overlay = overlayRef.current;
+    const parent = overlay?.parentElement;
+    let inertTargets: HTMLElement[] = [];
+    if (parent) {
+      inertTargets = Array.from(parent.children).filter(
+        (el): el is HTMLElement => el instanceof HTMLElement && el !== overlay,
+      );
+      inertTargets.forEach((el) => el.setAttribute('inert', 'true'));
+    }
+    if (parent) document.body.style.overflow = 'hidden';
+
+    cancelRef.current?.focus();
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onCancel();
+        e.preventDefault();
+        if (!loadingRef.current) onCancel();
+        return;
+      }
+      if (e.key === 'Tab' && overlay) {
+        const focusables = Array.from(
+          overlay.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter(
+          (el) =>
+            !el.hasAttribute('disabled') &&
+            el.getAttribute('aria-hidden') !== 'true' &&
+            !(el.offsetWidth === 0 && el.offsetHeight === 0),
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      inertTargets.forEach((el) => el.removeAttribute('inert'));
+      document.body.style.overflow = '';
+      previouslyFocused?.focus?.();
+    };
   }, [open, onCancel]);
 
   if (!open) return null;
@@ -62,8 +115,9 @@ export default function ConfirmDialog({
 
   const currentVariant = getVariantStyles();
 
-  return (
+  const dialog = (
     <div
+      ref={overlayRef}
       style={{
         position: 'fixed',
         inset: 0,
@@ -76,7 +130,7 @@ export default function ConfirmDialog({
         padding: '1rem',
       }}
       onClick={(e) => {
-        if (e.target === e.currentTarget && !loading) {
+        if (e.target === e.currentTarget && !loadingRef.current) {
           onCancel();
         }
       }}
@@ -149,6 +203,7 @@ export default function ConfirmDialog({
           }}
         >
           <button
+            ref={cancelRef}
             type="button"
             className="btn small outline"
             onClick={onCancel}
@@ -170,4 +225,6 @@ export default function ConfirmDialog({
       </div>
     </div>
   );
+
+  return createPortal(dialog, document.body);
 }

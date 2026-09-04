@@ -22,4 +22,22 @@ const userSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 userSchema.index({ organization: 1, name: 'text', email: 'text' });
+
+userSchema.set('toJSON', {
+  transform(doc, ret) {
+    delete ret.passwordHash;
+    delete ret.passwordResetTokenHash;
+    delete ret.passwordResetExpiresAt;
+    return ret;
+  }
+});
+userSchema.set('toObject', {
+  transform(doc, ret) {
+    delete ret.passwordHash;
+    delete ret.passwordResetTokenHash;
+    delete ret.passwordResetExpiresAt;
+    return ret;
+  }
+});
+
 module.exports = mongoose.model('User', userSchema);

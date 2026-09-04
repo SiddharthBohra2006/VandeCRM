@@ -16,6 +16,8 @@ const { ensureCrmDefaults } = require('../services/defaults');
 
 const router = express.Router();
 router.use(requireApiAuth);
+const apiPermission = require('./middleware/permission');
+router.use(apiPermission('businesses.view'));
 
 function canAccessCompany(user, company) {
   if (user && ['admin', 'manager'].includes(user.role)) return true;

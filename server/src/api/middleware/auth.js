@@ -41,17 +41,17 @@ async function requireApiAuth(req, res, next) {
     req.user = user;
     req.userObject = user.toObject();
 
-    // Resolve active company
-    const activeCompanyId = decoded.activeCompanyId || req.headers['x-active-company'] || '';
-    if (activeCompanyId) {
-      req.activeCompanyId = activeCompanyId;
+    // Revalidate workspace membership on every request; a JWT is not membership evidence.
+    const activeCompanyId = decoded.activeCompanyId || '';
+    const filter = authorizedCompanies(user);
+    const switching = req.baseUrl === '/api/auth' && req.path === '/switch-company';
+    if (activeCompanyId && !switching) {
+      if (!/^[a-f\d]{24}$/i.test(String(activeCompanyId))) return res.status(403).json({ ok: false, error: 'Invalid workspace selection.' });
+      const company = await ClientCompany.findOne({ ...filter, _id: activeCompanyId }).select('_id');
+      if (!company) return res.status(403).json({ ok: false, error: 'Workspace access changed. Select an authorized workspace.' });
+      req.activeCompanyId = String(company._id);
     } else {
-      // Find first assigned company
-      const company = await ClientCompany.findOne({
-        organization: user.organization._id,
-        assignedUsers: user._id,
-        status: { $ne: 'inactive' },
-      }).sort({ isMain: -1, name: 1 });
+      const company = await ClientCompany.findOne(filter).sort({ isMain: -1, name: 1 });
       req.activeCompanyId = company ? String(company._id) : null;
     }
 
@@ -77,7 +77,7 @@ async function requireApiAuth(req, res, next) {
 
 // JWT auth + permission guard that returns JSON (for API routes).
 // Requires JWT auth first, then checks the user has the given permission.
-async function requireApiPermission(permission) {
+function requireApiPermission(permission) {
   return async (req, res, next) => {
     await requireApiAuth(req, res, async (err) => {
       if (err) return next(err);
@@ -89,4 +89,12 @@ async function requireApiPermission(permission) {
   };
 }
 
-module.exports = { requireApiAuth, requireApiPermission, generateToken, JWT_SECRET };
+function authorizedCompanies(user) {
+  return {
+    organization: user.organization._id || user.organization,
+    status: { $ne: 'inactive' },
+    ...(['admin', 'manager'].includes(user.role) ? {} : { assignedUsers: user._id }),
+  };
+}
+
+module.exports = { authorizedCompanies, requireApiAuth, requireApiPermission, generateToken, JWT_SECRET };

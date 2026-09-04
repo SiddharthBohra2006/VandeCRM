@@ -1,12 +1,41 @@
 import { api } from './client';
 import { Company } from './companies';
 
+export interface LeadFieldPermissions {
+  configured: boolean;
+  visible: string[];
+  editable: string[];
+}
+
+export interface WorkTypePermission {
+  workTypeId: string;
+  actions: string[];
+  editableFieldKeys: string[];
+}
+
 export interface CustomRole {
   _id: string;
   name: string;
   permissions: string[];
   scope: 'organization' | 'assigned';
   description?: string;
+  leadFieldPermissions?: LeadFieldPermissions;
+  fieldPermissions?: Record<string, string[]>;
+  workTypePermissions?: WorkTypePermission[];
+}
+
+export interface WorkTypeLite {
+  _id: string;
+  name: string;
+  key: string;
+  fields?: Array<{ key: string; label?: string }>;
+}
+
+export interface LeadFieldLite {
+  _id: string;
+  key: string;
+  label: string;
+  type?: string;
 }
 
 export interface TeamMember {
@@ -37,9 +66,9 @@ export interface TeamResponse {
   customRoles: CustomRole[];
   permissionModules: string[];
   permissionActions: string[];
-  workFieldGroups?: any;
-  workTypes?: any[];
-  leadFields?: any[];
+  workFieldGroups?: Record<string, { core: string[]; links: string[] }>;
+  workTypes?: WorkTypeLite[];
+  leadFields?: LeadFieldLite[];
 }
 
 export interface TeamMemberInput {

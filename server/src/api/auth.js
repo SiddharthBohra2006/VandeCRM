@@ -7,9 +7,11 @@ const Organization = require('../../src/models/Organization');
 const EmailAccount = require('../../src/models/EmailAccount');
 const { hashPassword, verifyPassword } = require('../../src/services/passwords');
 const { sendEmail } = require('../../src/services/emailService');
-const { generateToken, requireApiAuth } = require('./middleware/auth');
+const { generateToken, requireApiAuth, authorizedCompanies } = require('./middleware/auth');
+const getRateLimiter = require('./middleware/rateLimiter');
 
 const router = express.Router();
+const authRateLimit = getRateLimiter(15, 60 * 1000);
 
 function getSanitizedRecoveryKey() {
   return String(process.env.ADMIN_RECOVERY_KEY || '').trim().replace(/^['"]|['"]$/g, '');
@@ -40,7 +42,7 @@ async function canCreateSignupAccount() {
 }
 
 // POST /api/auth/login
-router.post('/login', async (req, res, next) => {
+router.post('/login', authRateLimit, async (req, res, next) => {
   try {
     const email = String(req.body.email || '').trim().toLowerCase();
     const password = String(req.body.password || '');
@@ -60,11 +62,7 @@ router.post('/login', async (req, res, next) => {
     await user.save();
 
     // Find active company
-    const company = await ClientCompany.findOne({
-      organization: user.organization,
-      assignedUsers: user._id,
-      status: { $ne: 'inactive' },
-    }).sort({ isMain: -1, name: 1 });
+    const company = await ClientCompany.findOne(authorizedCompanies(user)).sort({ isMain: -1, name: 1 });
 
     const token = generateToken(user, company ? String(company._id) : '');
 
@@ -85,7 +83,7 @@ router.post('/login', async (req, res, next) => {
 });
 
 // POST /api/auth/signup
-router.post('/signup', async (req, res, next) => {
+router.post('/signup', authRateLimit, async (req, res, next) => {
   try {
     if (!(await canCreateSignupAccount())) {
       return res.status(403).json({ ok: false, error: 'Public signup is disabled. Ask an admin to invite or create your account.' });
@@ -162,7 +160,7 @@ router.get('/me', requireApiAuth, async (req, res, next) => {
       companyFilter.assignedUsers = req.user._id;
     }
     const companies = await ClientCompany.find(companyFilter)
-      .select('_id name isMain')
+      .select('_id name isMain terminology')
       .sort({ isMain: -1, name: 1 });
 
     const activeCompany = companies.find(c => String(c._id) === req.activeCompanyId) || companies[0] || null;
@@ -208,8 +206,7 @@ router.post('/switch-company', requireApiAuth, async (req, res, next) => {
     const company = await ClientCompany.findOne({
       _id: companyId,
       organization: req.user.organization._id,
-      assignedUsers: req.user._id,
-      status: { $ne: 'inactive' },
+      ...authorizedCompanies(req.user),
     });
 
     if (!company) {
@@ -229,7 +226,7 @@ router.post('/switch-company', requireApiAuth, async (req, res, next) => {
 });
 
 // POST /api/auth/forgot-password — request a password reset email
-router.post('/forgot-password', async (req, res, next) => {
+router.post('/forgot-password', authRateLimit, async (req, res, next) => {
   try {
     const email = String(req.body.email || '').trim().toLowerCase();
     const user = await User.findOne({ email, isActive: { $ne: false } });
@@ -263,7 +260,7 @@ router.post('/forgot-password', async (req, res, next) => {
 });
 
 // POST /api/auth/reset-password — complete a password reset with a valid token
-router.post('/reset-password', async (req, res, next) => {
+router.post('/reset-password', authRateLimit, async (req, res, next) => {
   try {
     const token = String(req.body.token || '');
     const password = String(req.body.password || '');
@@ -298,7 +295,7 @@ router.post('/reset-password', async (req, res, next) => {
 });
 
 // POST /api/auth/admin-recovery — emergency admin password reset via recovery key
-router.post('/admin-recovery', async (req, res, next) => {
+router.post('/admin-recovery', authRateLimit, async (req, res, next) => {
   try {
     if (!adminRecoveryEnabled()) {
       return res.status(404).json({ ok: false, error: 'Admin recovery is not enabled.' });

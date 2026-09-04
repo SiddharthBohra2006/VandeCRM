@@ -13,8 +13,16 @@ export interface User {
   name: string;
   email: string;
   role: string;
-  customRole?: { _id: string; name: string } | null;
+  customRole?: {
+    _id: string;
+    name: string;
+    scope?: 'organization' | 'assigned';
+    permissions?: string[];
+    leadFieldPermissions?: { configured: boolean; visible: string[]; editable: string[] };
+    workTypePermissions?: Array<{ workTypeId: string; actions: string[]; editableFieldKeys: string[] }>;
+  } | null;
   organization: { _id: string; name: string; theme?: OrganizationTheme };
+  hiddenModules?: string[];
   dashboardHiddenSections: string[];
   dashboardHiddenCards: string[];
   dashboardCardOrder: string[];

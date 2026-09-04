@@ -67,6 +67,7 @@ require('./models/WorkType');
 const { ensureCrmIndexes, syncWorkTypeDefaults, syncWorkspaceSeedData } = require('./services/defaults');
 
 const app = express();
+app.use('/api', require('./api/middleware/responsePrivacy').responsePrivacy);
 const port = Number(process.env.PORT) || 5000;
 
 // CORS for React dev server
@@ -85,8 +86,8 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
-app.use(express.urlencoded({ extended: true, limit: '5mb' }));
-app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '10mb' }));
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
@@ -139,6 +140,7 @@ app.use('/api/portfolio', apiPortfolio);
 app.use('/api/analytics', apiAnalytics);
 app.use('/api/reports', apiReports);
 app.use('/api/client-dashboard', apiClientDashboard);
+app.use('/api', require('./routes/api'));
 
 // ============================================
 // SERVE REACT BUILD (production)
@@ -170,6 +172,8 @@ async function startServer() {
   await ensureCrmIndexes();
   await syncWorkTypeDefaults();
   await syncWorkspaceSeedData();
+  const { startIntegrationScheduler } = require('./services/integrationSync');
+  startIntegrationScheduler();
   app.listen(port, '0.0.0.0', () => {
     console.log(`Vande CRM API running on http://0.0.0.0:${port}`);
     console.log(`API available at http://0.0.0.0:${port}/api`);

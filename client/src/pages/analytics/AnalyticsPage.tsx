@@ -119,10 +119,10 @@ export default function AnalyticsPage() {
           </select>
           <input type="date" style={{ ...selectCtrl, width: 160 }} aria-label="Start date" value={filters.dateFrom} onChange={e => handleFilter('dateFrom', e.target.value)} />
           <input type="date" style={{ ...selectCtrl, width: 160 }} aria-label="End date" value={filters.dateTo} onChange={e => handleFilter('dateTo', e.target.value)} />
-          <a className="btn" href="/analytics" style={{ height: 40, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }} onClick={e => e.preventDefault()}>
+          <button type="button" className="btn" style={{ height: 40, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => navigate('/analytics')}>
             {resetIcon()}
             Reset
-          </a>
+          </button>
         </div>
 
         <section className="analytics-kpi-grid">

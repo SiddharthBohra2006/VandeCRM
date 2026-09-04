@@ -33,37 +33,40 @@ export default function WorkCenterPage() {
 
       // Filter by view
       const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setHours(24, 0, 0, 0);
+
+      const checkClosed = (item: WorkItem) => {
+        const wt = item.workType || res.workTypes?.find(t => t._id === item.module || t.key === item.workType?.key);
+        const statusObj = wt?.statuses?.find(s => s.key === item.status);
+        if (statusObj?.isTerminalWon || statusObj?.isTerminalLost) return true;
+        return ['completed', 'delivered', 'done', 'won', 'lost', 'cancelled'].includes(String(item.status || '').toLowerCase());
+      };
+
       if (currentView === 'today') {
-        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-        filteredItems = filteredItems.filter(item => {
-          if (!item.deadline) return false;
-          const d = new Date(item.deadline);
-          return d >= startOfDay && d <= endOfDay;
-        });
+        filteredItems = filteredItems.filter(item => !checkClosed(item) && item.deadline && new Date(item.deadline) < tomorrow);
       } else if (currentView === 'overdue') {
-        filteredItems = filteredItems.filter(item => {
-          return item.status !== 'completed' && item.status !== 'delivered' && item.deadline && new Date(item.deadline) < now;
-        });
+        filteredItems = filteredItems.filter(item => !checkClosed(item) && item.deadline && new Date(item.deadline) < now);
       } else if (currentView === 'completed') {
-        filteredItems = filteredItems.filter(item => item.status === 'completed' || item.status === 'delivered');
+        filteredItems = filteredItems.filter(item => checkClosed(item));
       } else if (currentView === 'open') {
-        filteredItems = filteredItems.filter(item => item.status !== 'completed' && item.status !== 'delivered');
+        filteredItems = filteredItems.filter(item => !checkClosed(item));
       }
 
       // Filter by owner
       if (currentOwner === 'me' && user) {
         filteredItems = filteredItems.filter(item => {
-          const isAssigned = item.assignedTo && String(item.assignedTo._id) === String(user._id);
-          const isCollab = (item.collaborators || []).some(c => String(c._id) === String(user._id));
-          return isAssigned || isCollab;
+          const isAssigned = item.assignedTo && String(item.assignedTo._id || item.assignedTo) === String(user._id);
+          const isSecondary = item.secondaryAssignee && String(item.secondaryAssignee._id || item.secondaryAssignee) === String(user._id);
+          const isCollab = (item.collaborators || []).some(c => String(c._id || c) === String(user._id));
+          return isAssigned || isSecondary || isCollab;
         });
       }
 
       // Filter by module
       if (currentModule) {
         filteredItems = filteredItems.filter(item => {
-          return item.workType?.key === currentModule;
+          return item.workType?.key === currentModule || item.workType?._id === currentModule;
         });
       }
 

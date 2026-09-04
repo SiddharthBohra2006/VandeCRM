@@ -89,7 +89,11 @@ interface DashboardResponse {
   dashboardHiddenSections?: string[];
   recentMovements?: Movement[];
   movementSamples?: Movement[];
+  canViewLeads?: boolean;
+  canViewAds?: boolean;
   availableDashboardFields?: { _id: string; key: string; label: string; type: string }[];
+  customFieldMetrics?: string[];
+  dashboardFieldCounts?: { key: string; label: string; total: number }[];
 }
 
 interface Movement {
@@ -128,7 +132,6 @@ const SECTION_CHOICES: [string, string][] = [
   ['pipeline', 'Active pipeline'],
   ['attention', 'Needs attention'],
   ['recent', 'Recent movements'],
-  ['activity', 'Activity log'],
 ];
 
 function getCardTheme(icon: string) {
@@ -163,6 +166,7 @@ export default function DashboardPage() {
   const [editHidden, setEditHidden] = useState<Set<string>>(new Set());
   const [editOrder, setEditOrder] = useState<string[]>([]);
   const [editSections, setEditSections] = useState<Set<string>>(new Set());
+  const [editMetrics, setEditMetrics] = useState<string[]>([]);
   const [savedSections, setSavedSections] = useState<Set<string>>(new Set());
   const [pinSearch, setPinSearch] = useState('');
   const [savingPrefs, setSavingPrefs] = useState(false);
@@ -175,14 +179,19 @@ export default function DashboardPage() {
 
   const [movementFilter, setMovementFilter] = useState<'all' | 'work' | 'leads' | 'campaigns'>('all');
   const [previewMovement, setPreviewMovement] = useState<Movement | null>(null);
-  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const activeViewId = searchParams.get('dashboardView') || null;
 
   const loadDashboard = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
+      const params = new URLSearchParams();
       const campaign = searchParams.get('campaign');
-      const data = await api.get<DashboardResponse>(`/dashboard${campaign ? `?campaign=${encodeURIComponent(campaign)}` : ''}`);
+      const view = searchParams.get('dashboardView');
+      if (campaign) params.set('campaign', campaign);
+      if (view) params.set('dashboardView', view);
+      const q = params.toString();
+      const data = await api.get<DashboardResponse>(`/dashboard${q ? `?${q}` : ''}`);
       setDashboard(data);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to load dashboard');
@@ -200,6 +209,22 @@ export default function DashboardPage() {
       setEditSections(new Set(hidden));
     }
   }, [dashboard]);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        if (customizeOpen) {
+          setEditSections(new Set(savedSections));
+          setCustomizeOpen(false);
+        }
+        if (previewMovement) {
+          setPreviewMovement(null);
+        }
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [customizeOpen, previewMovement, savedSections]);
 
   async function moveCustomer(event: DragEvent, stageId: string) {
     event.preventDefault();
@@ -232,11 +257,8 @@ export default function DashboardPage() {
   });
 
   const fieldCard = (f: { key: string; label: string }): DashboardMetricCard => {
-    const allCustomers = (dashboard?.stageCards || []).flatMap(c => c.customers || []);
-    const total = allCustomers.filter(c => {
-      const v = (c as any).customData?.get?.(f.key) ?? (c as any).customData?.[f.key];
-      return v !== undefined && v !== null && v !== '' && v !== false;
-    }).length;
+    const counted = (dashboard.dashboardFieldCounts || []).find(c => c.key === f.key);
+    const total = counted ? counted.total : 0;
     return {
       href: '/customers',
       icon: 'filter',
@@ -262,9 +284,18 @@ export default function DashboardPage() {
     ...(dashboard.availableDashboardFields || []).map(fieldCard)
   ];
 
+  const canLeads = dashboard.canViewLeads !== false;
+  const canAds = dashboard.canViewAds !== false;
+  const permittedCards = cards.filter(card => {
+    if (!canLeads && (card.category === 'Leads & Clients' || card.category === 'Custom Fields')) return false;
+    if (!canAds && card.category === 'Finance') return false;
+    return true;
+  });
+
   const weeklyMax = Math.max(1, ...(dashboard.weeklyWorkProgress || []).map(day => day.count));
 
-  const defaultHiddenKeys = cards.filter(c => !c.defaultVisible).map(c => c.key);
+  const viewMetricCardKeys = new Set((dashboard.customFieldMetrics || []).map((key: string) => `field-${key}`));
+  const defaultHiddenKeys = permittedCards.filter(c => !c.defaultVisible && !viewMetricCardKeys.has(c.key)).map(c => c.key);
   const hiddenCards = new Set(
     dashboard.dashboardCardsCustomized && dashboard.dashboardHiddenCards !== undefined
       ? (dashboard.dashboardHiddenCards || [])
@@ -272,9 +303,10 @@ export default function DashboardPage() {
           ? dashboard.dashboardHiddenCards
           : defaultHiddenKeys)
   );
+  viewMetricCardKeys.forEach(key => hiddenCards.delete(key));
   const savedOrder = dashboard.dashboardCardOrder || [];
   const orderedCards = [
-    ...cards
+    ...permittedCards
   ].sort((a, b) => {
     const ia = savedOrder.indexOf(a.key);
     const ib = savedOrder.indexOf(b.key);
@@ -295,8 +327,9 @@ export default function DashboardPage() {
           ? dashboard.dashboardHiddenCards
           : defaultHiddenKeys);
     setEditHidden(new Set(activeHidden));
-    setEditOrder([...savedOrder, ...cards.map(c => c.key).filter(k => !(savedOrder || []).includes(k))]);
+    setEditOrder([...savedOrder, ...permittedCards.map(c => c.key).filter(k => !(savedOrder || []).includes(k))]);
     setEditSections(new Set(savedSections));
+    setEditMetrics(dashboard.customFieldMetrics || []);
     setPinSearch('');
     setCustomizeTab('cards');
     setCustomizeOpen(true);
@@ -344,18 +377,19 @@ export default function DashboardPage() {
   };
 
   const resetDefaults = () => {
-    const defaultKeys = cards.filter(c => !c.defaultVisible).map(c => c.key);
+    const defaultKeys = permittedCards.filter(c => !c.defaultVisible).map(c => c.key);
     setEditHidden(new Set(defaultKeys));
-    setEditOrder(cards.map(card => card.key));
+    setEditOrder(permittedCards.map(card => card.key));
     setEditSections(new Set());
+    setEditMetrics([]);
   };
 
   const query = pinSearch.trim().toLowerCase();
   const pinnedCards = editOrder
-    .map(key => cards.find(card => card.key === key))
+    .map(key => permittedCards.find(card => card.key === key))
     .filter((card): card is DashboardMetricCard => card !== undefined && !editHidden.has(card.key));
 
-  const unpinnedCards = cards.filter(card => editHidden.has(card.key) && (!query || card.label.toLowerCase().includes(query)));
+  const unpinnedCards = permittedCards.filter(card => editHidden.has(card.key) && (!query || card.label.toLowerCase().includes(query)));
 
   const sectionChoices = SECTION_CHOICES.map(([key, label]) => ({ key, label, visible: !editSections.has(key) }));
 
@@ -438,7 +472,7 @@ export default function DashboardPage() {
     ? `Here's the ${activeCompany ? activeCompany.name : 'selected CRM'} overview for today.`
     : `Here's your ${roleLabel} workspace in ${activeCompany ? activeCompany.name : 'the selected CRM'}.`;
 
-  const isEmptyDashboard = dashboard.totalCustomers === 0 && dashboard.moduleStats.length === 0;
+  const isEmptyDashboard = dashboard.totalCustomers === 0 && (dashboard.moduleStats.length === 0 || dashboard.moduleStats.every(s => s.total === 0));
 
   return (
     <div className="page-container dashboard-page">
@@ -457,14 +491,13 @@ export default function DashboardPage() {
 
       {dashboard.dashboardViews && dashboard.dashboardViews.length > 0 && (
         <nav className="lead-view-tabs" aria-label="Dashboard layouts">
-          <a href="/" className={!activeViewId ? 'active' : ''} onClick={e => { e.preventDefault(); setActiveViewId(null); loadDashboard(); }}>My dashboard</a>
+          <Link to="/" className={!activeViewId ? 'active' : ''}>My dashboard</Link>
           {dashboard.dashboardViews.map(view => (
-            <a
+            <Link
               key={view._id}
-              href={`/?dashboardView=${view._id}`}
+              to={`/?dashboardView=${view._id}`}
               className={activeViewId === view._id ? 'active' : ''}
-              onClick={e => { e.preventDefault(); setActiveViewId(view._id); }}
-            >{view.name}</a>
+            >{view.name}</Link>
           ))}
         </nav>
       )}
@@ -486,7 +519,7 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {!editSections.has('metrics') && (
+      {!savedSections.has('metrics') && (
         <section className="dashboard-metrics dashboard-reference-grid" aria-label="Dashboard metrics">
           {visibleCards.map(card => {
             const theme = getCardTheme(card.icon);
@@ -881,16 +914,6 @@ export default function DashboardPage() {
             </span>
             <a href="/" onClick={e => { e.preventDefault(); loadDashboard(); }}>Refresh activity<Icon name="refresh-cw" size={12} /></a>
           </footer>
-          {previewMovement && (
-            <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)' }} onClick={e => { if (e.target === e.currentTarget) setPreviewMovement(null); }}>
-              <div style={{ background: 'var(--panel)', borderRadius: 12, padding: '1.5rem', maxWidth: 420, width: '90%', border: '1px solid var(--border)' }}>
-                <h3 style={{ margin: '0 0 0.5rem', fontSize: '1rem' }}>{previewMovement.title}</h3>
-                <p style={{ margin: '0 0 0.75rem', fontSize: '0.82rem', color: 'var(--muted)' }}>{previewMovement.message}</p>
-                <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{previewMovement.category}{previewMovement.status ? ` · ${previewMovement.status}` : ''}</div>
-                <button type="button" className="btn" style={{ marginTop: '1rem' }} onClick={() => setPreviewMovement(null)}>Close</button>
-              </div>
-            </div>
-          )}
         </article>
       )}
 
@@ -911,7 +934,7 @@ export default function DashboardPage() {
             background: 'rgba(0,0,0,0.55)',
             backdropFilter: 'blur(3px)'
           }}
-          onClick={event => { if (event.target === event.currentTarget) setCustomizeOpen(false); }}
+          onClick={event => { if (event.target === event.currentTarget) { setEditSections(new Set(savedSections)); setCustomizeOpen(false); } }}
         >
           <div className="dashboard-customize-dialog">
             <form onSubmit={e => { e.preventDefault(); void submitPreferences(); }}>
@@ -920,7 +943,7 @@ export default function DashboardPage() {
                   <h2>Pin dashboard cards</h2>
                   <p>Choose the lead, client, and work summaries you need. Drag to reorder. Changes are saved for you only.</p>
                 </div>
-                <button className="modal-close" type="button" onClick={() => setCustomizeOpen(false)} aria-label="Close">&times;</button>
+                <button className="modal-close" type="button" onClick={() => { setEditSections(new Set(savedSections)); setCustomizeOpen(false); }} aria-label="Close">&times;</button>
               </div>
 
               <div className="tabs-nav-bar">
@@ -960,6 +983,7 @@ export default function DashboardPage() {
                           className="pin-search-input"
                           placeholder="Search cards..."
                           autoComplete="off"
+                          autoFocus
                           value={pinSearch}
                           onChange={event => setPinSearch(event.target.value)}
                         />
@@ -1005,7 +1029,9 @@ export default function DashboardPage() {
                         })}
                         {unpinnedCards.length === 0 && (
                           <p style={{ color: 'var(--muted)', fontSize: '0.75rem', padding: '1rem', textAlign: 'center' }}>
-                            All available cards are pinned to your dashboard.
+                            {pinSearch.trim()
+                              ? `No cards match your search "${pinSearch.trim()}".`
+                              : 'All available cards are pinned to your dashboard.'}
                           </p>
                         )}
                       </div>
@@ -1113,6 +1139,29 @@ export default function DashboardPage() {
                       </label>
                     ))}
                   </div>
+                  <div className="pin-sections-header" style={{ marginTop: 18 }}>
+                    <div className="pin-col-header">
+                      <div className="pin-col-title-row"><strong>FIELD COUNTERS</strong></div>
+                      <small>Select custom fields to show as counters on your dashboard.</small>
+                    </div>
+                  </div>
+                  <div className="pin-sections-list">
+                    {(dashboard.availableDashboardFields || []).map(field => {
+                      const checked = editMetrics.includes(field.key);
+                      return (
+                        <label className="dashboard-choice" key={field.key}>
+                          <span className="dashboard-choice-handle" aria-hidden="true">⠿</span>
+                          <span className="dashboard-choice-name">{field.label}</span>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => setEditMetrics(prev => checked ? prev.filter(k => k !== field.key) : [...prev, field.key])}
+                          />
+                          <i aria-hidden="true" />
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
@@ -1144,7 +1193,6 @@ export default function DashboardPage() {
                 <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                   {dashboard.dashboardViews.map(v => (
                     <button key={v._id} className="btn secondary outline" type="button" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }} onClick={() => {
-                      setSavedSections(new Set(v.hiddenSections || []));
                       setEditSections(new Set(v.hiddenSections || []));
                       setEditOrder(v.cardOrder || []);
                     }}>{v.name}</button>
@@ -1160,15 +1208,20 @@ export default function DashboardPage() {
                 if (!name.trim()) return;
                 try {
                   setSavingView(true);
+                  setError('');
                   await api.post('/dashboard/preferences/dashboard/views', {
                     name: name.trim(),
                     hiddenSections: [...editSections],
                     cardOrder: editOrder,
+                    customFieldMetrics: editMetrics.join(','),
                   });
                   setViewName('');
                   await loadDashboard();
-                } catch (_) {}
-                setSavingView(false);
+                } catch (err: any) {
+                  setError(err.message || 'Failed to save view');
+                } finally {
+                  setSavingView(false);
+                }
               }}
             >
               <input

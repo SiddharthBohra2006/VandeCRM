@@ -57,6 +57,13 @@ function splitCompanyNames(value) {
 
 const router = express.Router();
 router.use(requireApiAuth);
+const apiPermission = require('./middleware/permission');
+router.use((req, res, next) => {
+  const action = ['GET', 'HEAD'].includes(req.method) ? 'view'
+    : req.method === 'DELETE' ? 'delete'
+    : req.method === 'POST' && ['/', '/import', '/roles'].includes(req.path) ? 'create' : 'update';
+  return apiPermission('team.' + action)(req, res, next);
+});
 
 function normalizeArray(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
@@ -254,12 +261,12 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// DELETE /api/team/:id — Delete team member
+// DELETE /api/team/:id — Deactivate team member (preserves account lifecycle & data integrity)
 router.delete('/:id', async (req, res, next) => {
   try {
     const organization = req.user.organization._id;
     if (String(req.params.id) === String(req.user._id)) {
-      return res.status(400).json({ ok: false, error: 'You cannot delete your own account.' });
+      return res.status(400).json({ ok: false, error: 'You cannot deactivate your own account.' });
     }
 
     const user = await User.findOne({ _id: req.params.id, organization });
@@ -268,21 +275,68 @@ router.delete('/:id', async (req, res, next) => {
     }
 
     if (!canManageUser(req.user, user)) {
-      return res.status(403).json({ ok: false, error: 'Permission denied to delete this user.' });
+      return res.status(403).json({ ok: false, error: 'Permission denied to manage this user.' });
     }
 
+    if (user.role === 'admin' && user.isActive) {
+      const activeAdminCount = await User.countDocuments({ organization, role: 'admin', isActive: { $ne: false } });
+      if (activeAdminCount <= 1) {
+        return res.status(400).json({ ok: false, error: 'Cannot deactivate the last active administrator.' });
+      }
+    }
+
+    user.isActive = false;
+    await user.save();
     await ClientCompany.updateMany({ organization }, { $pull: { assignedUsers: user._id } });
-    await User.deleteOne({ _id: user._id, organization });
 
     await logAudit(req, {
-      action: 'delete',
+      action: 'update',
       entityType: 'user',
       entityId: req.params.id,
       entityName: user.name,
-      message: `Team member "${user.name}" removed.`,
+      message: `Team member "${user.name}" deactivated.`,
     });
 
-    res.json({ ok: true });
+    res.json({ ok: true, message: `Team member "${user.name}" deactivated.` });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/team/:id/status — Toggle active status
+router.post('/:id/status', async (req, res, next) => {
+  try {
+    const organization = req.user.organization._id;
+    if (String(req.params.id) === String(req.user._id)) {
+      return res.status(400).json({ ok: false, error: 'You cannot change the status of your own account.' });
+    }
+    const user = await User.findOne({ _id: req.params.id, organization });
+    if (!user) return res.status(404).json({ ok: false, error: 'Team member not found.' });
+    if (!canManageUser(req.user, user)) return res.status(403).json({ ok: false, error: 'Access denied.' });
+
+    const newIsActive = req.body.isActive === true || req.body.isActive === 'true';
+    if (!newIsActive && user.role === 'admin' && user.isActive) {
+      const activeAdminCount = await User.countDocuments({ organization, role: 'admin', isActive: { $ne: false } });
+      if (activeAdminCount <= 1) {
+        return res.status(400).json({ ok: false, error: 'Cannot deactivate the last active administrator.' });
+      }
+    }
+
+    user.isActive = newIsActive;
+    await user.save();
+    if (!newIsActive) {
+      await ClientCompany.updateMany({ organization }, { $pull: { assignedUsers: user._id } });
+    }
+
+    await logAudit(req, {
+      action: 'update',
+      entityType: 'user',
+      entityId: user._id,
+      entityName: user.name,
+      message: `Team member "${user.name}" ${user.isActive ? 'reactivated' : 'deactivated'}.`,
+    });
+
+    res.json({ ok: true, data: user });
   } catch (error) {
     next(error);
   }
@@ -480,7 +534,7 @@ router.get('/roles', async (req, res, next) => {
 router.post('/roles', async (req, res, next) => {
   try {
     const organization = req.user.organization._id;
-    const { name, permissions, scope } = req.body;
+    const { name, permissions, scope, leadFieldPermissions, fieldPermissions, workTypePermissions } = req.body;
 
     if (!String(name || '').trim()) {
       return res.status(400).json({ ok: false, error: 'Role name is required.' });
@@ -490,7 +544,10 @@ router.post('/roles', async (req, res, next) => {
       organization,
       name: String(name).trim(),
       permissions: normalizeArray(permissions),
-      scope: scope || 'organization',
+      scope: scope === 'assigned' ? 'assigned' : 'organization',
+      ...(leadFieldPermissions ? { leadFieldPermissions } : {}),
+      ...(fieldPermissions ? { fieldPermissions } : {}),
+      ...(workTypePermissions ? { workTypePermissions: normalizeArray(workTypePermissions) } : {}),
     });
 
     await logAudit(req, {
@@ -503,6 +560,7 @@ router.post('/roles', async (req, res, next) => {
 
     res.json({ ok: true, data: role });
   } catch (error) {
+    if (error.code === 11000) return res.status(400).json({ ok: false, error: 'A role with this name already exists.' });
     next(error);
   }
 });
@@ -517,10 +575,13 @@ router.put('/roles/:id', async (req, res, next) => {
       return res.status(404).json({ ok: false, error: 'Custom role not found.' });
     }
 
-    const { name, permissions, scope } = req.body;
+    const { name, permissions, scope, leadFieldPermissions, fieldPermissions, workTypePermissions } = req.body;
     if (name) role.name = String(name).trim();
     if (permissions !== undefined) role.permissions = normalizeArray(permissions);
-    if (scope) role.scope = scope;
+    if (scope) role.scope = scope === 'assigned' ? 'assigned' : 'organization';
+    if (leadFieldPermissions !== undefined) role.leadFieldPermissions = leadFieldPermissions;
+    if (fieldPermissions !== undefined) role.fieldPermissions = fieldPermissions;
+    if (workTypePermissions !== undefined) role.workTypePermissions = normalizeArray(workTypePermissions);
 
     await role.save();
 
@@ -534,6 +595,7 @@ router.put('/roles/:id', async (req, res, next) => {
 
     res.json({ ok: true, data: role });
   } catch (error) {
+    if (error.code === 11000) return res.status(400).json({ ok: false, error: 'A role with this name already exists.' });
     next(error);
   }
 });

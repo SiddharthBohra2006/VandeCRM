@@ -66,7 +66,19 @@ export default function WorkTypeBuilder({ workType, onClose, onChanged }: Props)
     workType?.statuses?.length ? workType.statuses.map(s => ({ key: s.key, label: s.label, color: s.color || '#64748b', isTerminalWon: s.isTerminalWon, isTerminalLost: s.isTerminalLost })) : defaultStatuses
   );
   const [fields, setFields] = useState<FieldDraft[]>(
-    workType?.fields?.length ? workType.fields.map(f => ({ key: f.key, label: f.label, type: f.type, options: f.options || [], required: !!f.required, placeholder: f.placeholder, group: f.group })) : []
+    workType?.fields?.length ? workType.fields.map(f => ({
+      key: f.key,
+      label: f.label,
+      type: f.type,
+      options: f.options || [],
+      required: !!f.required,
+      placeholder: f.placeholder,
+      group: f.group,
+      min: (f as any).min,
+      max: (f as any).max,
+      defaultValue: (f as any).defaultValue,
+      helpText: (f as any).helpText,
+    })) : []
   );
 
   const p = workType?.presentation || {};
@@ -104,11 +116,23 @@ export default function WorkTypeBuilder({ workType, onClose, onChanged }: Props)
       setSaving(true);
       setError('');
       const statusValue = statuses.map(({ key: k, label, color: c, isTerminalWon, isTerminalLost }) => ({ key: k, label, color: c, isTerminalWon, isTerminalLost }));
-      const fieldValue = fields.map(({ key: k, label, type, options, required, placeholder, group, min, max }) => ({ key: k, label, type, options, required, placeholder, group, min, max: max ?? null }));
+      const fieldValue = fields.map(({ key: k, label, type, options, required, placeholder, group, min, max, defaultValue, helpText }: any) => ({
+        key: k,
+        label,
+        type,
+        options,
+        required,
+        placeholder,
+        group,
+        min: min ?? null,
+        max: max ?? null,
+        defaultValue: defaultValue ?? '',
+        helpText: helpText ?? '',
+      }));
       const presentationValue = {
         enabledViews, defaultView, calendarField, listColumns, boardFields, filterFields,
         overviewGroupFields, overviewProgressFields, overviewCompleteValue,
-        fieldLabels: {},
+        fieldLabels: workType?.presentation?.fieldLabels || {},
       };
       const payload = {
         name,
@@ -237,7 +261,7 @@ export default function WorkTypeBuilder({ workType, onClose, onChanged }: Props)
                       <input type="color" className="row-color" value={status.color} onChange={e => { const n = [...statuses]; n[index] = { ...n[index], color: e.target.value }; setStatuses(n); }} title="Stage color" />
                       <div style={{ display: 'grid', gap: '.35rem' }}>
                         <label style={{ fontSize: '.72rem', fontWeight: 800, color: 'var(--muted)' }}>Label</label>
-                        <input type="text" value={status.label} required placeholder="e.g. In production" onChange={e => { const n = [...statuses]; n[index] = { ...n[index], label: e.target.value, key: slugify(e.target.value) || n[index].key }; setStatuses(n); }} />
+                        <input type="text" value={status.label} required placeholder="e.g. In production" onChange={e => { const n = [...statuses]; n[index] = { ...n[index], label: e.target.value, key: n[index].key || slugify(e.target.value) }; setStatuses(n); }} />
                       </div>
                       <div style={{ display: 'grid', gap: '.35rem' }}>
                         <label style={{ fontSize: '.72rem', fontWeight: 800, color: 'var(--muted)' }}>Key</label>
@@ -276,7 +300,7 @@ export default function WorkTypeBuilder({ workType, onClose, onChanged }: Props)
                     <div className="module-builder-row field-builder-row" key={index}>
                       <div style={{ display: 'grid', gap: '.35rem' }}>
                         <label style={{ fontSize: '.72rem', fontWeight: 800, color: 'var(--muted)' }}>Field name</label>
-                        <input type="text" value={field.label} required placeholder="e.g. Video length" onChange={e => { const n = [...fields]; n[index] = { ...n[index], label: e.target.value, key: slugify(e.target.value) || n[index].key }; setFields(n); }} />
+                        <input type="text" value={field.label} required placeholder="e.g. Video length" onChange={e => { const n = [...fields]; n[index] = { ...n[index], label: e.target.value, key: n[index].key || slugify(e.target.value) }; setFields(n); }} />
                       </div>
                       <div style={{ display: 'grid', gap: '.35rem' }}>
                         <label style={{ fontSize: '.72rem', fontWeight: 800, color: 'var(--muted)' }}>Type</label>

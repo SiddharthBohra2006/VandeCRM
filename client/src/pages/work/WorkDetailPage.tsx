@@ -47,6 +47,7 @@ export default function WorkDetailPage() {
   const [auditLog, setAuditLog] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
+  const [relatedItems, setRelatedItems] = useState<{ _id: string; title: string; workType?: { name: string } }[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -82,6 +83,7 @@ export default function WorkDetailPage() {
       setAuditLog(res.auditLog || []);
       setUsers(res.users || []);
       setCustomers(res.customers || []);
+      setRelatedItems(res.relatedItems || []);
 
       const formCustom: Record<string, any> = {};
       if (res.data.customFields) {
@@ -107,6 +109,7 @@ export default function WorkDetailPage() {
         collaborators: (res.data.collaborators || []).map((c: any) => c._id || c),
         customer: (res.data.customer as any)?._id || '',
         notes: res.data.notes || '',
+        relatedRecords: (res.data.relatedRecords || []).map((r: any) => (r.record?._id || r.record || r._id)).filter(Boolean),
         customFields: formCustom,
       });
     } catch (err: any) {
@@ -124,7 +127,7 @@ export default function WorkDetailPage() {
       setError('');
       await workApi.createSubtask(type, id, {
         title: newSubtaskTitle.trim(),
-        assignedTo: newSubtaskAssignee ? ({ _id: newSubtaskAssignee } as any) : null,
+        assignedTo: newSubtaskAssignee || null,
         deadline: newSubtaskDeadline ? newSubtaskDeadline : null,
         priority: newSubtaskPriority,
       });
@@ -476,6 +479,31 @@ export default function WorkDetailPage() {
                               }}
                             />
                             <span>{u.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Related records</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '8px', background: 'var(--panel-muted)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      {relatedItems.length === 0 && <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>No records from other work areas to link.</span>}
+                      {relatedItems.map(rg => {
+                        const isSelected = (editForm.relatedRecords || []).includes(rg._id);
+                        return (
+                          <label key={rg._id} className="check-pill" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={e => {
+                                const next = e.target.checked
+                                  ? [...(editForm.relatedRecords || []), rg._id]
+                                  : (editForm.relatedRecords || []).filter((rid: string) => rid !== rg._id);
+                                setEditForm({ ...editForm, relatedRecords: next });
+                              }}
+                            />
+                            <span>{rg.title} {rg.workType?.name ? `(${rg.workType.name})` : ''}</span>
                           </label>
                         );
                       })}

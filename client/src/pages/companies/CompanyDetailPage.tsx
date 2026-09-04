@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { companiesApi, Company, CompanyMetrics, AssignedUser, CompanyAttachment } from '../../api/companies';
 import { customersApi } from '../../api/customers';
+import { downloadAuthenticatedFile } from '../../api/client';
 import { Customer, Stage } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -48,6 +49,7 @@ export default function CompanyDetailPage() {
   const [attachmentCategory, setAttachmentCategory] = useState<'proposal' | 'contract' | 'invoice' | 'brief' | 'screenshot' | 'other'>('proposal');
   const [attachmentNotes, setAttachmentNotes] = useState('');
   const [selectedFile, setSelectedFile] = useState<{ name: string; base64: string } | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<{ name: string; base64: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // New Lead form state
@@ -126,7 +128,7 @@ export default function CompanyDetailPage() {
         status: res.data.status || 'active',
         healthStatus: res.data.healthStatus || 'healthy',
         monthlyPackage: res.data.monthlyPackage || 0,
-        startDate: res.data.createdAt ? res.data.createdAt.slice(0, 10) : '',
+        startDate: res.data.startDate ? res.data.startDate.slice(0, 10) : '',
         monthlyVideoTarget: res.data.monthlyVideoTarget || 0,
         monthlyDesignTarget: res.data.monthlyDesignTarget || 0,
         monthlyContentTarget: res.data.monthlyContentTarget || 0,
@@ -147,27 +149,32 @@ export default function CompanyDetailPage() {
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Attachment file must be 5 MB or smaller.');
+    const files = e.target.files ? [...e.target.files] : [];
+    if (files.length === 0) return;
+    const valid = files.filter(file => file.size <= 5 * 1024 * 1024);
+    if (valid.length !== files.length) {
+      setError(`${files.length - valid.length} file${files.length - valid.length === 1 ? '' : 's'} skipped: must be 5 MB or smaller.`);
+    }
+    if (valid.length === 0) {
+      setSelectedFile(null);
+      setSelectedFiles([]);
       return;
     }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setSelectedFile({
-        name: file.name,
-        base64: reader.result as string,
-      });
-    };
-    reader.readAsDataURL(file);
+    const reads = valid.map(file => new Promise<{ name: string; base64: string }>(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ name: file.name, base64: reader.result as string });
+      reader.readAsDataURL(file);
+    }));
+    void Promise.all(reads).then(all => {
+      setSelectedFile(all[0]);
+      setSelectedFiles([...all]);
+    });
   }
 
   async function handleUploadAttachment(e: React.FormEvent) {
     e.preventDefault();
-    if (!id || !selectedFile) {
+    const files = selectedFiles.length > 0 ? selectedFiles : (selectedFile ? [selectedFile] : []);
+    if (!id || files.length === 0) {
       setError('Please select a file to upload.');
       return;
     }
@@ -175,18 +182,22 @@ export default function CompanyDetailPage() {
     try {
       setUploadingAttachment(true);
       setError('');
-      const res = await companiesApi.uploadAttachment(id, {
-        category: attachmentCategory,
-        originalName: selectedFile.name,
-        fileData: selectedFile.base64,
-        notes: attachmentNotes,
-      });
-
-      setAttachments(prev => [res.data, ...prev]);
+      let uploadedCount = 0;
+      for (const file of files) {
+        const res = await companiesApi.uploadAttachment(id, {
+          category: attachmentCategory,
+          originalName: file.name,
+          fileData: file.base64,
+          notes: attachmentNotes,
+        });
+        setAttachments(prev => [res.data, ...prev]);
+        uploadedCount += 1;
+      }
       setSelectedFile(null);
+      setSelectedFiles([]);
       setAttachmentNotes('');
       if (fileInputRef.current) fileInputRef.current.value = '';
-      setSuccess('Attachment uploaded successfully.');
+      setSuccess(uploadedCount > 1 ? `${uploadedCount} attachments uploaded successfully.` : 'Attachment uploaded successfully.');
     } catch (err: any) {
       setError(err.message || 'Failed to upload attachment');
     } finally {
@@ -707,10 +718,11 @@ export default function CompanyDetailPage() {
                   }}
                 >
                   <span style={{ fontSize: '0.78rem', color: 'var(--teal)', fontWeight: 700 }}>
-                    {selectedFile ? selectedFile.name : 'Select file (PDF, Doc, Image, CSV up to 5MB)'}
+                    {selectedFiles.length > 1 ? `${selectedFiles.length} files selected` : (selectedFile ? selectedFile.name : 'Select file (PDF, Doc, Image, CSV up to 5MB, multi-select allowed)')}
                   </span>
                   <input
                     type="file"
+                    multiple
                     ref={fileInputRef}
                     accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.txt,.csv"
                     onChange={handleFileSelect}
@@ -729,9 +741,9 @@ export default function CompanyDetailPage() {
                 <button
                   type="submit"
                   className="btn primary"
-                  disabled={uploadingAttachment || !selectedFile}
+                  disabled={uploadingAttachment || (selectedFiles.length === 0 && !selectedFile)}
                 >
-                  {uploadingAttachment ? 'Uploading...' : 'Upload Attachment'}
+                  {uploadingAttachment ? 'Uploading...' : selectedFiles.length > 1 ? `Upload ${selectedFiles.length} Attachments` : 'Upload Attachment'}
                 </button>
               </form>
             </article>
@@ -780,15 +792,14 @@ export default function CompanyDetailPage() {
                       </div>
 
                       <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
-                        <a
-                          href={`/api/companies/${company._id}/attachments/${att._id}/download`}
+                        <button
+                          type="button"
                           className="btn small outline"
                           style={{ padding: '3px 8px', fontSize: '0.7rem' }}
-                          target="_blank"
-                          rel="noreferrer"
+                          onClick={() => downloadAuthenticatedFile(`/companies/${company._id}/attachments/${att._id}/download`, att.originalName)}
                         >
                           Download
-                        </a>
+                        </button>
                         <button
                           type="button"
                           className="btn small danger"

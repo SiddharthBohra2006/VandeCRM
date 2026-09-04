@@ -76,6 +76,30 @@ export interface ImportResult {
   skipped: number;
 }
 
+export interface ImportPreviewPayload {
+  csvData: string;
+  csvFileName?: string;
+  duplicateRule?: string;
+  mappings?: Record<string, string>;
+  defaultStageId?: string;
+  defaultAssignedToId?: string;
+  defaultClientCompanyId?: string;
+  defaultNextFollowUpAt?: string;
+  defaultFollowUpComment?: string;
+}
+
+export interface ImportPayload {
+  csvData: string;
+  csvFileName?: string;
+  duplicateRule?: string;
+  mappings?: Record<string, string>;
+  defaultStageId?: string;
+  defaultAssignedToId?: string;
+  defaultClientCompanyId?: string;
+  defaultNextFollowUpAt?: string;
+  defaultFollowUpComment?: string;
+}
+
 export const customersApi = {
   list: (params: Record<string, string>) => {
     const query = new URLSearchParams(params).toString();
@@ -94,38 +118,20 @@ export const customersApi = {
   delete: (id: string) =>
     api.delete<{ ok: true }>(`/customers/${id}`),
 
+  saveView: (name: string, filters: Record<string, string>, columns: string[] = []) =>
+    api.post<{ ok: true; data: any }>('/customers/views', { name, entity: 'customer', filters, columns }),
+
+  deleteView: (id: string) =>
+    api.delete<{ ok: true }>(`/customers/views/${id}`),
+
   bulk: (data: { action: string; selectedIds: string[]; [key: string]: unknown }) =>
     api.post<{ ok: true; message: string }>('/customers/bulk', data),
 
-  importPreview: async (data: { csvData: string; csvFileName?: string; duplicateRule?: string }): Promise<ImportPreviewResult> => {
-    const token = localStorage.getItem('crm_token');
-    const res = await fetch('/api/customers/import/preview', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/csv',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: data.csvData,
-    });
-    const result = await res.json();
-    if (!res.ok || !result.ok) throw new Error(result.error || 'Import preview failed');
-    return result;
-  },
+  importPreview: (data: ImportPreviewPayload) =>
+    api.post<ImportPreviewResult>('/customers/import/preview', data),
 
-  import: async (data: { csvData: string; csvFileName?: string; duplicateRule?: string; defaultStageId?: string; defaultAssignedToId?: string }): Promise<ImportResult> => {
-    const token = localStorage.getItem('crm_token');
-    const res = await fetch('/api/customers/import', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/csv',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: data.csvData,
-    });
-    const result = await res.json();
-    if (!res.ok || !result.ok) throw new Error(result.error || 'Import failed');
-    return result;
-  },
+  import: (data: ImportPayload) =>
+    api.post<ImportResult>('/customers/import', data),
 
   getDuplicates: () => api.get<{ ok: true; duplicateGroups: any[] }>('/customers/duplicates'),
   mergeDuplicate: (primaryId: string, duplicateId: string) =>
@@ -145,6 +151,12 @@ export const customersApi = {
 
   deleteAttachment: (id: string, attachmentId: string) =>
     api.delete<{ ok: true }>(`/customers/${id}/attachments/${attachmentId}`),
+
+  createSavedView: (data: { name: string; entity?: string; filters?: Record<string, any>; columns?: string[]; sortBy?: string }) =>
+    api.post<{ ok: true; data: any }>('/customers/views', data),
+
+  deleteSavedView: (id: string) =>
+    api.delete<{ ok: true }>(`/customers/views/${id}`),
 };
 
 export async function downloadCustomersCsv(params: { scope?: string; dateFrom?: string; dateTo?: string }) {

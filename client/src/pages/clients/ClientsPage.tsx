@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { clientsApi, ClientsListResponse } from '../../api/clients';
-import { downloadCustomersCsv } from '../../api/customers';
+import { customersApi, downloadCustomersCsv } from '../../api/customers';
 import CustomizeColumnsModal, { ColumnDefinition } from '../../components/CustomizeColumnsModal';
 
 const CLIENT_COLUMNS: ColumnDefinition[] = [
@@ -47,12 +47,12 @@ function formatRelativeTime(dateStr?: string | Date) {
   if (!dateStr) return { time: '—', label: '' };
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 60) return { time: `${Math.max(1, mins)}m ago`, label: 'New message' };
+  if (mins < 60) return { time: `${Math.max(1, mins)}m ago`, label: '' };
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return { time: `${hours}h ago`, label: 'Assigned to team' };
+  if (hours < 24) return { time: `${hours}h ago`, label: '' };
   const days = Math.floor(hours / 24);
-  if (days < 30) return { time: `${days}d ago`, label: 'Follow-up scheduled' };
-  return { time: new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }), label: 'Note added' };
+  if (days < 30) return { time: `${days}d ago`, label: '' };
+  return { time: new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }), label: '' };
 }
 
 export default function ClientsPage() {
@@ -62,6 +62,9 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState('');
+  const [bulkValue, setBulkValue] = useState('');
+  const [applyingBulk, setApplyingBulk] = useState(false);
 
   // Column visibility & order
   const [showColumnsModal, setShowColumnsModal] = useState(false);
@@ -135,6 +138,7 @@ export default function ClientsPage() {
   }
 
   function handleFilterChange(key: string, value: string) {
+    setSelectedIds(new Set());
     const params = new URLSearchParams(searchParams);
     if (value) {
       params.set(key, value);
@@ -146,6 +150,7 @@ export default function ClientsPage() {
   }
 
   function clearAdvancedFilters() {
+    setSelectedIds(new Set());
     const params = new URLSearchParams(searchParams);
     params.delete('label');
     params.delete('campaign');
@@ -154,6 +159,82 @@ export default function ClientsPage() {
     params.delete('dateTo');
     params.delete('page');
     setSearchParams(params);
+  }
+
+  const [savingView, setSavingView] = useState(false);
+  const [viewBeingSaved, setViewBeingSaved] = useState(false);
+
+  function savedViewFilters() {
+    const params = new URLSearchParams();
+    for (const key of ['q', 'stage', 'label', 'campaign', 'view', 'dateFrom', 'dateTo', 'sortBy']) {
+      const value = searchParams.get(key);
+      if (value) params.set(key, value);
+    }
+    return Object.fromEntries(params);
+  }
+
+  async function saveCurrentView() {
+    if (savingView) return;
+    if (!viewBeingSaved) {
+      setViewBeingSaved(true);
+      return;
+    }
+    const input = document.querySelector<HTMLInputElement>('.saved-view-name-input');
+    const name = (input?.value || '').trim();
+    if (!name) return;
+    try {
+      setSavingView(true);
+      setError('');
+      await customersApi.saveView(name, savedViewFilters());
+      setViewBeingSaved(false);
+      await loadData();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not save view');
+    } finally {
+      setSavingView(false);
+    }
+  }
+
+  function applySavedView(view: { _id: string; name: string; filters: Record<string, string> }) {
+    setSelectedIds(new Set());
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(view.filters || {})) {
+      if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+    }
+    params.delete('page');
+    setSearchParams(params);
+  }
+
+  async function deleteSavedView(id: string) {
+    try {
+      setError('');
+      await customersApi.deleteView(id);
+      await loadData();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not delete view');
+    }
+  }
+
+  async function handleBulkAction() {
+    if (!bulkAction || !selectedIds.size) return;
+    if (bulkAction === 'delete' && !window.confirm(`Delete ${selectedIds.size} selected clients?`)) return;
+    try {
+      setApplyingBulk(true);
+      setError('');
+      await customersApi.bulk({
+        selectedIds: [...selectedIds],
+        action: bulkAction,
+        value: bulkValue,
+      });
+      setSelectedIds(new Set());
+      setBulkAction('');
+      setBulkValue('');
+      await loadData();
+    } catch (err: any) {
+      setError(err.message || 'Bulk action failed');
+    } finally {
+      setApplyingBulk(false);
+    }
   }
 
   function toggleSelect(id: string) {
@@ -191,7 +272,7 @@ export default function ClientsPage() {
   if (error && !data) return <div className="alert alert-error" style={{ margin: '2rem' }}>{error}</div>;
   if (!data) return null;
 
-  const { data: clients, stages, labels, campaigns, pagination, clientStats } = data;
+  const { data: clients, stages, labels, campaigns, pagination, clientStats, users } = data;
   const currentView = searchParams.get('view') || 'all';
 
   const advancedFilterCount = [
@@ -323,6 +404,19 @@ export default function ClientsPage() {
         ))}
       </nav>
 
+      {/* Saved Views */}
+      {data && data.savedViews && data.savedViews.length > 0 && (
+        <div className="saved-views-row" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem' }}>
+          <span style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)' }}>Saved views</span>
+          {data.savedViews.map((view: { _id: string; name: string; filters: Record<string, string> }) => (
+            <span className="saved-view-chip" key={view._id} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: 'var(--panel-muted)', border: '1px solid var(--border)', borderRadius: 999, padding: '0.2rem 0.5rem 0.2rem 0.75rem', fontSize: '0.75rem' }}>
+              <button type="button" onClick={() => applySavedView(view)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)', fontWeight: 600 }}>{view.name}</button>
+              <button type="button" aria-label={`Delete saved view ${view.name}`} onClick={() => void deleteSavedView(view._id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '0.9rem', lineHeight: 1 }}>&times;</button>
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* 4. Filters Toolbar */}
       <form className="filter-bar leads-toolbar" onSubmit={e => e.preventDefault()}>
         <div className="leads-toolbar-left">
@@ -403,6 +497,20 @@ export default function ClientsPage() {
         </div>
 
         <div className="leads-toolbar-right">
+          {viewBeingSaved && (
+            <input
+              type="text"
+              className="saved-view-name-input"
+              placeholder="Name this view"
+              autoFocus
+              style={{ width: 130, padding: '0.4rem 0.6rem', fontSize: '0.78rem', background: 'var(--input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 8 }}
+              onKeyDown={e => { if (e.key === 'Enter') void saveCurrentView(); if (e.key === 'Escape') setViewBeingSaved(false); }}
+            />
+          )}
+          <button className="btn secondary outline" type="button" disabled={savingView} onClick={() => void saveCurrentView()} title="Save the current filters and columns as a reusable view">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            {viewBeingSaved ? 'Save view' : 'Save current view'}
+          </button>
           <div className="view-toggle-group">
             <Link to="/clients" className="view-toggle-btn active" title="List view">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
@@ -420,6 +528,66 @@ export default function ClientsPage() {
           )}
         </div>
       </form>
+
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="bulk-actions" style={{ margin: '0 32px 14px 32px' }}>
+          <strong>{selectedIds.size} selected</strong>
+          <select value={bulkAction} onChange={event => { setBulkAction(event.target.value); setBulkValue(''); }}>
+            <option value="">Choose action</option>
+            <option value="stage">Change status</option>
+            <option value="transfer">Transfer</option>
+            <option value="priority">Set priority</option>
+            <option value="value">Set value</option>
+            <option value="source">Set source</option>
+            <option value="delete">Delete</option>
+          </select>
+          {bulkAction === 'stage' && (
+            <select aria-label="New status" value={bulkValue} onChange={event => setBulkValue(event.target.value)}>
+              <option value="">Choose status</option>
+              {stages.filter(s => s.isActive).map(s => <option value={s._id} key={s._id}>{s.name}</option>)}
+            </select>
+          )}
+          {bulkAction === 'transfer' && (
+            <select aria-label="New owner" value={bulkValue} onChange={event => setBulkValue(event.target.value)}>
+              <option value="">Unassigned</option>
+              {users.map(u => <option value={u._id} key={u._id}>{u.name}</option>)}
+            </select>
+          )}
+          {bulkAction === 'priority' && (
+            <select aria-label="New priority" value={bulkValue} onChange={event => setBulkValue(event.target.value)}>
+              <option value="">Choose priority</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          )}
+          {['value', 'source'].includes(bulkAction) && (
+            <input
+              aria-label={`New ${bulkAction}`}
+              placeholder={bulkAction === 'value' ? 'New deal value' : 'New source'}
+              type={bulkAction === 'value' ? 'number' : 'text'}
+              value={bulkValue}
+              onChange={event => setBulkValue(event.target.value)}
+            />
+          )}
+          <button
+            className="btn small primary"
+            type="button"
+            disabled={!bulkAction || applyingBulk}
+            onClick={handleBulkAction}
+          >
+            {applyingBulk ? 'Applying…' : 'Apply'}
+          </button>
+          <button
+            className="btn small"
+            type="button"
+            onClick={() => { setSelectedIds(new Set()); setBulkAction(''); setBulkValue(''); }}
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
 
       {/* 5. Subheader Showing X-Y of Z */}
       <div className="leads-table-top-bar">

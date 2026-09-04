@@ -35,6 +35,7 @@ export interface Company {
   metaPixelId?: string;
   ga4MeasurementId?: string;
   apiKey?: string;
+  startDate?: string | null;
   assignedUsers?: AssignedUser[];
   accountOwner?: AssignedUser | null;
   createdAt: string;

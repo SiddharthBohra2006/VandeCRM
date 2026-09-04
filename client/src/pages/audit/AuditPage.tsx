@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { auditApi, AuditLogEntry, AuditResponse } from '../../api/audit';
 
 export default function AuditPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<AuditResponse | null>(null);
-  const [actionFilter, setActionFilter] = useState('');
-  const [entityFilter, setEntityFilter] = useState('');
-  const [userFilter, setUserFilter] = useState('');
+  const actionFilter = searchParams.get('action') || '';
+  const entityFilter = searchParams.get('entityType') || '';
+  const userFilter = searchParams.get('user') || '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -30,10 +32,15 @@ export default function AuditPage() {
     }
   }
 
+  function handleFilterChange(key: string, value: string) {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setSearchParams(next);
+  }
+
   function handleResetFilters() {
-    setActionFilter('');
-    setEntityFilter('');
-    setUserFilter('');
+    setSearchParams({});
   }
 
   return (
@@ -52,7 +59,7 @@ export default function AuditPage() {
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1.25rem' }}>
         <select
           value={actionFilter}
-          onChange={e => setActionFilter(e.target.value)}
+          onChange={e => handleFilterChange('action', e.target.value)}
           style={{ padding: '6px 10px', borderRadius: '6px', background: 'var(--panel)', color: 'var(--text)', fontSize: '0.82rem', minWidth: '160px' }}
         >
           <option value="">All actions</option>
@@ -63,7 +70,7 @@ export default function AuditPage() {
 
         <select
           value={entityFilter}
-          onChange={e => setEntityFilter(e.target.value)}
+          onChange={e => handleFilterChange('entityType', e.target.value)}
           style={{ padding: '6px 10px', borderRadius: '6px', background: 'var(--panel)', color: 'var(--text)', fontSize: '0.82rem', minWidth: '160px' }}
         >
           <option value="">All entity types</option>
@@ -74,7 +81,7 @@ export default function AuditPage() {
 
         <select
           value={userFilter}
-          onChange={e => setUserFilter(e.target.value)}
+          onChange={e => handleFilterChange('user', e.target.value)}
           style={{ padding: '6px 10px', borderRadius: '6px', background: 'var(--panel)', color: 'var(--text)', fontSize: '0.82rem', minWidth: '180px' }}
         >
           <option value="">All users</option>

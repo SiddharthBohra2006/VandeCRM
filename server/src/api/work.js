@@ -12,6 +12,7 @@ const WorkType = require('../models/WorkType');
 const Customer = require('../models/Customer');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
+const Notification = require('../models/Notification');
 
 const router = express.Router();
 router.use(requireApiAuth);
@@ -96,7 +97,7 @@ router.get('/', async (req, res, next) => {
     );
 
     const items = await CustomRecord.find(filter)
-      .populate('workType assignedTo customer')
+      .populate('workType assignedTo customer collaborators secondaryAssignee')
       .sort({ deadline: 1, createdAt: -1 })
       .lean();
 
@@ -156,7 +157,7 @@ router.get('/:type', resolveWorkType, async (req, res, next) => {
     await ensureMonthlyRecords(req);
     const activeWorkspace = String(req.activeCompanyId);
     const organization = req.user.organization._id;
-    const { status, assignedTo, priority, q, view = 'open', month = '', page = 1, pageSize = 100 } = req.query;
+    const { status, assignedTo, priority, q, view = 'open', month = '', page = 1, pageSize = 100, collaborator, secondaryAssignee } = req.query;
     const presentation = req.workType.presentation || {};
     const calendarField = presentation.calendarField || 'deadline';
 
@@ -169,6 +170,8 @@ router.get('/:type', resolveWorkType, async (req, res, next) => {
     if (status) filter.status = status;
     if (priority) filter.priority = priority;
     if (assignedTo) filter.assignedTo = assignedTo;
+    if (secondaryAssignee) filter.secondaryAssignee = secondaryAssignee;
+    if (collaborator) filter.collaborators = collaborator;
     if (q) {
       filter.$or = [
         { title: new RegExp(String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
@@ -176,13 +179,28 @@ router.get('/:type', resolveWorkType, async (req, res, next) => {
       ];
     }
 
+    for (const [key, value] of Object.entries(req.query)) {
+      if (!key.startsWith('cf_') || value === '' || value === undefined) continue;
+      const fieldKey = key.slice(3);
+      const field = (req.workType.fields || []).find(f => f.key === fieldKey);
+      if (!field) continue;
+      if (field.type === 'number') {
+        const num = Number(value);
+        filter[`customFields.${fieldKey}`] = Number.isFinite(num) ? num : { $exists: true };
+      } else if (field.type === 'checkbox') {
+        filter[`customFields.${fieldKey}`] = ['true', 'yes', '1', 'on'].includes(String(value).toLowerCase());
+      } else {
+        filter[`customFields.${fieldKey}`] = String(value);
+      }
+    }
+
     restrictToAssigned(filter, req.user);
 
     const now = new Date();
     if (view === 'today') {
-      const startOfDay = new Date(now.setHours(0, 0, 0, 0));
-      const endOfDay = new Date(now.setHours(23, 59, 59, 999));
-      filter.deadline = { $gte: startOfDay, $lte: endOfDay };
+      const endOfDay = new Date(now);
+      endOfDay.setHours(23, 59, 59, 999);
+      filter.deadline = { $lt: endOfDay };
     } else if (view === 'overdue') {
       filter.deadline = { $lt: new Date() };
     }
@@ -249,14 +267,14 @@ router.get('/:type/:id', resolveWorkType, async (req, res, next) => {
     restrictToAssigned(filter, req.user);
 
     const item = await CustomRecord.findOne(filter)
-      .populate('workType assignedTo customer collaborators secondaryAssignee subtasks.assignedTo createdBy')
+      .populate('workType assignedTo customer collaborators secondaryAssignee createdBy relatedRecords')
       .lean();
 
     if (!item) {
       return res.status(404).json({ ok: false, error: 'Record not found.' });
     }
 
-    const [childSubtasks, auditLog, users, customers] = await Promise.all([
+    const [childSubtasks, auditLog, users, customers, relatedItems] = await Promise.all([
       CustomRecord.find({
         organization,
         workspace: activeWorkspace,
@@ -276,6 +294,11 @@ router.get('/:type/:id', resolveWorkType, async (req, res, next) => {
         .lean(),
       assignableWorkUsers(organization, activeWorkspace, req.workType),
       Customer.find({ organization, clientCompany: activeWorkspace }).select('name company email').sort({ name: 1 }).lean(),
+      CustomRecord.find({ organization, workspace: activeWorkspace, module: { $ne: req.workType._id } })
+        .select('title module workType')
+        .populate('workType')
+        .limit(50)
+        .lean(),
     ]);
 
     const combinedSubtasks = (childSubtasks && childSubtasks.length > 0) ? childSubtasks : (item.subtasks || []);
@@ -288,6 +311,7 @@ router.get('/:type/:id', resolveWorkType, async (req, res, next) => {
       auditLog,
       users,
       customers,
+      relatedItems,
     });
   } catch (error) {
     next(error);
@@ -311,6 +335,7 @@ router.post('/:type', resolveWorkType, async (req, res, next) => {
     }
 
     const status = body.status || req.workType.statuses[0]?.key || 'pending';
+    if (!req.workType.statuses.some(s => s.key === status)) return res.status(400).json({ ok: false, error: 'Invalid status.' });
     const priority = priorities.includes(body.priority) ? body.priority : 'medium';
     const deadline = body.deadline ? new Date(body.deadline) : null;
     const startDate = body.startDate ? new Date(body.startDate) : null;
@@ -331,6 +356,7 @@ router.post('/:type', resolveWorkType, async (req, res, next) => {
       assignedTo: body.assignedTo || req.user._id,
       collaborators: ids(body.collaborators),
       secondaryAssignee: body.secondaryAssignee || null,
+      relatedRecords: Array.isArray(body.relatedRecords) ? body.relatedRecords : [],
       customFields,
       createdBy: req.user._id,
     });
@@ -346,7 +372,7 @@ router.post('/:type', resolveWorkType, async (req, res, next) => {
     await runRecordAutomation({ record: item, workType: req.workType, trigger: 'record_created' });
 
     const populated = await CustomRecord.findById(item._id)
-      .populate('workType assignedTo customer collaborators')
+      .populate('workType assignedTo customer collaborators relatedRecords')
       .lean();
 
     res.json({ ok: true, data: populated });
@@ -366,17 +392,18 @@ router.put('/:type/:id', resolveWorkType, async (req, res, next) => {
     const organization = req.user.organization._id;
     const body = req.body;
 
-    const item = await CustomRecord.findOne({
+    const item = await CustomRecord.findOne(restrictToAssigned({
       _id: req.params.id,
       organization,
       workspace: activeWorkspace,
       module: req.workType._id,
-    });
+    }, req.user));
 
     if (!item) {
       return res.status(404).json({ ok: false, error: 'Record not found.' });
     }
 
+    if (body.status !== undefined && !req.workType.statuses.some(s => s.key === body.status)) return res.status(400).json({ ok: false, error: 'Invalid status.' });
     const previousStatus = item.status;
     const previousOwner = item.assignedTo ? String(item.assignedTo) : null;
 
@@ -385,11 +412,13 @@ router.put('/:type/:id', resolveWorkType, async (req, res, next) => {
     if (body.priority !== undefined && priorities.includes(body.priority)) item.priority = body.priority;
     if (body.deadline !== undefined) item.deadline = body.deadline ? new Date(body.deadline) : null;
     if (body.startDate !== undefined) item.startDate = body.startDate ? new Date(body.startDate) : null;
+    if (body.deliveredAt !== undefined) item.deliveredAt = body.deliveredAt ? new Date(body.deliveredAt) : null;
     if (body.notes !== undefined) item.notes = String(body.notes).trim();
     if (body.customer !== undefined) item.customer = body.customer || null;
     if (body.assignedTo !== undefined) item.assignedTo = body.assignedTo || null;
     if (body.collaborators !== undefined) item.collaborators = ids(body.collaborators);
     if (body.secondaryAssignee !== undefined) item.secondaryAssignee = body.secondaryAssignee || null;
+    if (body.relatedRecords !== undefined) item.relatedRecords = Array.isArray(body.relatedRecords) ? body.relatedRecords : [];
 
     if (body.customFields && typeof body.customFields === 'object') {
       for (const [k, v] of Object.entries(body.customFields)) {
@@ -397,7 +426,7 @@ router.put('/:type/:id', resolveWorkType, async (req, res, next) => {
       }
     }
 
-    if (isComplete(item) && !item.deliveredAt) {
+    if (req.workType.statuses.some(s => s.key === item.status && s.isTerminalWon) && !item.deliveredAt) {
       item.deliveredAt = new Date();
     }
 
@@ -419,7 +448,7 @@ router.put('/:type/:id', resolveWorkType, async (req, res, next) => {
     });
 
     const populated = await CustomRecord.findById(item._id)
-      .populate('workType assignedTo customer collaborators secondaryAssignee')
+      .populate('workType assignedTo customer collaborators secondaryAssignee relatedRecords')
       .lean();
 
     res.json({ ok: true, data: populated });
@@ -439,20 +468,21 @@ router.post('/:type/:id/status', resolveWorkType, async (req, res, next) => {
     const organization = req.user.organization._id;
     const { status } = req.body;
 
-    const item = await CustomRecord.findOne({
+    const item = await CustomRecord.findOne(restrictToAssigned({
       _id: req.params.id,
       organization,
       workspace: activeWorkspace,
       module: req.workType._id,
-    });
+    }, req.user));
 
     if (!item) {
       return res.status(404).json({ ok: false, error: 'Record not found.' });
     }
 
+    if (!req.workType.statuses.some(s => s.key === status)) return res.status(400).json({ ok: false, error: 'Invalid status.' });
     const previousStatus = item.status;
     item.status = status;
-    if (isComplete(item) && !item.deliveredAt) {
+    if (req.workType.statuses.some(s => s.key === item.status && s.isTerminalWon) && !item.deliveredAt) {
       item.deliveredAt = new Date();
     }
     await item.save();
@@ -484,12 +514,12 @@ router.delete('/:type/:id', resolveWorkType, async (req, res, next) => {
     const activeWorkspace = String(req.activeCompanyId);
     const organization = req.user.organization._id;
 
-    const item = await CustomRecord.findOne({
+    const item = await CustomRecord.findOne(restrictToAssigned({
       _id: req.params.id,
       organization,
       workspace: activeWorkspace,
       module: req.workType._id,
-    });
+    }, req.user));
 
     if (!item) {
       return res.status(404).json({ ok: false, error: 'Record not found.' });
@@ -511,44 +541,33 @@ router.delete('/:type/:id', resolveWorkType, async (req, res, next) => {
   }
 });
 
-// POST /api/work/:type/:id/subtasks — Add subtask
+// Subtasks use the same child-record model as EJS, not an embedded array.
 router.post('/:type/:id/subtasks', resolveWorkType, async (req, res, next) => {
   try {
-    const activeWorkspace = String(req.activeCompanyId);
+    if (!hasWorkPermission(req.user, req.workType, 'create')) return res.status(403).json({ ok: false, error: 'Permission denied.' });
     const organization = req.user.organization._id;
-    const { title, assignedTo, deadline, status, priority } = req.body;
-
-    if (!String(title || '').trim()) {
-      return res.status(400).json({ ok: false, error: 'Subtask title is required.' });
+    const workspace = req.activeCompanyId;
+    const parent = await CustomRecord.findOne(restrictToAssigned({ _id: req.params.id, organization, workspace, module: req.workType._id, parentRecord: null }, req.user));
+    if (!parent) return res.status(404).json({ ok: false, error: 'Parent task not found.' });
+    const title = String(req.body.title || '').trim();
+    if (!title) return res.status(400).json({ ok: false, error: 'Subtask title is required.' });
+    const assignedTo = isRestrictedUser(req.user) ? req.user._id : (req.body.assignedTo || null);
+    if (assignedTo) {
+      const eligible = await assignableWorkUsers(organization, workspace, req.workType);
+      if (!mongoose.isObjectIdOrHexString(assignedTo) || !eligible.some(user => String(user._id) === String(assignedTo))) return res.status(400).json({ ok: false, error: 'Choose an eligible team member.' });
     }
-
-    const item = await CustomRecord.findOne({
-      _id: req.params.id,
-      organization,
-      workspace: activeWorkspace,
-      module: req.workType._id,
-    });
-
-    if (!item) {
-      return res.status(404).json({ ok: false, error: 'Record not found.' });
+    const deadline = req.body.deadline ? new Date(req.body.deadline) : null;
+    if (deadline && Number.isNaN(deadline.getTime())) return res.status(400).json({ ok: false, error: 'Choose a valid subtask deadline.' });
+    const subtask = await CustomRecord.create({ organization, workspace, module: req.workType._id, parentRecord: parent._id, title, assignedTo, deadline, customer: parent.customer, status: req.workType.statuses[0].key, priority: priorities.includes(req.body.priority) ? req.body.priority : 'medium', createdBy: req.user._id });
+    if (assignedTo && ![parent.assignedTo, parent.secondaryAssignee, ...(parent.collaborators || [])].some(id => String(id) === String(assignedTo))) {
+      parent.collaborators.push(assignedTo);
+      await parent.save();
     }
-
-    const subtask = {
-      title: String(title).trim(),
-      assignedTo: assignedTo || null,
-      deadline: deadline ? new Date(deadline) : null,
-      status: status || 'pending',
-      priority: priorities.includes(priority) ? priority : 'medium',
-      createdAt: new Date(),
-    };
-
-    item.subtasks.push(subtask);
-    await item.save();
-
-    res.json({ ok: true, data: item.subtasks[item.subtasks.length - 1] });
-  } catch (error) {
-    next(error);
-  }
+    await logAudit(req, { action: 'work_subtask_create', entityType: 'custom_record', entityId: parent._id, entityName: parent.title, message: 'Added subtask "' + subtask.title + '".', metadata: { subtaskId: subtask._id } });
+    if (assignedTo && String(assignedTo) !== String(req.user._id)) await Notification.create({ organization, user: assignedTo, title: 'New Subtask Assigned', message: subtask.title + ' was assigned under ' + parent.title, link: '/work/' + req.workType.key + '/' + subtask._id });
+    await subtask.populate('assignedTo');
+    res.json({ ok: true, data: subtask });
+  } catch (error) { next(error); }
 });
 
 // POST /api/work/:type/import — Bulk CSV import
@@ -574,6 +593,7 @@ router.post('/:type/import', resolveWorkType, async (req, res, next) => {
     let created = 0;
     let skipped = 0;
     const defaultStatus = req.workType.statuses[0]?.key || 'pending';
+    const eligible = await assignableWorkUsers(organization, activeWorkspace, req.workType);
 
     for (const row of rows) {
       const title = String(row.title || row.name || '').trim();
@@ -590,11 +610,30 @@ router.post('/:type/import', resolveWorkType, async (req, res, next) => {
       const deadline = row.deadline ? new Date(row.deadline) : null;
       const notes = row.notes || '';
 
+      let assignedTo = null;
+      const rawOwner = row.assignedTo || row.assigned_to || row.owner || row.assignee;
+      if (isRestrictedUser(req.user)) {
+        assignedTo = req.user._id;
+      } else if (rawOwner) {
+        const match = eligible.find(u => String(u._id) === String(rawOwner) || (u.email && u.email.toLowerCase() === String(rawOwner).toLowerCase()) || (u.name && u.name.toLowerCase() === String(rawOwner).toLowerCase()));
+        if (match) assignedTo = match._id;
+      }
+
       const customFields = {};
       (req.workType.fields || []).forEach(f => {
         const val = row[f.key] ?? row[f.label] ?? row[`custom_${f.key}`];
         if (val !== undefined && val !== '') {
-          customFields[f.key] = val;
+          if (f.type === 'number') {
+            const num = Number(val);
+            customFields[f.key] = Number.isFinite(num) ? num : null;
+          } else if (f.type === 'checkbox') {
+            customFields[f.key] = ['true', 'yes', '1', 'on'].includes(String(val).toLowerCase());
+          } else if (f.type === 'date') {
+            const d = new Date(val);
+            customFields[f.key] = Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+          } else {
+            customFields[f.key] = val;
+          }
         }
       });
 
@@ -606,6 +645,7 @@ router.post('/:type/import', resolveWorkType, async (req, res, next) => {
         status,
         priority,
         deadline,
+        assignedTo,
         notes,
         customFields,
         createdBy: req.user._id,

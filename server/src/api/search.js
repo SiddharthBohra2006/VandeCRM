@@ -108,7 +108,7 @@ router.get('/', async (req, res, next) => {
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
     const [myFollowUps, openTasks, todayMeetings, unreadMessages] = await Promise.all([
-      workspace
+      workspace && hasPermission(req.user, 'businesses.view')
         ? Customer.countDocuments({ ...customerScope, nextFollowUpAt: { $exists: true, $ne: null, $lte: endOfToday } })
             .maxTimeMS(1000)
             .catch(() => 0)
@@ -118,9 +118,11 @@ router.get('/', async (req, res, next) => {
             .maxTimeMS(1000)
             .catch(() => 0)
         : 0,
-      Activity.countDocuments({ organization, createdAt: { $gte: startOfToday, $lte: endOfToday } })
-        .maxTimeMS(1000)
-        .catch(() => 0),
+      workspace && hasPermission(req.user, 'businesses.view')
+        ? Activity.countDocuments({ organization, user: req.user._id, createdAt: { $gte: startOfToday, $lte: endOfToday } })
+            .maxTimeMS(1000)
+            .catch(() => 0)
+        : 0,
       Notification.countDocuments({ organization, user: req.user._id, read: false })
         .maxTimeMS(1000)
         .catch(() => 0),
@@ -198,7 +200,7 @@ router.get('/', async (req, res, next) => {
         });
       });
 
-      queue('history', 'Work History', true, async () => {
+      queue('history', 'Work History', hasPermission(req.user, 'audit.view'), async () => {
         const text = matchText(['message', 'entityName', 'action']);
         const items = await AuditLog.find({ organization, ...text, ...dated(null) })
           .populate('user', 'name email')

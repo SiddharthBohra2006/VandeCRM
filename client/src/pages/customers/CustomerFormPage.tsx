@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { customersApi, CustomersListResponse } from '../../api/customers';
 import { useAuth } from '../../contexts/AuthContext';
 import { CustomerInput, CustomField } from '../../types';
@@ -16,6 +16,11 @@ const initialForm: FormState = {
 };
 
 export default function CustomerFormPage() {
+  const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const isClientScope = searchParams.get('scope') === 'client';
+  const isEdit = Boolean(id);
+
   const navigate = useNavigate();
   const { crmTerms } = useAuth();
   const [options, setOptions] = useState<CustomersListResponse | null>(null);
@@ -25,21 +30,49 @@ export default function CustomerFormPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    customersApi.list({ pageSize: '1' }).then(result => {
+    Promise.all([
+      customersApi.list({ pageSize: '1' }),
+      id ? customersApi.get(id) : null,
+    ]).then(([result, detailRes]) => {
       setOptions(result);
-      const defaultStage = result.stages.find(stage => stage.isDefault && stage.isActive) || result.stages.find(stage => stage.isActive);
-      setForm(current => ({ ...current, stage: defaultStage?._id || '' }));
+      if (detailRes?.data) {
+        const d = detailRes.data;
+        setForm({
+          name: d.name || '',
+          company: d.company || '',
+          email: d.email || '',
+          phone: d.phone || '',
+          source: d.source || 'Manual',
+          value: d.value || 0,
+          priority: (d.priority as any) || 'medium',
+          leadScore: d.leadScore || 0,
+          stage: typeof d.stage === 'object' ? (d.stage as any)?._id : d.stage || '',
+          labels: Array.isArray(d.labels) ? d.labels.map((l: any) => l._id || l) : [],
+          assignedTo: typeof d.assignedTo === 'object' ? (d.assignedTo as any)?._id : d.assignedTo || '',
+          campaign: typeof d.campaign === 'object' ? (d.campaign as any)?._id : d.campaign || '',
+          notes: d.notes || '',
+          customData: d.customData ? (typeof (d.customData as any).toObject === 'function' ? (d.customData as any).toObject() : d.customData) : {},
+        });
+      } else {
+        const availableStages = isClientScope
+          ? result.stages.filter(s => s.isActive && s.isWon).length
+            ? result.stages.filter(s => s.isActive && s.isWon)
+            : result.stages.filter(s => s.isActive)
+          : result.stages.filter(s => s.isActive);
+        const defaultStage = availableStages.find(stage => stage.isDefault) || availableStages[0];
+        setForm(current => ({ ...current, stage: defaultStage?._id || '' }));
+      }
     }).catch(caught => setError(caught instanceof Error ? caught.message : 'Failed to load form options'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [id, isClientScope]);
 
   function change(event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = event.target;
     setForm(current => ({ ...current, [name]: name === 'value' || name === 'leadScore' ? Number(value) || 0 : value }));
   }
 
-  function toggleLabel(id: string) {
-    setForm(current => ({ ...current, labels: current.labels.includes(id) ? current.labels.filter(label => label !== id) : [...current.labels, id] }));
+  function toggleLabel(labelId: string) {
+    setForm(current => ({ ...current, labels: current.labels.includes(labelId) ? current.labels.filter(l => l !== labelId) : [...current.labels, labelId] }));
   }
 
   function customField(field: CustomField, value: string | boolean) {
@@ -56,10 +89,15 @@ export default function CustomerFormPage() {
     try {
       setSaving(true);
       setError('');
-      const result = await customersApi.create(form);
-      navigate(`/customers/${result.data._id}`);
+      if (isEdit && id) {
+        await customersApi.update(id, form);
+        navigate(`/customers/${id}`);
+      } else {
+        const result = await customersApi.create(form);
+        navigate(`/customers/${result.data._id}`);
+      }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : `Failed to create ${crmTerms.leadSingular.toLowerCase()}`);
+      setError(caught instanceof Error ? caught.message : `Failed to save ${isClientScope ? crmTerms.recordSingular.toLowerCase() : crmTerms.leadSingular.toLowerCase()}`);
     } finally {
       setSaving(false);
     }
@@ -68,23 +106,31 @@ export default function CustomerFormPage() {
   if (loading) return <div className="loading">Loading form…</div>;
   if (!options) return <div className="alert alert-error" role="alert">{error || 'Form options are unavailable.'}</div>;
 
+  const backUrl = isClientScope ? '/clients' : '/customers';
+  const displayStages = isClientScope && !isEdit
+    ? (options.stages.filter(s => s.isActive && s.isWon).length ? options.stages.filter(s => s.isActive && s.isWon) : options.stages.filter(s => s.isActive))
+    : options.stages.filter(s => s.isActive);
+
   return (
     <div className="page-container">
       <section className="page-head">
-        <div><Link to="/customers" className="back-link">← Back to {crmTerms.leadPlural}</Link><h1>New {crmTerms.leadSingular}</h1></div>
+        <div>
+          <Link to={backUrl} className="back-link">← Back to {isClientScope ? crmTerms.recordPlural : crmTerms.leadPlural}</Link>
+          <h1>{isEdit ? `Edit ${form.name || crmTerms.leadSingular}` : isClientScope ? `New ${crmTerms.recordSingular}` : `New ${crmTerms.leadSingular}`}</h1>
+        </div>
       </section>
       <form className="form-card stack-form" onSubmit={submit}>
         {error && <div className="alert alert-error" role="alert">{error}</div>}
         <div className="form-grid">
-          <label>{crmTerms.recordSingular} name *<input required name="name" value={form.name} onChange={change} /></label>
+          <label>{isClientScope ? crmTerms.recordSingular : crmTerms.leadSingular} name *<input required name="name" value={form.name} onChange={change} /></label>
           <label>Company / Brand<input name="company" value={form.company} onChange={change} /></label>
           <label>Phone<input name="phone" value={form.phone} onChange={change} /></label>
           <label>Email<input type="email" name="email" value={form.email} onChange={change} /></label>
-          <label>{crmTerms.recordSingular} source<input name="source" value={form.source} onChange={change} /></label>
+          <label>{isClientScope ? crmTerms.recordSingular : crmTerms.leadSingular} source<input name="source" value={form.source} onChange={change} /></label>
           <label>Deal value<input type="number" min="0" name="value" value={form.value} onChange={change} /></label>
           <label>Priority<select name="priority" value={form.priority} onChange={change}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
           <label>Lead score<input type="number" min="0" max="100" name="leadScore" value={form.leadScore} onChange={change} /></label>
-          <label>Stage *<select required name="stage" value={form.stage} onChange={change}><option value="">Select stage</option>{options.stages.filter(stage => stage.isActive).map(stage => <option value={stage._id} key={stage._id}>{stage.name}</option>)}</select></label>
+          <label>Stage *<select required name="stage" value={form.stage} onChange={change}><option value="">Select stage</option>{displayStages.map(stage => <option value={stage._id} key={stage._id}>{stage.name}</option>)}</select></label>
           <label>Campaign<select name="campaign" value={form.campaign} onChange={change}><option value="">No campaign</option>{options.campaigns.map(campaign => <option value={campaign._id} key={campaign._id}>{campaign.name}</option>)}</select></label>
           <label>Assigned owner<select name="assignedTo" value={form.assignedTo} onChange={change}><option value="">Assign to me</option>{options.users.map(user => <option value={user._id} key={user._id}>{user.name}</option>)}</select></label>
         </div>
@@ -99,7 +145,12 @@ export default function CustomerFormPage() {
         })}</div></fieldset>}
 
         <label>Internal notes<textarea name="notes" rows={6} value={form.notes} onChange={change} /></label>
-        <div className="form-actions"><Link to="/customers" className="btn secondary">Cancel</Link><button className="btn primary" disabled={saving}>{saving ? 'Creating…' : `Create ${crmTerms.leadSingular}`}</button></div>
+        <div className="form-actions">
+          <Link to={backUrl} className="btn secondary">Cancel</Link>
+          <button className="btn primary" disabled={saving}>
+            {saving ? 'Saving…' : isEdit ? 'Save Changes' : isClientScope ? `Create ${crmTerms.recordSingular}` : `Create ${crmTerms.leadSingular}`}
+          </button>
+        </div>
       </form>
     </div>
   );

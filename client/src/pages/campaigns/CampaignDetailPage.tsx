@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { campaignsApi, Campaign, CampaignMetrics } from '../../api/campaigns';
 import { Company } from '../../api/companies';
 import { Customer } from '../../types';
@@ -26,9 +26,10 @@ export default function CampaignDetailPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Date filters
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  // Date filters (URL-backed for reload/share parity with EJS)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const dateFrom = searchParams.get('dateFrom') || '';
+  const dateTo = searchParams.get('dateTo') || '';
 
   // Edit form state
   const [formData, setFormData] = useState({
@@ -116,8 +117,8 @@ export default function CampaignDetailPage() {
     try {
       setSaving(true);
       setError('');
-      const res = await campaignsApi.update(id, formData);
-      setCampaign(res.data);
+      await campaignsApi.update(id, formData);
+      await loadCampaign(id);
       setSuccess('Campaign updated successfully.');
     } catch (err: any) {
       setError(err.message || 'Failed to update campaign');
@@ -131,7 +132,7 @@ export default function CampaignDetailPage() {
     const newStatus = campaign.status === 'archived' ? 'active' : 'archived';
     try {
       await campaignsApi.updateStatus(id, newStatus);
-      setCampaign({ ...campaign, status: newStatus as any });
+      await loadCampaign(id);
       setSuccess(`Campaign ${newStatus === 'archived' ? 'archived' : 'restored'}.`);
     } catch (err: any) {
       setError(err.message || 'Failed to change status');
@@ -214,20 +215,30 @@ export default function CampaignDetailPage() {
         <input
           type="date"
           value={dateFrom}
-          onChange={e => setDateFrom(e.target.value)}
+          onChange={e => {
+            const updated = new URLSearchParams(searchParams);
+            if (e.target.value) updated.set('dateFrom', e.target.value);
+            else updated.delete('dateFrom');
+            setSearchParams(updated);
+          }}
           style={{ maxWidth: '160px' }}
         />
         <input
           type="date"
           value={dateTo}
-          onChange={e => setDateTo(e.target.value)}
+          onChange={e => {
+            const updated = new URLSearchParams(searchParams);
+            if (e.target.value) updated.set('dateTo', e.target.value);
+            else updated.delete('dateTo');
+            setSearchParams(updated);
+          }}
           style={{ maxWidth: '160px' }}
         />
         {(dateFrom || dateTo) && (
           <button
             type="button"
             className="btn small"
-            onClick={() => { setDateFrom(''); setDateTo(''); }}
+            onClick={() => setSearchParams(new URLSearchParams())}
           >
             Reset Dates
           </button>

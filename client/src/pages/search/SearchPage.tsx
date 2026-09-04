@@ -18,6 +18,13 @@ export default function SearchPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    setQ(searchParams.get('q') || '');
+    setType(searchParams.get('type') || 'all');
+    setDateField(searchParams.get('dateField') || 'updated');
+    setFrom(searchParams.get('from') || '');
+    setTo(searchParams.get('to') || '');
+    setModule(searchParams.get('module') || '');
+    setPage(Number(searchParams.get('page')) || 1);
     executeSearch();
   }, [searchParams]);
 

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AppLayout from './layouts/AppLayout';
 import AuthLayout from './layouts/AuthLayout';
@@ -42,15 +42,85 @@ import ForbiddenPage from './pages/errors/ForbiddenPage';
 import ServerErrorPage from './pages/errors/ServerErrorPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { token } = useAuth();
+  const { token, user, loading, authBootError, refreshUser, logout } = useAuth();
   if (!token) return <Navigate to="/auth/login" replace />;
+  if (loading) {
+    return (
+      <div className="loading-screen" aria-live="polite">Loading workspace......</div>
+    );
+  }
+  if (!user) {
+    return (
+      <div className="boot-error-shell" role="alert" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'var(--bg, #090d16)', fontFamily: 'var(--font-display)' }}>
+        <div style={{ maxWidth: 460, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+          <div style={{ fontSize: '2rem' }}>📡</div>
+          <h1 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text, #f8fafc)' }}>
+            {authBootError ? 'Could not reach the server' : 'Session could not be restored'}
+          </h1>
+          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted, #94a3b8)', lineHeight: 1.5 }}>
+            {authBootError
+              ? 'Your browser was unable to contact the server (offline or a temporary outage). Your sign-in is still valid — retry when you are back online.'
+              : 'Please sign in again to continue.'}
+          </p>
+          <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center' }}>
+            <button type="button" className="btn small primary" onClick={() => refreshUser()}>Retry</button>
+            <button type="button" className="btn small outline" onClick={() => logout()}>Sign out</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return <>{children}</>;
+}
+
+function SessionExpiredModal() {
+  const { sessionExpired, dismissSessionExpired, logout } = useAuth();
+  const navigate = useNavigate();
+  if (!sessionExpired) return null;
+  return (
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="session-expired-title"
+      style={{
+        position: 'fixed', inset: 0, zIndex: 99998,
+        background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
+      }}
+    >
+      <div style={{ width: '100%', maxWidth: 460, background: 'var(--panel, #121b2d)', border: '1px solid rgba(212, 175, 55, 0.25)', borderRadius: 12, boxShadow: '0 20px 50px rgba(0,0,0,0.4)', padding: '1.5rem' }}>
+        <h3 id="session-expired-title" style={{ margin: '0 0 0.5rem', fontSize: '1.05rem', fontFamily: 'var(--font-display)', color: 'var(--text, #f8fafc)' }}>
+          Your session has expired
+        </h3>
+        <p style={{ margin: '0 0 1.25rem', fontSize: '0.85rem', color: 'var(--muted, #94a3b8)', lineHeight: 1.55 }}>
+          Please copy any unsaved work on this page before continuing, then sign in again to pick up where you left off.
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem' }}>
+          <button type="button" className="btn small outline" onClick={dismissSessionExpired}>Continue working</button>
+          <button
+            type="button"
+            className="btn small primary"
+            onClick={() => { logout(); navigate('/auth/login', { replace: true }); }}
+          >
+            Sign in again
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function GuestRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
   if (token) return <Navigate to="/" replace />;
   return <>{children}</>;
+}
+
+function HomeRedirect() {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user?.role === 'client') return <Navigate to="/client-dashboard" replace />;
+  return <DashboardPage />;
 }
 
 export default function App() {
@@ -65,8 +135,9 @@ export default function App() {
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
           </Route>
-          <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-            <Route path="/" element={<DashboardPage />} />
+          <Route element={<ProtectedRoute><SessionExpiredModal /><AppLayout /></ProtectedRoute>}>
+            <Route path="/" element={<HomeRedirect />} />
+            <Route path="/pipeline" element={<Navigate to="/?section=pipeline" replace />} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/customers/new" element={<CustomerFormPage />} />
             <Route path="/customers/duplicates" element={<DuplicatesPage />} />
@@ -74,7 +145,11 @@ export default function App() {
             <Route path="/customers/import/preview" element={<CustomerImportPreviewPage />} />
             <Route path="/customers/import/results" element={<CustomerImportResultsPage />} />
             <Route path="/customers/:id" element={<CustomerDetailPage />} />
+            <Route path="/customers/:id/edit" element={<CustomerFormPage />} />
             <Route path="/clients" element={<ClientsPage />} />
+            <Route path="/clients/new" element={<CustomerFormPage />} />
+            <Route path="/clients/:id" element={<CustomerDetailPage />} />
+            <Route path="/clients/:id/edit" element={<CustomerFormPage />} />
             <Route path="/client-dashboard" element={<ClientDashboardPage />} />
             <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/campaigns/:id" element={<CampaignDetailPage />} />

@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { customersApi, downloadCustomersCsv, downloadImportTemplate, CustomersListResponse, ImportPreviewRow } from '../../api/customers';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import CustomizeColumnsModal, { ColumnDefinition } from '../../components/CustomizeColumnsModal';
+import { SCHEMA_OPTIONS, parseCsvRow, suggestTarget } from '../../utils/importCsv';
 
 const CUSTOMER_COLUMNS: ColumnDefinition[] = [
   { key: 'name', label: 'Lead', icon: 'user', defaultVisible: true },
@@ -47,12 +48,12 @@ function formatRelativeTime(dateStr?: string | Date) {
   if (!dateStr) return { time: '—', label: '' };
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 60) return { time: `${Math.max(1, mins)}m ago`, label: 'New message' };
+  if (mins < 60) return { time: `${Math.max(1, mins)}m ago`, label: '' };
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return { time: `${hours}h ago`, label: 'Assigned to team' };
+  if (hours < 24) return { time: `${hours}h ago`, label: '' };
   const days = Math.floor(hours / 24);
-  if (days < 30) return { time: `${days}d ago`, label: 'Follow-up scheduled' };
-  return { time: new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }), label: 'Note added' };
+  if (days < 30) return { time: `${days}d ago`, label: '' };
+  return { time: new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }), label: '' };
 }
 
 const PRIORITY_MOD = { high: 'High', medium: 'Medium', low: 'Low' } as const;
@@ -78,6 +79,16 @@ export default function CustomersPage() {
   const [importResult, setImportResult] = useState<{ imported: number; updated: number; skipped: number } | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [duplicateRule, setDuplicateRule] = useState<'update' | 'skip' | 'create'>('update');
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvMappings, setCsvMappings] = useState<Record<string, string>>({});
+  const [defaultStageId, setDefaultStageId] = useState('');
+  const [defaultAssignedToId, setDefaultAssignedToId] = useState('');
+  const [defaultClientCompanyId, setDefaultClientCompanyId] = useState('');
+  const [defaultNextFollowUpAt, setDefaultNextFollowUpAt] = useState('');
+  const [defaultFollowUpComment, setDefaultFollowUpComment] = useState('');
+  const [importStages, setImportStages] = useState<{ _id: string; name: string; isDefault?: boolean }[]>([]);
+  const [importUsers, setImportUsers] = useState<{ _id: string; name: string }[]>([]);
+  const [importCompanies, setImportCompanies] = useState<{ _id: string; name: string }[]>([]);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -208,6 +219,59 @@ export default function CustomersPage() {
     setSearchParams(params);
   }
 
+  const [savingView, setSavingView] = useState(false);
+  const [viewBeingSaved, setViewBeingSaved] = useState(false);
+
+  function savedViewFilters() {
+    const params = new URLSearchParams();
+    for (const key of ['q', 'stage', 'label', 'campaign', 'view', 'dateFrom', 'dateTo', 'sortBy']) {
+      const value = searchParams.get(key);
+      if (value) params.set(key, value);
+    }
+    return Object.fromEntries(params);
+  }
+
+  async function saveCurrentView() {
+    if (savingView) return;
+    if (!viewBeingSaved) {
+      setViewBeingSaved(true);
+      return;
+    }
+    const input = document.querySelector<HTMLInputElement>('.saved-view-name-input');
+    const name = (input?.value || '').trim();
+    if (!name) return;
+    try {
+      setSavingView(true);
+      setError('');
+      await customersApi.saveView(name, savedViewFilters());
+      setViewBeingSaved(false);
+      await loadData();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not save view');
+    } finally {
+      setSavingView(false);
+    }
+  }
+
+  function applySavedView(view: { _id: string; name: string; filters: Record<string, string> }) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(view.filters || {})) {
+      if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+    }
+    params.delete('page');
+    setSearchParams(params);
+  }
+
+  async function deleteSavedView(id: string) {
+    try {
+      setError('');
+      await customersApi.deleteView(id);
+      await loadData();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not delete view');
+    }
+  }
+
   function toggleSelect(id: string) {
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -239,11 +303,31 @@ export default function CustomersPage() {
     }
   }
 
+  async function openCsvModal() {
+    setShowCsvModal(true);
+    try {
+      const res = await customersApi.list({ pageSize: '1' });
+      if (res.stages) setImportStages(res.stages);
+      if (res.users) setImportUsers(res.users);
+      if (res.companies) setImportCompanies(res.companies);
+    } catch { /* defaults remain empty */ }
+  }
+
   function handleCsvFile(file: File | undefined | null) {
     if (!file) {
       setCsvFileName('');
       setCsvText('');
+      setCsvHeaders([]);
+      setCsvMappings({});
       setCsvStatus('Choose a CSV to preview its database impact.');
+      return;
+    }
+    if (!/\.csv$/i.test(file.name)) {
+      setCsvFileName(file.name);
+      setCsvText('');
+      setCsvHeaders([]);
+      setCsvMappings({});
+      setCsvStatus('Excel files (.xlsx/.xls) are not supported on this screen yet. Export the sheet as CSV (File → Save As → CSV UTF-8) and upload that file instead.');
       return;
     }
     setCsvFileName(file.name);
@@ -252,8 +336,13 @@ export default function CustomersPage() {
     reader.onload = e => {
       const text = String(e.target?.result || '');
       setCsvText(text);
-      const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-      setCsvStatus(`Loaded ${file.name} (${Math.max(0, lines.length - 1)} rows). Click Preview.`);
+      const lines = text.split(/\r?\n/);
+      const headers = parseCsvRow(lines[0] || '').filter(header => header.trim());
+      setCsvHeaders(headers);
+      const initialMappings: Record<string, string> = {};
+      headers.forEach(header => { initialMappings[header] = suggestTarget(header); });
+      setCsvMappings(initialMappings);
+      setCsvStatus(`Loaded ${file.name} (${Math.max(0, lines.length - 1)} rows). Review mappings and click Preview.`);
     };
     reader.onerror = () => {
       setCsvStatus('Failed to read CSV file.');
@@ -266,7 +355,17 @@ export default function CustomersPage() {
     try {
       setPreviewing(true);
       setError('');
-      const result = await customersApi.importPreview({ csvData: csvText, csvFileName, duplicateRule });
+      const result = await customersApi.importPreview({
+        csvData: csvText,
+        csvFileName,
+        duplicateRule,
+        mappings: csvMappings,
+        defaultStageId,
+        defaultAssignedToId,
+        defaultClientCompanyId,
+        defaultNextFollowUpAt,
+        defaultFollowUpComment,
+      });
       setPreviewRows(result.preview.rows);
       setPreviewCounts({
         totalRows: result.preview.totalRows,
@@ -288,7 +387,17 @@ export default function CustomersPage() {
     try {
       setWorking(true);
       setError('');
-      const result = await customersApi.import({ csvData: csvText, csvFileName, duplicateRule });
+      const result = await customersApi.import({
+        csvData: csvText,
+        csvFileName,
+        duplicateRule,
+        mappings: csvMappings,
+        defaultStageId,
+        defaultAssignedToId,
+        defaultClientCompanyId,
+        defaultNextFollowUpAt,
+        defaultFollowUpComment,
+      });
       setImportResult({
         imported: result.imported,
         updated: result.updated,
@@ -297,6 +406,8 @@ export default function CustomersPage() {
       setShowPreviewModal(false);
       setCsvText('');
       setCsvFileName('');
+      setCsvHeaders([]);
+      setCsvMappings({});
       await loadData();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Import failed');
@@ -334,7 +445,7 @@ export default function CustomersPage() {
         </div>
         <div className="customer-actions">
           {isManager && (
-            <button className="btn secondary outline" type="button" onClick={() => setShowCsvModal(true)}>
+            <button className="btn secondary outline" type="button" onClick={() => void openCsvModal()}>
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>
               Import
             </button>
@@ -464,6 +575,19 @@ export default function CustomersPage() {
         ))}
       </nav>
 
+      {/* 3b. Saved Views */}
+      {data && data.savedViews && data.savedViews.length > 0 && (
+        <div className="saved-views-row" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem' }}>
+          <span style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)' }}>Saved views</span>
+          {data.savedViews.map((view: { _id: string; name: string; filters: Record<string, string> }) => (
+            <span className="saved-view-chip" key={view._id} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: 'var(--panel-muted)', border: '1px solid var(--border)', borderRadius: 999, padding: '0.2rem 0.5rem 0.2rem 0.75rem', fontSize: '0.75rem' }}>
+              <button type="button" onClick={() => applySavedView(view)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)', fontWeight: 600 }}>{view.name}</button>
+              <button type="button" aria-label={`Delete saved view ${view.name}`} onClick={() => void deleteSavedView(view._id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '0.9rem', lineHeight: 1 }}>&times;</button>
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* 4. Filters Toolbar */}
       <form className="filter-bar leads-toolbar" onSubmit={e => e.preventDefault()}>
         <div className="leads-toolbar-left">
@@ -544,6 +668,20 @@ export default function CustomersPage() {
         </div>
 
         <div className="leads-toolbar-right">
+          {viewBeingSaved && (
+            <input
+              type="text"
+              className="saved-view-name-input"
+              placeholder="Name this view"
+              autoFocus
+              style={{ width: 130, padding: '0.4rem 0.6rem', fontSize: '0.78rem', background: 'var(--input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 8 }}
+              onKeyDown={e => { if (e.key === 'Enter') void saveCurrentView(); if (e.key === 'Escape') setViewBeingSaved(false); }}
+            />
+          )}
+          <button className="btn secondary outline" type="button" disabled={savingView} onClick={() => void saveCurrentView()} title="Save the current filters and columns as a reusable view">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            {viewBeingSaved ? 'Save view' : 'Save current view'}
+          </button>
           <div className="view-toggle-group">
             <Link to="/customers" className="view-toggle-btn active" title="List view">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
@@ -971,6 +1109,64 @@ export default function CustomersPage() {
                   <span>{csvFileName || 'No file selected'}</span>
                 </label>
                 <p className="csv-file-status">{csvStatus}</p>
+                {csvHeaders.length > 0 && (
+                  <div style={{ borderTop: '1px solid var(--border)', marginTop: '0.75rem', paddingTop: '0.75rem' }}>
+                    <h4 style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text)', margin: '0 0 0.6rem' }}>Match Columns to {crmTerms.recordSingular} Fields</h4>
+                    <div style={{ maxHeight: 220, overflow: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                      {csvHeaders.map(header => (
+                        <label key={header} style={{ display: 'grid', gap: '0.2rem', fontSize: '0.72rem', fontWeight: 600, color: 'var(--muted)', padding: '0.15rem 0' }}>
+                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text)', fontWeight: 700 }}>{header}</span>
+                          <select className="app-select" value={csvMappings[header] || header} onChange={e => setCsvMappings(prev => ({ ...prev, [header]: e.target.value }))}>
+                            {SCHEMA_OPTIONS.map(opt => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                            <option value={header}>New custom field</option>
+                            <option value="__ignore">Ignore column</option>
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.75rem' }}>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
+                        Default pipeline stage
+                        <select className="app-select" style={{ display: 'block', width: '100%', marginTop: '0.25rem' }} value={defaultStageId} onChange={e => setDefaultStageId(e.target.value)}>
+                          <option value="">Default CRM Stage</option>
+                          {importStages.map(stage => (
+                            <option key={stage._id} value={stage._id}>{stage.name} {stage.isDefault ? '(Default)' : ''}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
+                        Default owner
+                        <select className="app-select" style={{ display: 'block', width: '100%', marginTop: '0.25rem' }} value={defaultAssignedToId} onChange={e => setDefaultAssignedToId(e.target.value)}>
+                          <option value="">Current user ({user?.name || 'Me'})</option>
+                          {importUsers.map(importUser => (
+                            <option key={importUser._id} value={importUser._id}>{importUser.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {importCompanies.length > 0 && (
+                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
+                          Default company
+                          <select className="app-select" style={{ display: 'block', width: '100%', marginTop: '0.25rem' }} value={defaultClientCompanyId} onChange={e => setDefaultClientCompanyId(e.target.value)}>
+                            <option value="">{activeCompany?.name || 'Default company'}</option>
+                            {importCompanies.map(company => (
+                              <option key={company._id} value={company._id}>{company.name}</option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
+                        Default follow-up date & time (optional)
+                        <input type="datetime-local" className="app-select" style={{ display: 'block', width: '100%', marginTop: '0.25rem' }} value={defaultNextFollowUpAt} onChange={e => setDefaultNextFollowUpAt(e.target.value)} />
+                      </label>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, gridColumn: '1 / -1' }}>
+                        Default follow-up comment (optional)
+                        <input className="app-select" maxLength={1000} placeholder="Why and what should happen next" style={{ display: 'block', width: '100%', marginTop: '0.25rem' }} value={defaultFollowUpComment} onChange={e => setDefaultFollowUpComment(e.target.value)} />
+                      </label>
+                    </div>
+                  </div>
+                )}
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, margin: '0.75rem 0 0.25rem' }}>
                   On duplicate match
                   <select value={duplicateRule} onChange={e => setDuplicateRule(e.target.value as 'update' | 'skip' | 'create')} className="app-select" style={{ display: 'block', width: '100%', marginTop: '0.25rem' }}>

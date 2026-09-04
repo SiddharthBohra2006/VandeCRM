@@ -8,16 +8,18 @@ const EmailTemplate = require('../models/EmailTemplate');
 const { encrypt } = require('../services/encryption');
 const { isValidEmail, renderTemplate, sendEmail, usesImplicitTls, verifyEmailAccount } = require('../services/emailService');
 const { logAudit } = require('../utils/audit');
-const { hasPermission } = require('../config/roles');
+const { hasPermission, isRestrictedUser } = require('../config/roles');
 
 const router = express.Router();
 router.use(requireApiAuth);
+const apiPermission = require('./middleware/permission');
+router.use(apiPermission('mail.view'));
 
 const templateCategories = ['intro', 'follow_up', 'proposal', 'payment', 'onboarding', 'support', 'custom'];
 
 function getCustomerFilter(req, extra = {}) {
   const filter = { organization: req.user.organization._id, ...extra };
-  if (req.user.role === 'agent') filter.assignedTo = req.user._id;
+  if (isRestrictedUser(req.user)) filter.assignedTo = req.user._id;
   return filter;
 }
 
@@ -95,7 +97,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // POST /api/mail/send — Send email to customer
-router.post('/send', async (req, res, next) => {
+router.post('/send', apiPermission('mail.create'), async (req, res, next) => {
   try {
     const organization = req.user.organization._id;
     const { customerId, templateId, subject: rawSubject, body: rawBody } = req.body;
@@ -173,7 +175,7 @@ router.post('/send', async (req, res, next) => {
 });
 
 // POST /api/mail/templates — Create email template
-router.post('/templates', async (req, res, next) => {
+router.post('/templates', apiPermission('mail.create'), async (req, res, next) => {
   try {
     const organization = req.user.organization._id;
     const { name, category, subject, body } = req.body;
@@ -212,7 +214,7 @@ router.post('/templates', async (req, res, next) => {
 });
 
 // PUT /api/mail/templates/:id — Update email template
-router.put('/templates/:id', async (req, res, next) => {
+router.put('/templates/:id', apiPermission('mail.update'), async (req, res, next) => {
   try {
     const organization = req.user.organization._id;
     const template = await EmailTemplate.findOne({ _id: req.params.id, organization });
@@ -245,7 +247,7 @@ router.put('/templates/:id', async (req, res, next) => {
 });
 
 // DELETE /api/mail/templates/:id — Delete email template
-router.delete('/templates/:id', async (req, res, next) => {
+router.delete('/templates/:id', apiPermission('mail.delete'), async (req, res, next) => {
   try {
     const organization = req.user.organization._id;
     const template = await EmailTemplate.findOne({ _id: req.params.id, organization });
@@ -271,7 +273,7 @@ router.delete('/templates/:id', async (req, res, next) => {
 });
 
 // POST /api/mail/settings — Update SMTP settings
-router.post('/settings', async (req, res, next) => {
+router.post('/settings', apiPermission('mail.update'), async (req, res, next) => {
   try {
     const organization = req.user.organization._id;
     const { name, fromName, fromEmail, replyTo, smtpHost, smtpPort, smtpUsername, smtpPassword, smtpSecure } = req.body;

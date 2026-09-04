@@ -9,6 +9,7 @@ interface TopBarProps {
   activeCompany: Company | null;
   companies: Company[];
   onSwitchCompany: (companyId: string) => Promise<void>;
+  onToggleMobile?: () => void;
 }
 
 const THEME_PRESETS = [
@@ -46,16 +47,14 @@ function LiveClock() {
     const id = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
-  // IST = UTC + 5:30
-  const ist = new Date(time.getTime() + (5.5 * 60 * 60 * 1000) - (time.getTimezoneOffset() * 60 * 1000));
   return (
     <span className="live-clock topbar-live-clock">
-      {ist.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+      {time.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
     </span>
   );
 }
 
-export default function TopBar({ user, activeCompany, companies, onSwitchCompany }: TopBarProps) {
+export default function TopBar({ user, activeCompany, companies, onSwitchCompany, onToggleMobile }: TopBarProps) {
   const { logout } = useAuth();
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -140,7 +139,7 @@ export default function TopBar({ user, activeCompany, companies, onSwitchCompany
         className="mobile-menu-btn"
         type="button"
         aria-label="Toggle Mobile Menu"
-        onClick={() => document.querySelector('.sidebar')?.classList.toggle('mobile-open')}
+        onClick={onToggleMobile}
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />

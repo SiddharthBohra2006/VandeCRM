@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { teamApi, TeamMember, CustomRole, TeamSummary, TeamMemberInput } from '../../api/team';
+import { teamApi, TeamMember, CustomRole, TeamSummary, TeamMemberInput, WorkTypeLite, LeadFieldLite } from '../../api/team';
 import { Company } from '../../api/companies';
 import { useAuth } from '../../contexts/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -19,6 +19,8 @@ export default function TeamPage() {
   const [roleDefinitions, setRoleDefinitions] = useState<Record<string, { label: string; description?: string }>>({});
   const [permissionModules, setPermissionModules] = useState<string[]>([]);
   const [permissionActions, setPermissionActions] = useState<string[]>([]);
+  const [workTypes, setWorkTypes] = useState<WorkTypeLite[]>([]);
+  const [leadFields, setLeadFields] = useState<LeadFieldLite[]>([]);
   const [teamSummary, setTeamSummary] = useState<TeamSummary>({ total: 0, active: 0, inactive: 0 });
 
   const [loading, setLoading] = useState(true);
@@ -41,6 +43,8 @@ export default function TeamPage() {
   const searchQuery = searchParams.get('q') || '';
   const statusFilter = searchParams.get('status') || '';
   const roleFilter = searchParams.get('role') || '';
+
+  const moduleOptions = ['businesses', 'tasks', ...permissionModules.filter(m => m !== 'businesses' && m !== 'tasks')];
 
   // Add Member State
   const [showAddMember, setShowAddMember] = useState(false);
@@ -71,10 +75,24 @@ export default function TeamPage() {
   // Role Form State
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [editingRole, setEditingRole] = useState<CustomRole | null>(null);
-  const [roleForm, setRoleForm] = useState<{ name: string; scope: 'organization' | 'assigned'; permissions: string[] }>({
+  const [roleForm, setRoleForm] = useState<{
+    name: string;
+    scope: 'organization' | 'assigned';
+    permissions: string[];
+    leadFieldsConfigured: boolean;
+    leadVisible: string[];
+    leadEditable: string[];
+    workActions: Record<string, string[]>;
+    editableFields: Record<string, string[]>;
+  }>({
     name: '',
     scope: 'assigned',
     permissions: [],
+    leadFieldsConfigured: false,
+    leadVisible: [],
+    leadEditable: [],
+    workActions: {},
+    editableFields: {},
   });
   const [savingRole, setSavingRole] = useState(false);
 
@@ -98,6 +116,8 @@ export default function TeamPage() {
       setRoleDefinitions(res.roleDefinitions || {});
       setPermissionModules(res.permissionModules || []);
       setPermissionActions(res.permissionActions || []);
+      setWorkTypes(res.workTypes || []);
+      setLeadFields(res.leadFields || []);
       setTeamSummary(res.teamSummary || { total: 0, active: 0, inactive: 0 });
     } catch (err: any) {
       setError(err.message || 'Failed to load team data');
@@ -160,6 +180,7 @@ export default function TeamPage() {
       customRole: member.customRole?._id || '',
       assignedCompanies: userCompanyIds,
       isActive: member.isActive !== false,
+      hiddenModules: member.hiddenModules || [],
     });
   }
 
@@ -183,15 +204,15 @@ export default function TeamPage() {
   function handleDeleteMember(memberId: string, memberName: string) {
     setConfirmState({
       open: true,
-      title: 'Delete Team Member',
-      message: `Delete team member "${memberName}"? This cannot be undone.`,
+      title: 'Deactivate Team Member',
+      message: `Deactivate team member "${memberName}"? The account will be marked inactive and workspace access removed while preserving historical logs and assignments.`,
       action: async () => {
         try {
           await teamApi.delete(memberId);
-          setSuccess(`Team member "${memberName}" deleted.`);
+          setSuccess(`Team member "${memberName}" deactivated.`);
           await loadTeamData();
         } catch (err: any) {
-          setError(err.message || 'Failed to delete member');
+          setError(err.message || 'Failed to deactivate member');
         } finally {
           setConfirmState(prev => ({ ...prev, open: false }));
         }
@@ -199,18 +220,49 @@ export default function TeamPage() {
     });
   }
 
+  async function handleReactivateMember(memberId: string, memberName: string) {
+    try {
+      await teamApi.update(memberId, { isActive: true });
+      setSuccess(`Team member "${memberName}" reactivated.`);
+      await loadTeamData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to reactivate member');
+    }
+  }
+
   function openCreateRole() {
     setEditingRole(null);
-    setRoleForm({ name: '', scope: 'assigned', permissions: [] });
+    setRoleForm({
+      name: '',
+      scope: 'assigned',
+      permissions: [],
+      leadFieldsConfigured: false,
+      leadVisible: [],
+      leadEditable: [],
+      workActions: {},
+      editableFields: {},
+    });
     setShowRoleModal(true);
   }
 
   function openEditRole(role: CustomRole) {
     setEditingRole(role);
+    const leadAccess = role.leadFieldPermissions || { configured: false, visible: [], editable: [] };
+    const workActions: Record<string, string[]> = {};
+    const editableFields: Record<string, string[]> = {};
+    (role.workTypePermissions || []).forEach(perm => {
+      workActions[String(perm.workTypeId)] = perm.actions || [];
+      editableFields[String(perm.workTypeId)] = perm.editableFieldKeys || [];
+    });
     setRoleForm({
       name: role.name,
       scope: role.scope,
       permissions: role.permissions || [],
+      leadFieldsConfigured: Boolean(leadAccess.configured),
+      leadVisible: leadAccess.visible || [],
+      leadEditable: leadAccess.editable || [],
+      workActions,
+      editableFields,
     });
     setShowRoleModal(true);
   }
@@ -224,17 +276,60 @@ export default function TeamPage() {
     }));
   }
 
+  function toggleInArray(arr: string[], value: string): string[] {
+    return arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value];
+  }
+
+  function toggleLeadVisible(key: string) {
+    setRoleForm(prev => ({ ...prev, leadVisible: toggleInArray(prev.leadVisible, key) }));
+  }
+
+  function toggleLeadEditable(key: string) {
+    setRoleForm(prev => ({ ...prev, leadEditable: toggleInArray(prev.leadEditable, key) }));
+  }
+
+  function toggleWorkAction(workTypeId: string, action: string) {
+    setRoleForm(prev => ({
+      ...prev,
+      workActions: { ...prev.workActions, [workTypeId]: toggleInArray(prev.workActions[workTypeId] || [], action) },
+    }));
+  }
+
+  function toggleEditableField(workTypeId: string, field: string) {
+    setRoleForm(prev => ({
+      ...prev,
+      editableFields: { ...prev.editableFields, [workTypeId]: toggleInArray(prev.editableFields[workTypeId] || [], field) },
+    }));
+  }
+
   async function handleSaveRole(e: React.FormEvent) {
     e.preventDefault();
     if (!roleForm.name.trim()) return;
     try {
       setSavingRole(true);
       setError('');
+      const payload = {
+        name: roleForm.name,
+        scope: roleForm.scope,
+        permissions: roleForm.permissions,
+        leadFieldPermissions: {
+          configured: roleForm.leadFieldsConfigured,
+          visible: roleForm.leadVisible,
+          editable: roleForm.leadEditable,
+        },
+        workTypePermissions: workTypes
+          .map(workType => ({
+            workTypeId: workType._id,
+            actions: roleForm.workActions[workType._id] || [],
+            editableFieldKeys: roleForm.editableFields[workType._id] || [],
+          }))
+          .filter(perm => perm.actions.length),
+      };
       if (editingRole) {
-        await teamApi.updateRole(editingRole._id, roleForm);
+        await teamApi.updateRole(editingRole._id, payload);
         setSuccess(`Custom role "${roleForm.name}" updated.`);
       } else {
-        await teamApi.createRole(roleForm);
+        await teamApi.createRole(payload);
         setSuccess(`Custom role "${roleForm.name}" created.`);
       }
       setShowRoleModal(false);
@@ -432,6 +527,33 @@ export default function TeamPage() {
                 </label>
               </div>
 
+              <div style={{ marginBottom: '1rem' }}>
+                <span style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
+                  Hide modules for this member
+                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {moduleOptions.map(mod => (
+                    <label
+                      key={mod}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', padding: '0.25rem 0.6rem', border: '1px solid var(--border)', borderRadius: '999px', cursor: 'pointer' }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={(newMember.hiddenModules || []).includes(mod)}
+                        onChange={e => {
+                          const hidden = newMember.hiddenModules || [];
+                          setNewMember({
+                            ...newMember,
+                            hiddenModules: e.target.checked ? [...new Set([...hidden, mod])] : hidden.filter(m => m !== mod),
+                          });
+                        }}
+                      />
+                      {mod}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               <button className="btn primary" type="submit" disabled={addingMember}>
                 {addingMember ? 'Creating...' : 'Create Team Member'}
               </button>
@@ -565,13 +687,24 @@ export default function TeamPage() {
                             Edit
                           </button>
                           {user?._id !== member._id && (
-                            <button
-                              type="button"
-                              className="btn small danger"
-                              onClick={() => handleDeleteMember(member._id, member.name)}
-                            >
-                              Delete
-                            </button>
+                            member.isActive !== false ? (
+                              <button
+                                type="button"
+                                className="btn small danger"
+                                onClick={() => handleDeleteMember(member._id, member.name)}
+                              >
+                                Deactivate
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn small"
+                                style={{ borderColor: 'var(--teal)', color: 'var(--teal)' }}
+                                onClick={() => handleReactivateMember(member._id, member.name)}
+                              >
+                                Reactivate
+                              </button>
+                            )
                           )}
                         </div>
                       </td>
@@ -728,6 +861,33 @@ export default function TeamPage() {
                 />
                 Active Account
               </label>
+
+              <div>
+                <span style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
+                  Hide modules for this member
+                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {moduleOptions.map(mod => (
+                    <label
+                      key={mod}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', padding: '0.25rem 0.6rem', border: '1px solid var(--border)', borderRadius: '999px', cursor: 'pointer' }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={(editForm.hiddenModules || []).includes(mod)}
+                        onChange={e => {
+                          const hidden = editForm.hiddenModules || [];
+                          setEditForm({
+                            ...editForm,
+                            hiddenModules: e.target.checked ? [...new Set([...hidden, mod])] : hidden.filter(m => m !== mod),
+                          });
+                        }}
+                      />
+                      {mod}
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1.5rem' }}>
@@ -823,6 +983,106 @@ export default function TeamPage() {
                   </table>
                 </div>
               </div>
+
+              {leadFields.length > 0 && (
+                <div>
+                  <strong style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.5rem' }}>Lead field access</strong>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', marginBottom: '0.5rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={roleForm.leadFieldsConfigured}
+                      onChange={e => setRoleForm({ ...roleForm, leadFieldsConfigured: e.target.checked })}
+                    />
+                    Limit this role to selected lead fields
+                  </label>
+                  <p style={{ color: 'var(--muted)', fontSize: '0.75rem', margin: '0 0 0.5rem' }}>
+                    Checked under View can be seen. Checked under Edit can be changed and is automatically visible.
+                  </p>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          <th style={{ padding: '0.4rem 0.6rem', textAlign: 'left' }}>Field</th>
+                          <th style={{ padding: '0.4rem 0.6rem', textAlign: 'center' }}>View</th>
+                          <th style={{ padding: '0.4rem 0.6rem', textAlign: 'center' }}>Edit</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leadFields.map(field => (
+                          <tr key={field._id} style={{ borderBottom: '1px solid var(--border)' }}>
+                            <td style={{ padding: '0.4rem 0.6rem', fontWeight: 700 }}>{field.label || field.key}</td>
+                            <td style={{ padding: '0.4rem 0.6rem', textAlign: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={roleForm.leadVisible.includes(field.key)}
+                                onChange={() => toggleLeadVisible(field.key)}
+                              />
+                            </td>
+                            <td style={{ padding: '0.4rem 0.6rem', textAlign: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={roleForm.leadEditable.includes(field.key)}
+                                onChange={() => toggleLeadEditable(field.key)}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {workTypes.length > 0 && (
+                <div>
+                  <strong style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.5rem' }}>Work module access</strong>
+                  {workTypes.map(workType => {
+                    const editableFieldOptions = [
+                      'title', 'clientCompany', 'assignedTo', 'collaborators', 'secondaryAssignee',
+                      'status', 'priority', 'deadline', 'startDate', 'deliveredAt', 'notes',
+                      ...(workType.fields || []).map(f => f.key),
+                    ];
+                    return (
+                      <fieldset
+                        key={workType._id}
+                        style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '0.75rem', marginBottom: '0.75rem' }}
+                      >
+                        <legend style={{ fontSize: '0.8rem', fontWeight: 800, padding: '0 0.35rem' }}>{workType.name}</legend>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                          {permissionActions.map(action => {
+                            const checked = (roleForm.workActions[workType._id] || []).includes(action);
+                            return (
+                              <label
+                                key={action}
+                                style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.76rem', padding: '0.25rem 0.6rem', border: '1px solid var(--border)', borderRadius: '999px', cursor: 'pointer' }}
+                              >
+                                <input type="checkbox" checked={checked} onChange={() => toggleWorkAction(workType._id, action)} />
+                                {action}
+                              </label>
+                            );
+                          })}
+                        </div>
+                        <small style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '0.35rem' }}>Editable fields</small>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                          {editableFieldOptions.map(field => {
+                            const checked = (roleForm.editableFields[workType._id] || []).includes(field);
+                            const label = field.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
+                            return (
+                              <label
+                                key={field}
+                                style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.76rem', padding: '0.25rem 0.6rem', border: '1px solid var(--border)', borderRadius: '999px', cursor: 'pointer' }}
+                              >
+                                <input type="checkbox" checked={checked} onChange={() => toggleEditableField(workType._id, field)} />
+                                {label}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </fieldset>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem' }}>

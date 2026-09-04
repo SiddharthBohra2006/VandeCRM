@@ -281,59 +281,6 @@ const reportBuilders = {
   'source-attribution': getSourceAttributionReport
 };
 
-// GET /api/reports/:reportKey
-router.get('/:reportKey', async (req, res, next) => {
-  try {
-    const builder = reportBuilders[req.params.reportKey];
-    if (!builder) return res.status(404).json({ ok: false, error: 'Report not found' });
-    const report = await builder(req, await getReportFilters(req));
-    res.json({ ok: true, reportKey: req.params.reportKey, report, query: req.query });
-  } catch (error) { next(error); }
-});
-
-// GET /api/reports/:reportKey/export.csv — returns CSV string in envelope
-router.get('/:reportKey/export.csv', async (req, res, next) => {
-  try {
-    const builder = reportBuilders[req.params.reportKey];
-    if (!builder) return res.status(404).json({ ok: false, error: 'Report not found' });
-    const report = await builder(req, await getReportFilters(req));
-    res.json({ ok: true, filename: `${req.params.reportKey}.csv`, csv: toCsv(report.columns, report.rows) });
-  } catch (error) { next(error); }
-});
-
-// GET /api/reports/:reportKey/export.pdf — returns base64 PDF in envelope
-router.get('/:reportKey/export.pdf', async (req, res, next) => {
-  try {
-    const builder = reportBuilders[req.params.reportKey];
-    if (!builder) return res.status(404).json({ ok: false, error: 'Report not found' });
-    const report = await builder(req, await getReportFilters(req));
-    const pdf = createSimpleReportPdf(report.title, reportDateLabel(req.query), report.columns, report.rows);
-    res.json({ ok: true, filename: `${req.params.reportKey}.pdf`, base64: Buffer.from(pdf).toString('base64') });
-  } catch (error) { next(error); }
-});
-
-async function moduleReportContext(req) {
-  const organization = req.user.organization._id;
-  const workTypes = (await WorkType.find({ organization, clientCompany: req.activeCompanyId, isActive: true }).sort({ order: 1, name: 1 }))
-    .filter(workType => hasWorkPermission(req.user, workType, 'view'));
-  const saved = req.query.saved ? await SavedReport.findOne({ _id: req.query.saved, organization, clientCompany: req.activeCompanyId, user: req.user._id }) : null;
-  const query = saved ? { ...saved.config, saved: String(saved._id) } : req.query;
-  const workType = workTypes.find(item => [String(item._id), item.key].includes(String(query.module))) || workTypes[0];
-  if (!workType) return { workTypes, workType: null, saved, query, users: [], savedReports: [], config: null, report: { columns: ['Group', 'Record count'], rows: [], totalRecords: 0 } };
-  const config = normalizeConfig(query, workType);
-  if (config.owner && !/^[a-f0-9]{24}$/i.test(config.owner)) config.owner = '';
-  const filter = { organization, workspace: req.activeCompanyId, module: workType._id, ...getDateRangeFilter(config.dateFrom, config.dateTo) };
-  if (config.status) filter.status = config.status;
-  if (config.owner) filter.assignedTo = config.owner;
-  if (isRestrictedUser(req.user)) filter.$or = [{ assignedTo: req.user._id }, { collaborators: req.user._id }, { secondaryAssignee: req.user._id }];
-  const [items, users, savedReports] = await Promise.all([
-    CustomRecord.find(filter).populate('assignedTo').sort({ createdAt: -1 }),
-    User.find({ organization, isActive: true }).sort({ name: 1 }),
-    SavedReport.find({ organization, clientCompany: req.activeCompanyId, user: req.user._id }).sort({ name: 1 })
-  ]);
-  return { workTypes, workType, saved, query, users, savedReports, config, options: reportOptions(workType), report: buildModuleReport(items, workType, config) };
-}
-
 // GET /api/reports/module-builder
 router.get('/module-builder', async (req, res, next) => {
   try {
@@ -392,6 +339,37 @@ router.delete('/module-builder/:id', async (req, res, next) => {
     if (!activeWorkspace) return;
     await SavedReport.deleteOne({ _id: req.params.id, organization: req.user.organization._id, clientCompany: activeWorkspace, user: req.user._id });
     res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
+// GET /api/reports/:reportKey
+router.get('/:reportKey', async (req, res, next) => {
+  try {
+    const builder = reportBuilders[req.params.reportKey];
+    if (!builder) return res.status(404).json({ ok: false, error: 'Report not found' });
+    const report = await builder(req, await getReportFilters(req));
+    res.json({ ok: true, reportKey: req.params.reportKey, report, query: req.query });
+  } catch (error) { next(error); }
+});
+
+// GET /api/reports/:reportKey/export.csv — returns CSV string in envelope
+router.get('/:reportKey/export.csv', async (req, res, next) => {
+  try {
+    const builder = reportBuilders[req.params.reportKey];
+    if (!builder) return res.status(404).json({ ok: false, error: 'Report not found' });
+    const report = await builder(req, await getReportFilters(req));
+    res.json({ ok: true, filename: `${req.params.reportKey}.csv`, csv: toCsv(report.columns, report.rows) });
+  } catch (error) { next(error); }
+});
+
+// GET /api/reports/:reportKey/export.pdf — returns base64 PDF in envelope
+router.get('/:reportKey/export.pdf', async (req, res, next) => {
+  try {
+    const builder = reportBuilders[req.params.reportKey];
+    if (!builder) return res.status(404).json({ ok: false, error: 'Report not found' });
+    const report = await builder(req, await getReportFilters(req));
+    const pdf = createSimpleReportPdf(report.title, reportDateLabel(req.query), report.columns, report.rows);
+    res.json({ ok: true, filename: `${req.params.reportKey}.pdf`, base64: Buffer.from(pdf).toString('base64') });
   } catch (error) { next(error); }
 });
 

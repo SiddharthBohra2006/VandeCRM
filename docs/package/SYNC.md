@@ -57,3 +57,12 @@
   - Section 7: Built reusable `<ConfirmDialog>` component in `client/src/components/ConfirmDialog.tsx` and replaced native `window.confirm()` calls across all pages.
   - Section 8: Master Gap Report updated in `GAP_REPORT.md` with complete parity matrix and ownership breakdown.
   - Full verification: `npx tsc --noEmit` exit 0, `npm run build` exit 0, `node --check` exit 0.
+
+## 2026-09-04 — User-authorized migration fixes
+The owner requested Codex to fix the realstatusmigration.md findings across the historical domain boundaries. SEC-01: restored the EJS audit.view gate in the Audit API; six synthetic tests of the actual staged router passed (admin, manager, agent, client, granted custom role, hidden module). No database access or CRM data mutation. Other audit findings remain open.
+
+SEC-02/03/04/10 permission gates: restored EJS view/action policies in six domain routers. 32 synthetic tests passed against actual staged routers. Credential projection, recipient scope and other associated sub-findings remain open.
+SEC-09 and SEC-03 credential response protection: tested nested Mongoose/lean responses across four roles. API JSON omits password/reset material and encrypted credentials; API keys require integrations.update. Tests preserve IDs, Dates, JWT token fields and primitive values. Internal database/authentication queries and data are unchanged.
+SEC-06: workspace access now revalidated per JWT request using current organization, active status and membership. Forged headers ignored; switch recovery remains available. Login/switch manager access aligned with existing /me policy; terminology projection restored. Six isolated middleware scenarios passed.
+DATA-01 fixed: sparse imports retain omitted numbers, stage and existing fields; explicit zero works; Mongoose Map custom fields preserved. Import preview/execution apply submitted mappings and preview recognizes same-file duplicates. Actual handlers tested with synthetic documents and mocked persistence. Remaining import workflow/UI findings still open.
+Work repair: four mutation parent/item lookups now enforce assigned scope. Invalid embedded populate removed; subtasks use CustomRecord.parentRecord with create permission, eligible owner/date checks, inherited customer, collaborator access, audit and notification. UI sends owner ID with correct input type. Status membership and terminal completion timestamp repaired. Isolated handler tests and full staged client TypeScript passed. General work field/reference validation remains open.

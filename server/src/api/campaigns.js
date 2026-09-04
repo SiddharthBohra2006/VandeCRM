@@ -11,6 +11,8 @@ const { logAudit } = require('../utils/audit');
 
 const router = express.Router();
 router.use(requireApiAuth);
+const apiPermission = require('./middleware/permission');
+router.use(apiPermission('ads.view'));
 
 const platformOptions = ['Meta Ads', 'Google Ads', 'LinkedIn Ads', 'YouTube', 'TikTok', 'Email Marketing', 'SEO', 'Other'];
 const statusOptions = ['draft', 'active', 'paused', 'completed', 'archived'];

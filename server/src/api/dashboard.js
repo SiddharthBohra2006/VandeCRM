@@ -1,5 +1,5 @@
 const express = require('express');
-const { hasPermission, hasWorkPermission, isRestrictedUser, INTERNAL_ROLES } = require('../config/roles');
+const { hasPermission, hasWorkPermission, isRestrictedUser, INTERNAL_ROLES, canAccessLeadField } = require('../config/roles');
 const { requireApiAuth } = require('./middleware/auth');
 const Customer = require('../models/Customer');
 const CrmStage = require('../models/CrmStage');
@@ -31,11 +31,29 @@ const asList = value => Array.isArray(value) ? value.map(String) : value ? [Stri
 const cardKeys = value => (Array.isArray(value) ? value : String(value || '').split(','))
   .map(item => String(item).trim()).filter(item => /^[a-z0-9_-]+$/i.test(item)).slice(0, 200);
 
+function sanitizeDashboardCustomer(customer, user) {
+  if (!customer || !canAccessLeadField) return customer;
+  const isDoc = typeof customer.toObject === 'function';
+  const plain = isDoc ? customer.toObject() : { ...customer };
+  if (!plain.customData) return plain;
+  const filtered = {};
+  const entries = plain.customData instanceof Map
+    ? plain.customData.entries()
+    : typeof plain.customData.entries === 'function'
+      ? plain.customData.entries()
+      : Object.entries(plain.customData);
+  for (const [k, v] of entries) {
+    if (canAccessLeadField(user, k, 'view')) filtered[k] = v;
+  }
+  plain.customData = filtered;
+  return plain;
+}
+
 router.post('/preferences/sidebar', async (req, res, next) => {
   try {
     const activeWorkspace = workspace(req, res);
     if (!activeWorkspace) return;
-    const allowed = ['nav-task-center', 'nav-portfolio', 'nav-pipeline', 'nav-database', 'nav-tasks', 'nav-analytics', 'nav-reports', 'nav-mail', 'nav-companies', 'nav-campaigns', 'nav-team', 'nav-settings', 'nav-audit'];
+    const allowed = ['nav-task-center', 'nav-portfolio', 'nav-pipeline', 'nav-database', 'nav-clients', 'nav-tasks', 'nav-analytics', 'nav-reports', 'nav-mail', 'nav-companies', 'nav-campaigns', 'nav-team', 'nav-settings', 'nav-audit'];
     const workTypes = await WorkType.find({ organization: req.user.organization._id, clientCompany: activeWorkspace }).select('key').lean();
     allowed.push(...workTypes.map(type => `nav-work-${type.key}`));
     req.user.sidebarHiddenItems = asList(req.body.hiddenItems).filter(item => allowed.includes(item));
@@ -100,17 +118,46 @@ router.get('/', async (req, res, next) => {
     const customerFilter = { organization, clientCompany: activeWorkspace };
     if (req.query.campaign) customerFilter.campaign = req.query.campaign;
     if (isRestrictedUser(req.user)) customerFilter.assignedTo = req.user._id;
+    const canViewLeads = hasPermission(req.user, 'businesses.view');
     const canViewAds = hasPermission(req.user, 'ads.view');
     const visibleWorkTypes = (await WorkType.find({ organization, clientCompany: activeWorkspace, isActive: true }).sort({ order: 1, name: 1 }))
       .filter(type => hasWorkPermission(req.user, type, 'view'));
     const [allStages, customers, customFields, campaigns, workItems, dashboardViews] = await Promise.all([
       CrmStage.find({ organization, clientCompany: activeWorkspace }).sort({ order: 1, createdAt: 1 }),
-      Customer.find(customerFilter).populate('stage labels assignedTo clientCompany campaign').sort({ updatedAt: -1 }),
+      canViewLeads ? Customer.find(customerFilter).populate('stage labels assignedTo clientCompany campaign').sort({ updatedAt: -1 }) : [],
       CustomField.find({ organization, clientCompany: activeWorkspace, entity: 'customer', isActive: true }).sort({ order: 1, createdAt: 1 }),
       canViewAds ? Campaign.find({ organization, clientCompany: activeWorkspace }).sort({ name: 1 }) : [],
       CustomRecord.find({ organization, module: { $in: visibleWorkTypes.map(type => type._id) }, workspace: activeWorkspace, ...(isRestrictedUser(req.user) ? { $or: [{ assignedTo: req.user._id }, { collaborators: req.user._id }, { secondaryAssignee: req.user._id }] } : {}) }).populate('workType').select('title status deadline deliveredAt notes createdAt updatedAt module'),
       DashboardView.find({ organization, user: req.user._id }).sort({ name: 1 })
     ]);
+
+    let activeDashboardView = null;
+    const viewKey = req.query.dashboardView || req.query.view;
+    if (viewKey) {
+      const isId = /^[a-f\d]{24}$/i.test(String(viewKey));
+      activeDashboardView = await DashboardView.findOne({
+        organization,
+        user: req.user._id,
+        ...(isId ? { _id: viewKey } : { name: viewKey })
+      });
+    }
+
+    const dashboardHiddenCards = activeDashboardView ? (activeDashboardView.hiddenCards || []) : (req.user.dashboardHiddenCards || []);
+    const dashboardCardOrder = activeDashboardView ? (activeDashboardView.cardOrder || []) : (req.user.dashboardCardOrder || []);
+    const dashboardHiddenSections = activeDashboardView ? (activeDashboardView.hiddenSections || []) : (req.user.dashboardHiddenSections || []);
+    const customFieldMetrics = activeDashboardView ? (activeDashboardView.customFieldMetrics || []) : [];
+
+    const dashboardFieldCounts = customFields.map(field => {
+      let total = 0;
+      for (const customer of customers) {
+        const data = customer.customData;
+        if (!data) continue;
+        const value = typeof data.get === 'function' ? data.get(field.key) : data[field.key];
+        if (value !== undefined && value !== null && value !== '' && value !== false) total += 1;
+      }
+      return { key: field.key, label: field.label, total };
+    });
+
     const populatedStages = new Set(customers.filter(item => item.stage).map(item => String(item.stage._id)));
     const stages = allStages.filter(stage => stage.isActive || populatedStages.has(String(stage._id)));
     const stageCards = stages.map(stage => {
@@ -135,14 +182,14 @@ router.get('/', async (req, res, next) => {
       return { label, date, count: items.length, isToday: date.toDateString() === now.toDateString(), items: items.slice(0, 6).map(item => ({ _id: item._id, title: item.title, module: item.workType?.name || 'Work', type: item.workType?.key || 'task', completedAt: item.deliveredAt || item.updatedAt, status: item.status })) };
     });
     const attentionCustomers = [...followupsDue, ...staleCustomers].filter((item, index, list) => list.findIndex(other => String(other._id) === String(item._id)) === index).slice(0, 6);
-    const recentActivities = await Activity.find({
+    const recentActivities = canViewLeads ? await Activity.find({
       organization,
       ...(isRestrictedUser(req.user) ? { customer: { $in: customers.map(customer => customer._id) } } : {})
-    }).populate('customer user').sort({ createdAt: -1 }).limit(30);
+    }).populate('customer user').sort({ createdAt: -1 }).limit(30) : [];
     const auditFilter = movementAuditFilter(organization, workItems, campaigns);
     const movementAudits = auditFilter ? await AuditLog.find(auditFilter).populate('user', 'name').sort({ createdAt: -1 }).limit(30) : [];
-    const recentMovements = dashboardMovements(hasPermission(req.user, 'businesses.view') ? recentActivities : [], movementAudits, visibleWorkTypes);
-    const movementSamples = sampleMovements(visibleWorkTypes, hasPermission(req.user, 'businesses.view'), canViewAds, now);
+    const recentMovements = dashboardMovements(canViewLeads ? recentActivities : [], movementAudits, visibleWorkTypes);
+    const movementSamples = sampleMovements(visibleWorkTypes, canViewLeads, canViewAds, now);
     res.json({
       ok: true,
       stats: { totalLeads: activeCustomers.length, totalClients: wonCustomers.length, newThisWeek: activeCustomers.filter(item => item.createdAt >= weekAgo).length, followupsDue: followupsDue.length, staleCustomers: staleCustomers.length, openWork: workItems.filter(isOpenWork).length, completedWork: workItems.filter(isComplete).length, overdue: workItems.filter(item => isOpenWork(item) && item.deadline && item.deadline < now).length, adSpend: campaigns.reduce((sum, item) => sum + (item.spent || 0), 0), deliveredPercent: workItems.length ? Math.round(workItems.filter(isComplete).length / workItems.length * 100) : 0 },
@@ -150,15 +197,21 @@ router.get('/', async (req, res, next) => {
       moduleStats: visibleWorkTypes.map(type => { const records = workItems.filter(item => String(item.workType?._id) === String(type._id)); return { key: type.key, name: type.name, icon: type.icon, color: type.color, total: records.length, open: records.filter(isOpenWork).length, completed: records.filter(isComplete).length, statuses: type.statuses.map(status => ({ key: status.key, label: status.label, count: records.filter(item => item.status === status.key).length })) }; }),
       upcomingDeadlines: workItems.filter(item => isOpenWork(item) && item.deadline && item.deadline <= nextWeek).sort((a, b) => a.deadline - b.deadline).slice(0, 6),
       weeklyWorkProgress,
-      recentCustomers: customers.slice(0, 6), attentionCustomers, campaigns, dashboardViews,
+      recentCustomers: customers.slice(0, 6).map(customer => sanitizeDashboardCustomer(customer, req.user)), attentionCustomers, campaigns, dashboardViews,
       availableDashboardFields: customFields, totalCustomers: customers.length,
       totalValue: activeCustomers.reduce((sum, item) => sum + (item.value || 0), 0),
-      dashboardCardsCustomized: req.user.dashboardCardsCustomized || false,
-      dashboardHiddenCards: req.user.dashboardHiddenCards || [],
-      dashboardCardOrder: req.user.dashboardCardOrder || [],
-      dashboardHiddenSections: req.user.dashboardHiddenSections || [],
+      dashboardCardsCustomized: Boolean(activeDashboardView) || req.user.dashboardCardsCustomized || false,
+      dashboardHiddenCards,
+      dashboardCardOrder,
+      dashboardHiddenSections,
+      customFieldMetrics,
+      customFieldMetrics,
+      activeDashboardViewId: activeDashboardView ? String(activeDashboardView._id) : null,
+      dashboardFieldCounts,
       recentMovements,
-      movementSamples
+      movementSamples,
+      canViewLeads,
+      canViewAds
     });
   } catch (error) { next(error); }
 });

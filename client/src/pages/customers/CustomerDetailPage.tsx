@@ -1,6 +1,7 @@
 import { CSSProperties, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { CustomerDetailResponse, customersApi } from '../../api/customers';
+import { downloadAuthenticatedFile } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { CustomerInput } from '../../types';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -59,6 +60,7 @@ export default function CustomerDetailPage() {
   const [uploadCategory, setUploadCategory] = useState('proposal');
   const [uploadNotes, setUploadNotes] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
 
   async function load(customerId: string) {
@@ -164,40 +166,48 @@ export default function CustomerDetailPage() {
 
   async function handleUploadAttachment(e: React.FormEvent) {
     e.preventDefault();
-    if (!id || !uploadFile) {
+    const files = uploadFiles.length > 0 ? uploadFiles : (uploadFile ? [uploadFile] : []);
+    if (!id || files.length === 0) {
       setError('Please select a file to upload.');
-      return;
-    }
-    if (uploadFile.size > 3 * 1024 * 1024) {
-      setError('File must be 3 MB or smaller.');
       return;
     }
     try {
       setUploading(true);
       setError('');
-      const reader = new FileReader();
-      reader.onload = async event => {
-        try {
-          const fileData = String(event.target?.result || '');
-          await customersApi.uploadAttachment(id, {
-            fileData,
-            originalName: uploadFile.name,
-            category: uploadCategory,
-            notes: uploadNotes,
-          });
-          setUploadFile(null);
-          setUploadNotes('');
-          setSuccess('File uploaded successfully.');
-          await load(id);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Upload failed');
-        } finally {
-          setUploading(false);
+      let uploadedCount = 0;
+      let skipped = 0;
+      for (const file of files) {
+        if (file.size > 3 * 1024 * 1024) {
+          skipped += 1;
+          continue;
         }
-      };
-      reader.readAsDataURL(uploadFile);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Upload failed');
+        const fileData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = event => resolve(String(event.target?.result || ''));
+          reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+          reader.readAsDataURL(file);
+        });
+        await customersApi.uploadAttachment(id, {
+          fileData,
+          originalName: file.name,
+          category: uploadCategory,
+          notes: uploadNotes,
+        });
+        uploadedCount += 1;
+      }
+      setUploadFile(null);
+      setUploadFiles([]);
+      setUploadNotes('');
+      if (uploadedCount > 0) {
+        setSuccess(skipped > 0 ? `${uploadedCount} file${uploadedCount === 1 ? '' : 's'} uploaded. ${skipped} skipped (3 MB limit).` : `${uploadedCount} file${uploadedCount === 1 ? '' : 's'} uploaded successfully.`);
+        await load(id);
+      } else {
+        const err = new Error(skipped > 0 ? 'None uploaded. Files must be 3 MB or smaller.' : 'Upload failed.');
+        setError(err.message);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
       setUploading(false);
     }
   }
@@ -540,8 +550,9 @@ export default function CustomerDetailPage() {
                         </select>
                         <input
                           type="file"
+                          multiple
                           accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.txt,.csv"
-                          onChange={e => setUploadFile(e.target.files?.[0] || null)}
+                          onChange={e => { setUploadFile(e.target.files?.[0] || null); setUploadFiles([...(e.target.files || [])]); }}
                           style={{ fontSize: '0.78rem' }}
                         />
                       </div>
@@ -552,8 +563,8 @@ export default function CustomerDetailPage() {
                         onChange={e => setUploadNotes(e.target.value)}
                         style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.78rem' }}
                       />
-                      <button className="btn btn-primary" type="submit" disabled={uploading || !uploadFile} style={{ alignSelf: 'flex-start' }}>
-                        {uploading ? 'Uploading...' : 'Upload File'}
+                      <button className="btn btn-primary" type="submit" disabled={uploading || (uploadFiles.length === 0 && !uploadFile)} style={{ alignSelf: 'flex-start' }}>
+                        {uploading ? 'Uploading...' : uploadFiles.length > 1 ? `Upload ${uploadFiles.length} Files` : 'Upload File'}
                       </button>
                     </form>
                   </div>
@@ -573,14 +584,14 @@ export default function CustomerDetailPage() {
                               </div>
                             </div>
                             <div style={{ display: 'flex', gap: '6px' }}>
-                              <a
+                              <button
+                                type="button"
                                 className="btn btn-secondary"
                                 style={{ padding: '2px 8px', fontSize: '0.72rem' }}
-                                href={`/api/customers/${customer._id}/attachments/${file._id}/download`}
-                                download
+                                onClick={() => downloadAuthenticatedFile(`/customers/${customer._id}/attachments/${file._id}/download`, file.originalName)}
                               >
                                 Download
-                              </a>
+                              </button>
                               <button
                                 className="btn btn-danger"
                                 style={{ padding: '2px 8px', fontSize: '0.72rem' }}

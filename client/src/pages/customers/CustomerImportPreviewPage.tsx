@@ -24,9 +24,12 @@ export default function CustomerImportPreviewPage() {
     defaultStageId?: string;
     defaultAssignedToId?: string;
     defaultClientCompanyId?: string;
+    defaultNextFollowUpAt?: string;
+    defaultFollowUpComment?: string;
   };
 
   const [importing, setImporting] = useState(false);
+  const [error, setError] = useState('');
 
   if (!state.preview || !state.csvData) {
     return (
@@ -51,12 +54,17 @@ export default function CustomerImportPreviewPage() {
   const handleImport = async () => {
     try {
       setImporting(true);
+      setError('');
       const res = await customersApi.import({
         csvData: state.csvData!,
         csvFileName: state.csvFileName,
         duplicateRule: state.duplicateRule,
+        mappings: state.mappings,
         defaultStageId: state.defaultStageId,
         defaultAssignedToId: state.defaultAssignedToId,
+        defaultClientCompanyId: state.defaultClientCompanyId,
+        defaultNextFollowUpAt: state.defaultNextFollowUpAt,
+        defaultFollowUpComment: state.defaultFollowUpComment,
       });
       navigate('/customers/import/results', {
         state: {
@@ -68,7 +76,7 @@ export default function CustomerImportPreviewPage() {
         }
       });
     } catch (err: any) {
-      alert(err.message || 'Import failed');
+      setError(err.message || 'Import failed');
       setImporting(false);
     }
   };
@@ -82,12 +90,16 @@ export default function CustomerImportPreviewPage() {
           <p className="page-subtitle">Review column mappings, warnings, and matching rules before executing.</p>
         </div>
         <div className="actions" style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
-          <Link className="btn secondary outline" to="/customers/import">Back to Mapping</Link>
+          <button type="button" className="btn secondary outline" onClick={() => navigate('/customers/import', { state })}>
+            Back to Mapping
+          </button>
           <button className="btn primary" disabled={preview.totalRows === 0 || importing} onClick={handleImport}>
             {importing ? 'Importing…' : `Import ${preview.totalRows} rows`}
           </button>
         </div>
       </section>
+
+      {error && <div className="notice danger" style={{ margin: '0 0 1rem' }}>{error}</div>}
 
       <section className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', marginBottom: '1rem' }}>
         <div className="metric-card"><span>Total rows</span><strong>{preview.totalRows}</strong></div>

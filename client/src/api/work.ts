@@ -118,6 +118,7 @@ export interface WorkDetailResponse {
   auditLog: any[];
   users: any[];
   customers: any[];
+  relatedItems: { _id: string; title: string; workType?: { name: string } }[];
 }
 
 export const workApi = {
@@ -132,7 +133,7 @@ export const workApi = {
   updateStatus: (type: string, id: string, status: string) =>
     api.post<{ ok: true }>(`/work/${type}/${id}/status`, { status }),
   delete: (type: string, id: string) => api.delete<{ ok: true }>(`/work/${type}/${id}`),
-  createSubtask: (type: string, id: string, data: Partial<WorkSubtask>) =>
+  createSubtask: (type: string, id: string, data: Omit<Partial<WorkSubtask>, 'assignedTo'> & { assignedTo?: string | null }) =>
     api.post<{ ok: true; data: WorkSubtask }>(`/work/${type}/${id}/subtasks`, data),
   importCsv: (type: string, data: { csvText?: string; rows?: any[] }) =>
     api.post<{ ok: true; created: number; skipped: number }>(`/work/${type}/import`, data),

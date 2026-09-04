@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { portfolioApi, PortfolioResponse } from '../../api/portfolio';
+import { useAuth } from '../../contexts/AuthContext';
 
 function formatIn(value: number) {
   return Number(value || 0).toLocaleString('en-IN');
@@ -11,11 +12,22 @@ function initials(name: string) {
 }
 
 export default function PortfolioPage() {
+  const { switchCompany } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const detail = searchParams.get('detail') || '';
   const [data, setData] = useState<PortfolioResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  async function handleOpenDashboard(companyId: string) {
+    try {
+      await switchCompany(companyId);
+      navigate('/');
+    } catch (e: any) {
+      setError(e.message || 'Failed to switch workspace');
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -123,7 +135,17 @@ export default function PortfolioPage() {
             </dl>
             <footer>
               <span>{item.company.category || 'Uncategorized business'}</span>
-              <Link to={`/companies/${item.company._id}`}>Settings →</Link>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn small"
+                  style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+                  onClick={() => handleOpenDashboard(item.company._id)}
+                >
+                  Open dashboard
+                </button>
+                <Link to={`/companies/${item.company._id}`}>Settings →</Link>
+              </div>
             </footer>
           </article>
         ))}

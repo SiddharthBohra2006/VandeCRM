@@ -14,8 +14,24 @@ export default function AppLayout() {
       return true;
     }
   });
+  const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Close the mobile drawer on route selection (matches sidebar overlay behavior)
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  // Close the mobile drawer on Escape / backdrop click
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMobileOpen(false);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [mobileOpen]);
 
   const toggleSidebar = () => {
     setSidebarOpen(prev => {
@@ -40,6 +56,10 @@ export default function AppLayout() {
 
   return (
     <div className="app-layout">
+      <div
+        className={`sidebar-backdrop ${mobileOpen ? 'show' : ''}`}
+        onClick={() => setMobileOpen(false)}
+      />
       <Sidebar
         user={user}
         activeCompany={activeCompany}
@@ -50,6 +70,8 @@ export default function AppLayout() {
         onToggle={toggleSidebar}
         onSwitchCompany={switchCompany}
         currentPath={location.pathname}
+        mobileOpen={mobileOpen}
+        onCloseMobile={() => setMobileOpen(false)}
       />
       <div className={`main-wrap ${sidebarOpen ? '' : 'expanded'}`}>
         <TopBar
@@ -57,9 +79,10 @@ export default function AppLayout() {
           activeCompany={activeCompany}
           companies={companies}
           onSwitchCompany={switchCompany}
+          onToggleMobile={() => setMobileOpen(v => !v)}
         />
         <div className="page-content">
-          <Outlet />
+          <Outlet key={activeCompany?._id || 'default'} />
         </div>
       </div>
     </div>

@@ -5,6 +5,10 @@ const User = require('../models/User');
 
 const router = express.Router();
 router.use(requireApiAuth);
+const { hasPermission } = require('../config/roles');
+router.use((req, res, next) => hasPermission(req.user, 'audit.view')
+  ? next()
+  : res.status(403).json({ ok: false, error: 'Access denied' }));
 
 // GET /api/audit — Fetch audit logs with filtering
 router.get('/', async (req, res, next) => {

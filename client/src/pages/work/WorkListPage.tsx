@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { workApi, WorkType, WorkItem, WorkTypeField } from '../../api/work';
 import { useAuth } from '../../contexts/AuthContext';
+import { parseCsv } from '../../utils/importCsv';
 
 type ViewMode = 'list' | 'board' | 'calendar' | 'overview';
 
@@ -24,10 +25,12 @@ export default function WorkListPage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [workType, setWorkType] = useState<WorkType | null>(null);
+const [workType, setWorkType] = useState<WorkType | null>(null);
   const [items, setItems] = useState<WorkItem[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -73,25 +76,31 @@ export default function WorkListPage() {
     return map;
   }, [workType]);
 
-  useEffect(() => {
+useEffect(() => {
     loadWorkList();
-  }, [type, searchParams]);
+  }, [type, searchParams, page]);
 
   async function loadWorkList() {
     try {
       setLoading(true);
       setError('');
-      const params: Record<string, string> = { pageSize: '200' };
+      const params: Record<string, string> = { pageSize: '100', page: String(page) };
       if (currentStatus) params.status = currentStatus;
       if (currentPriority) params.priority = currentPriority;
       if (searchQuery) params.q = searchQuery;
       if (month && activeView === 'calendar') params.month = month;
+      const configuredFilters = workType?.presentation?.filterFields || [];
+      if (configuredFilters.includes('assignedTo') && searchParams.get('assignedTo')) params.assignedTo = searchParams.get('assignedTo') || '';
+      searchParams.forEach((value, key) => {
+        if (key.startsWith('cf_') && value) params[key] = value;
+      });
 
       const res = await workApi.list(type, params);
       setWorkType(res.workType);
-      setItems(res.data || []);
+      setItems(page === 1 ? (res.data || []) : prev => [...prev, ...(res.data || [])]);
       setUsers(res.users || []);
       setCustomers(res.customers || []);
+      setTotalResults(res.pagination?.totalResults ?? (res.data || []).length);
 
       if (!form.status && res.workType?.statuses?.length) {
         setForm(prev => ({ ...prev, status: res.workType.statuses[0].key }));
@@ -103,9 +112,10 @@ export default function WorkListPage() {
     }
   }
 
-  function setParam(key: string, value: string) {
+function setParam(key: string, value: string) {
     const updated = new URLSearchParams(searchParams);
     if (value) updated.set(key, value); else updated.delete(key);
+    setPage(1);
     setSearchParams(updated);
   }
 
@@ -202,19 +212,22 @@ export default function WorkListPage() {
     }
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       const text = String(reader.result || '');
       setImportCsvText(text);
-      const lines = text.split(/\r?\n/).filter(line => line.trim());
-      if (lines.length > 0) {
-        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-        const rows = lines.slice(1, 6).map(line => line.split(',').map(c => c.trim().replace(/^"|"$/g, '')));
-        setImportHeaders(headers);
-        setImportPreviewRows(rows);
+      try {
+        const parsed = parseCsv(text);
+        if (parsed.length > 0) {
+          setImportHeaders(parsed[0]);
+          setImportPreviewRows(parsed.slice(1, 6));
+        }
+      } catch {
+        setImportHeaders(['title', 'status', 'assignedTo', 'priority', 'deadline', 'notes']);
+        setImportPreviewRows([]);
       }
     };
     reader.readAsText(file);
@@ -396,22 +409,78 @@ export default function WorkListPage() {
         </form>
       )}
 
-      {/* Filter Bar (list/board views) */}
+{/* Filter Bar (list/board views) */}
       {activeView !== 'overview' && (
         <div className="work-filters" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1rem' }}>
-          <select value={currentStatus} onChange={e => handleFilterChange('status', e.target.value)} style={{ minWidth: '150px' }}>
-            <option value="">All statuses</option>
-            {(workType?.statuses || []).map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
-          <select value={currentPriority} onChange={e => handleFilterChange('priority', e.target.value)} style={{ minWidth: '130px' }}>
-            <option value="">All priorities</option>
-            <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-          </select>
-          {(currentStatus || currentPriority) && (
-            <button type="button" className="btn small" onClick={() => setSearchParams(new URLSearchParams({ view: activeView }))}>Reset Filters</button>
+          {(workType?.presentation?.filterFields || ['status', 'assignedTo', 'priority']).map(filterKey => {
+            if (filterKey === 'status') {
+              return (
+                <select key={filterKey} value={currentStatus} onChange={e => handleFilterChange('status', e.target.value)} style={{ minWidth: '150px' }}>
+                  <option value="">All statuses</option>
+                  {(workType?.statuses || []).map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                </select>
+              );
+            }
+            if (filterKey === 'priority') {
+              return (
+                <select key={filterKey} value={currentPriority} onChange={e => handleFilterChange('priority', e.target.value)} style={{ minWidth: '130px' }}>
+                  <option value="">All priorities</option>
+                  <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+                </select>
+              );
+            }
+            if (filterKey === 'assignedTo' || filterKey === 'secondaryAssignee') {
+              return (
+                <select key={filterKey} value={searchParams.get(filterKey === 'assignedTo' ? 'assignedTo' : 'secondaryAssignee') || ''} onChange={e => handleFilterChange(filterKey === 'assignedTo' ? 'assignedTo' : 'secondaryAssignee', e.target.value)} style={{ minWidth: '150px' }}>
+                  <option value="">All {filterKey === 'assignedTo' ? 'owners' : 'secondary assignees'}</option>
+                  {users.map(u => <option key={u._id} value={u._id}>{u.name}</option>)}
+                </select>
+              );
+            }
+            if (filterKey.startsWith('custom:')) {
+              const customField = workType?.fields?.find(f => `custom:${f.key}` === filterKey);
+              if (!customField) return null;
+              const qp = `cf_${customField.key}`;
+              const current = searchParams.get(qp) || '';
+              if (customField.type === 'select' || customField.type === 'status') {
+                const options = Array.isArray(customField.options) ? customField.options : [];
+                return (
+                  <select key={filterKey} value={current} onChange={e => handleFilterChange(qp, e.target.value)} style={{ minWidth: '150px' }}>
+                    <option value="">All {customField.label}</option>
+                    {options.map((opt: any) => <option key={String(opt)} value={String(opt)}>{String(opt)}</option>)}
+                  </select>
+                );
+              }
+              if (customField.type === 'checkbox') {
+                return (
+                  <select key={filterKey} value={current} onChange={e => handleFilterChange(qp, e.target.value)} style={{ minWidth: '130px' }}>
+                    <option value="">All {customField.label}</option>
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                  </select>
+                );
+              }
+              return (
+                <input
+                  key={filterKey}
+                  type={customField.type === 'number' ? 'number' : 'text'}
+                  placeholder={customField.label}
+                  value={current}
+                  onChange={e => handleFilterChange(qp, e.target.value)}
+                  style={{ minWidth: '150px', padding: '6px 10px', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--panel)', color: 'var(--text)', fontSize: '0.8rem' }}
+                />
+              );
+            }
+            return null;
+          })}
+          {(currentStatus || currentPriority || searchParams.get('assignedTo') || searchParams.get('secondaryAssignee') || [...searchParams.keys()].some(k => k.startsWith('cf_'))) && (
+            <button type="button" className="btn small" onClick={() => { setPage(1); setSearchParams(new URLSearchParams({ view: activeView })); }}>Reset Filters</button>
           )}
         </div>
       )}
+
+      {/* Overview View */}
+      {activeView === 'overview' && renderOverview()}
 
       {/* Board View */}
       {activeView === 'board' && (
@@ -545,8 +614,28 @@ export default function WorkListPage() {
                 );
               })}
             </tbody>
-          </table>
+</table>
         </section>
+      )}
+
+      {/* Pagination / Load more */}
+      {(activeView === 'list' || activeView === 'board') && totalResults > 0 && (
+        <div className="work-pagination" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '0.75rem' }}>
+          <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+            Showing {Math.min(items.length, totalResults)} of {totalResults} records
+          </span>
+          {items.length < totalResults && (
+            <button
+              type="button"
+              className="btn small"
+              onClick={() => setPage(page + 1)}
+              disabled={loading}
+              style={{ fontWeight: 600 }}
+            >
+              {loading ? 'Loading…' : 'Load more'}
+            </button>
+          )}
+        </div>
       )}
       {/* Import CSV Modal */}
       {showImport && (
@@ -656,7 +745,127 @@ export default function WorkListPage() {
               </div>
             );
           })}
+</div>
+      </section>
+    );
+  }
+
+  function renderOverview() {
+    const overviewGroups = (workType?.presentation?.overviewGroupFields || []).filter(key => fieldMap.has(key));
+    const overviewSteps = (workType?.presentation?.overviewProgressFields || []).filter(key => fieldMap.has(key));
+    const completeValue = String(workType?.presentation?.overviewCompleteValue || 'Done').toLowerCase();
+
+    const pendingCount = items.filter(i => /pending|not.?started|todo/i.test(i.status) || /pending|not.?started|todo/i.test(statusLabels[i.status])).length;
+    const startedCount = items.filter(i => /started|queued|assigned/i.test(i.status) || /started|queued|assigned/i.test(statusLabels[i.status])).length;
+    const inProgressCount = items.filter(i => /progress|active|working/i.test(i.status) || /progress|active|working/i.test(statusLabels[i.status])).length;
+    const reviewCount = items.filter(i => /review|qa|testing/i.test(i.status) || /review|qa|testing/i.test(statusLabels[i.status])).length;
+    const revisionCount = items.filter(i => /revision|change|blocked|rejected/i.test(i.status) || /revision|change|blocked|rejected/i.test(statusLabels[i.status])).length;
+    const completedCount = items.filter(i => workType?.statuses?.find(s => s.key === i.status)?.isTerminalWon || /done|completed|delivered|approved|won/i.test(i.status)).length;
+
+    const groupKey = overviewGroups[0] || 'customer';
+
+    const grouped = new Map<string, WorkItem[]>();
+    items.forEach(item => {
+      const gVal = displayValue(item, groupKey) || 'Unassigned';
+      if (!grouped.has(gVal)) grouped.set(gVal, []);
+      grouped.get(gVal)!.push(item);
+    });
+
+    return (
+      <section className="work-overview" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
+          <div className="stat-card" style={{ padding: '12px', textAlign: 'left' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--muted)', fontWeight: 600 }}>Total records</span>
+            <strong style={{ fontSize: '1.4rem', display: 'block', color: 'var(--text)' }}>{items.length}</strong>
+            <small style={{ color: 'var(--muted)', fontSize: '0.68rem' }}>All records</small>
+          </div>
+          <div className="stat-card" style={{ padding: '12px', textAlign: 'left' }}>
+            <span style={{ fontSize: '0.72rem', color: '#d97706', fontWeight: 600 }}>Pending</span>
+            <strong style={{ fontSize: '1.4rem', display: 'block', color: 'var(--text)' }}>{pendingCount}</strong>
+            <small style={{ color: 'var(--muted)', fontSize: '0.68rem' }}>Not started</small>
+          </div>
+          <div className="stat-card" style={{ padding: '12px', textAlign: 'left' }}>
+            <span style={{ fontSize: '0.72rem', color: '#7c3aed', fontWeight: 600 }}>Started</span>
+            <strong style={{ fontSize: '1.4rem', display: 'block', color: 'var(--text)' }}>{startedCount}</strong>
+            <small style={{ color: 'var(--muted)', fontSize: '0.68rem' }}>Queued / Assigned</small>
+          </div>
+          <div className="stat-card" style={{ padding: '12px', textAlign: 'left' }}>
+            <span style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: 600 }}>In Progress</span>
+            <strong style={{ fontSize: '1.4rem', display: 'block', color: 'var(--text)' }}>{inProgressCount}</strong>
+            <small style={{ color: 'var(--muted)', fontSize: '0.68rem' }}>Active work</small>
+          </div>
+          <div className="stat-card" style={{ padding: '12px', textAlign: 'left' }}>
+            <span style={{ fontSize: '0.72rem', color: '#ea580c', fontWeight: 600 }}>Review / Revision</span>
+            <strong style={{ fontSize: '1.4rem', display: 'block', color: 'var(--text)' }}>{reviewCount + revisionCount}</strong>
+            <small style={{ color: 'var(--muted)', fontSize: '0.68rem' }}>QA & feedback</small>
+          </div>
+          <div className="stat-card" style={{ padding: '12px', textAlign: 'left' }}>
+            <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600 }}>Completed</span>
+            <strong style={{ fontSize: '1.4rem', display: 'block', color: 'var(--text)' }}>{completedCount}</strong>
+            <small style={{ color: 'var(--muted)', fontSize: '0.68rem' }}>Delivered / Done</small>
+          </div>
         </div>
+
+        <section className="table-card" style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                <th style={{ padding: '0.75rem 1rem', fontSize: '0.78rem', color: 'var(--muted)' }}>{fieldMap.get(groupKey)?.label || 'Group / Client'}</th>
+                <th style={{ padding: '0.75rem 1rem', fontSize: '0.78rem', color: 'var(--muted)' }}>Items</th>
+                {overviewSteps.map(step => (
+                  <th key={step} style={{ padding: '0.75rem 1rem', fontSize: '0.78rem', color: 'var(--muted)' }}>{fieldMap.get(step)?.label || step}</th>
+                ))}
+                <th style={{ padding: '0.75rem 1rem', fontSize: '0.78rem', color: 'var(--muted)' }}>Progress</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.length === 0 ? (
+                <tr><td colSpan={overviewSteps.length + 3} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--muted)' }}>No records to display in overview.</td></tr>
+              ) : Array.from(grouped.entries()).map(([groupName, groupItems]) => {
+                const totalInGroup = groupItems.length;
+                const completedInGroup = groupItems.filter(i => workType?.statuses?.find(s => s.key === i.status)?.isTerminalWon || /done|completed|delivered/i.test(i.status)).length;
+                const pct = totalInGroup > 0 ? Math.round((completedInGroup / totalInGroup) * 100) : 0;
+                return (
+                  <tr key={groupName} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '0.75rem 1rem', fontWeight: 700 }}>
+                      {groupName}
+                      <small style={{ display: 'block', color: 'var(--muted)', fontWeight: 400 }}>{totalInGroup} item{totalInGroup === 1 ? '' : 's'}</small>
+                    </td>
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {groupItems.map(gi => (
+                          <Link key={gi._id} to={`/work/${type}/${gi._id}`} style={{ fontSize: '0.82rem', color: 'var(--gold)' }}>{gi.title}</Link>
+                        ))}
+                      </div>
+                    </td>
+                    {overviewSteps.map(step => (
+                      <td key={step} style={{ padding: '0.75rem 1rem', fontSize: '0.82rem' }}>
+                        {groupItems.map(gi => {
+                          const val = displayValue(gi, step);
+                          const isDone = String(val).toLowerCase() === completeValue || /done|completed|yes|approved/i.test(String(val));
+                          return (
+                            <div key={gi._id} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ color: isDone ? '#059669' : '#d97706', fontSize: '0.75rem' }}>{isDone ? '✓' : '○'}</span>
+                              <span>{val}</span>
+                            </div>
+                          );
+                        })}
+                      </td>
+                    ))}
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ flex: 1, background: 'var(--border)', height: 6, borderRadius: 3, overflow: 'hidden', minWidth: 60 }}>
+                          <div style={{ width: `${pct}%`, background: 'var(--gold)', height: '100%' }} />
+                        </div>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>{pct}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
       </section>
     );
   }
