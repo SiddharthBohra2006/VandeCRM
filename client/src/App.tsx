@@ -11,6 +11,10 @@ import CustomersPage from './pages/customers/CustomersPage';
 import CustomerDetailPage from './pages/customers/CustomerDetailPage';
 import CustomerFormPage from './pages/customers/CustomerFormPage';
 import DuplicatesPage from './pages/customers/DuplicatesPage';
+import CustomerImportPage from './pages/customers/CustomerImportPage';
+import CustomerImportPreviewPage from './pages/customers/CustomerImportPreviewPage';
+import CustomerImportResultsPage from './pages/customers/CustomerImportResultsPage';
+import WorkImportPreviewPage from './pages/work/WorkImportPreviewPage';
 import ClientsPage from './pages/clients/ClientsPage';
 import CompaniesPage from './pages/companies/CompaniesPage';
 import CompanyDetailPage from './pages/companies/CompanyDetailPage';
@@ -66,6 +70,9 @@ export default function App() {
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/customers/new" element={<CustomerFormPage />} />
             <Route path="/customers/duplicates" element={<DuplicatesPage />} />
+            <Route path="/customers/import" element={<CustomerImportPage />} />
+            <Route path="/customers/import/preview" element={<CustomerImportPreviewPage />} />
+            <Route path="/customers/import/results" element={<CustomerImportResultsPage />} />
             <Route path="/customers/:id" element={<CustomerDetailPage />} />
             <Route path="/clients" element={<ClientsPage />} />
             <Route path="/client-dashboard" element={<ClientDashboardPage />} />
@@ -73,6 +80,7 @@ export default function App() {
             <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
             <Route path="/work" element={<WorkCenterPage />} />
             <Route path="/work/:type" element={<WorkListPage />} />
+            <Route path="/work/:type/import/preview" element={<WorkImportPreviewPage />} />
             <Route path="/work/:type/:id" element={<WorkDetailPage />} />
             <Route path="/team" element={<TeamPage />} />
             <Route path="/settings/setup" element={<SetupPage />} />

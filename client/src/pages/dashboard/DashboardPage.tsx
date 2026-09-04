@@ -1,4 +1,4 @@
-import { CSSProperties, DragEvent, useCallback, useEffect, useState } from 'react';
+import { CSSProperties, DragEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
@@ -80,7 +80,7 @@ interface DashboardResponse {
   recentCustomers: Customer[];
   attentionCustomers: Customer[];
   campaigns: { _id: string; name: string }[];
-  dashboardViews: { _id: string; name: string }[];
+  dashboardViews: { _id: string; name: string; hiddenSections?: string[]; cardOrder?: string[]; customFieldMetrics?: string[] }[];
   totalValue: number;
   totalCustomers: number;
   dashboardCardsCustomized?: boolean;
@@ -159,8 +159,12 @@ export default function DashboardPage() {
   const [editHidden, setEditHidden] = useState<Set<string>>(new Set());
   const [editOrder, setEditOrder] = useState<string[]>([]);
   const [editSections, setEditSections] = useState<Set<string>>(new Set());
+  const [savedSections, setSavedSections] = useState<Set<string>>(new Set());
   const [pinSearch, setPinSearch] = useState('');
   const [savingPrefs, setSavingPrefs] = useState(false);
+  const [viewName, setViewName] = useState('');
+  const [savingView, setSavingView] = useState(false);
+  const viewNameRef = useRef('');
   
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [dashboardDragKey, setDashboardDragKey] = useState<string | null>(null);
@@ -183,6 +187,14 @@ export default function DashboardPage() {
   }, [searchParams]);
 
   useEffect(() => { void loadDashboard(); }, [loadDashboard]);
+
+  useEffect(() => {
+    if (dashboard) {
+      const hidden = new Set(dashboard.dashboardHiddenSections || []);
+      setSavedSections(hidden);
+      setEditSections(new Set(hidden));
+    }
+  }, [dashboard]);
 
   async function moveCustomer(event: DragEvent, stageId: string) {
     event.preventDefault();
@@ -267,7 +279,7 @@ export default function DashboardPage() {
   const openCustomize = () => {
     setEditHidden(new Set(dashboard.dashboardHiddenCards || []));
     setEditOrder([...savedOrder, ...cards.map(c => c.key).filter(k => !(savedOrder || []).includes(k))]);
-    setEditSections(new Set(dashboard.dashboardHiddenSections || []));
+    setEditSections(new Set(savedSections));
     setPinSearch('');
     setCustomizeTab('cards');
     setCustomizeOpen(true);
@@ -301,6 +313,7 @@ export default function DashboardPage() {
         dashboardHiddenCards: [...editHidden],
         dashboardCardOrder: editOrder,
       });
+      setSavedSections(new Set(editSections));
       setCustomizeOpen(false);
       await loadDashboard();
     } catch (caught) {
@@ -383,7 +396,7 @@ export default function DashboardPage() {
       await api.post('/dashboard/preferences/dashboard', {
         dashboardCardOrder: newOrder,
         dashboardHiddenCards: [...hiddenCards],
-        hiddenSections: [...editSections]
+        hiddenSections: [...savedSections]
       });
     } catch (_) {}
   };
@@ -457,7 +470,7 @@ export default function DashboardPage() {
       )}
 
       <section className="dashboard-summary-grid">
-        {!editSections.has('work-progress') && (
+        {!savedSections.has('work-progress') && (
           <article className="dashboard-luxury-card work-progress-card">
             <header className="luxury-card-head">
               <div className="luxury-card-title">
@@ -511,7 +524,7 @@ export default function DashboardPage() {
           </article>
         )}
 
-        {!editSections.has('deadlines') && (
+        {!savedSections.has('deadlines') && (
           <article className="dashboard-luxury-card deadlines-card">
             <header className="luxury-card-head">
               <div className="luxury-card-title">
@@ -542,7 +555,7 @@ export default function DashboardPage() {
           </article>
         )}
 
-        {!editSections.has('attention') && (
+        {!savedSections.has('attention') && (
           <article className="dashboard-luxury-card attention-card">
             <header className="luxury-card-head">
               <div className="luxury-card-title">
@@ -575,7 +588,7 @@ export default function DashboardPage() {
         )}
       </section>
 
-      {!editSections.has('pipeline') && (
+      {!savedSections.has('pipeline') && (
         <section className="dashboard-pipeline-section" aria-label="Active pipeline">
           <div className="section-head">
             <h2>Active pipeline</h2>
@@ -621,7 +634,7 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {!editSections.has('recent') && (
+      {!savedSections.has('recent') && (
         <section className="dashboard-movements-section">
           <div className="section-head">
             <h2>Recent movements</h2>
@@ -858,7 +871,10 @@ export default function DashboardPage() {
                   <span>Reset to default</span>
                 </button>
                 <div className="modal-footer-right">
-                  <button className="btn" type="button" onClick={() => setCustomizeOpen(false)}>Cancel</button>
+                  <button className="btn" type="button" onClick={() => {
+                    setEditSections(new Set(savedSections));
+                    setCustomizeOpen(false);
+                  }}>Cancel</button>
                   <button
                     className="btn primary"
                     type="submit"
@@ -869,6 +885,52 @@ export default function DashboardPage() {
                   </button>
                 </div>
               </div>
+            </form>
+
+            {dashboard.dashboardViews && dashboard.dashboardViews.length > 0 && (
+              <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', marginBottom: '0.4rem' }}>Saved Views</div>
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  {dashboard.dashboardViews.map(v => (
+                    <button key={v._id} className="btn secondary outline" type="button" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }} onClick={() => {
+                      setSavedSections(new Set(v.hiddenSections || []));
+                      setEditSections(new Set(v.hiddenSections || []));
+                      setEditOrder(v.cardOrder || []);
+                    }}>{v.name}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <form className="dashboard-layout-save" style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid var(--border)', display: 'flex', gap: '0.5rem', alignItems: 'center' }}
+              onSubmit={async e => {
+                e.preventDefault();
+                const name = viewNameRef.current || viewName;
+                if (!name.trim()) return;
+                try {
+                  setSavingView(true);
+                  await api.post('/dashboard/preferences/dashboard/views', {
+                    name: name.trim(),
+                    hiddenSections: [...editSections],
+                    cardOrder: editOrder,
+                  });
+                  setViewName('');
+                  await loadDashboard();
+                } catch (_) {}
+                setSavingView(false);
+              }}
+            >
+              <input
+                type="text"
+                placeholder="Name this layout"
+                required
+                value={viewName}
+                onChange={e => { viewNameRef.current = e.target.value; setViewName(e.target.value); }}
+                style={{ flex: 1, padding: '0.4rem 0.6rem', fontSize: '0.8rem', background: 'var(--input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 6 }}
+              />
+              <button className="btn secondary" type="submit" disabled={savingView} style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                {savingView ? 'Saving…' : 'Save as view'}
+              </button>
             </form>
           </div>
         </div>
