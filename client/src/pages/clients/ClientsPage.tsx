@@ -3,6 +3,26 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { clientsApi, ClientsListResponse } from '../../api/clients';
 
+const AVATAR_PALETTES = [
+  { bg: '#eff6ff', color: '#2563eb' },
+  { bg: '#ecfdf5', color: '#059669' },
+  { bg: '#faf5ff', color: '#7c3aed' },
+  { bg: '#f0fdfa', color: '#0d9488' },
+  { bg: '#fdf2f8', color: '#db2777' },
+  { bg: '#fff7ed', color: '#ea580c' },
+  { bg: '#fffbeb', color: '#d97706' }
+];
+
+function getAvatarColor(str: string) {
+  let hash = 0;
+  for (let i = 0; i < (str || '').length; i++) hash = (hash << 5) - hash + str.charCodeAt(i);
+  return AVATAR_PALETTES[Math.abs(hash) % AVATAR_PALETTES.length];
+}
+
+function initialsOf(name: string) {
+  return (name || 'C').split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'C';
+}
+
 export default function ClientsPage() {
   const { crmTerms } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -43,33 +63,35 @@ export default function ClientsPage() {
   if (error && !data) return <div className="alert alert-error">{error}</div>;
   if (!data) return null;
 
-  const { data: clients, stages, labels, campaigns, users, pagination, clientStats } = data;
+  const { data: clients, stages, labels, campaigns, pagination, clientStats } = data;
   const view = searchParams.get('view') || 'all';
 
   return (
     <div className="page-container">
       <div className="page-header">
         <h1>{crmTerms.recordPlural} <span style={{ fontSize: '0.75rem', background: '#ffedd5', color: '#ea580c', padding: '2px 8px', borderRadius: 999, fontWeight: 800 }}>{clientStats.totalClients}</span></h1>
-        <Link to="/customers/new?scope=client" className="btn btn-primary">+ Add {crmTerms.recordSingular.toLowerCase()}</Link>
+        <div className="header-actions">
+          <Link to="/customers/new?scope=client" className="btn btn-primary">+ Add {crmTerms.recordSingular.toLowerCase()}</Link>
+        </div>
       </div>
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}
 
       {/* KPI Cards */}
       <div className="stats-bar" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', display: 'grid' }}>
-        <a className="stat-card" href="#/customers?view=new" style={{ display: 'block', textDecoration: 'none' }} onClick={e => { e.preventDefault(); handleFilterChange('view', 'new'); }}>
+        <a className="stat-card" href="#/clients?view=new" style={{ display: 'block', textDecoration: 'none' }} onClick={e => { e.preventDefault(); handleFilterChange('view', 'new'); }}>
           <span className="stat-value">{clientStats.newClients}</span>
-          <span className="stat-label">New {crmTerms.recordPlural.toLowerCase()}</span>
+          <span className="stat-label">New {crmTerms.recordPlural.toLowerCase()} (7d)</span>
         </a>
-        <a className="stat-card" href="#/customers" style={{ display: 'block', textDecoration: 'none' }} onClick={e => { e.preventDefault(); handleFilterChange('view', ''); }}>
+        <a className="stat-card" href="#/clients" style={{ display: 'block', textDecoration: 'none' }} onClick={e => { e.preventDefault(); handleFilterChange('view', ''); }}>
           <span className="stat-value">{clientStats.totalClients}</span>
           <span className="stat-label">Total {crmTerms.recordPlural.toLowerCase()}</span>
         </a>
-        <a className="stat-card" href="#/customers?view=high-value" style={{ display: 'block', textDecoration: 'none' }} onClick={e => { e.preventDefault(); handleFilterChange('view', 'high-value'); }}>
+        <a className="stat-card" href="#/clients?view=high-value" style={{ display: 'block', textDecoration: 'none' }} onClick={e => { e.preventDefault(); handleFilterChange('view', 'high-value'); }}>
           <span className="stat-value">₹{clientStats.totalValue.toLocaleString('en-IN')}</span>
           <span className="stat-label">Portfolio value</span>
         </a>
-        <a className="stat-card" href="#/customers?view=high-priority" style={{ display: 'block', textDecoration: 'none' }} onClick={e => { e.preventDefault(); handleFilterChange('view', 'high-priority'); }}>
+        <a className="stat-card" href="#/clients?view=high-priority" style={{ display: 'block', textDecoration: 'none' }} onClick={e => { e.preventDefault(); handleFilterChange('view', 'high-priority'); }}>
           <span className="stat-value">{clientStats.highPriorityCount || 0}</span>
           <span className="stat-label">High priority</span>
         </a>
@@ -120,32 +142,106 @@ export default function ClientsPage() {
           <thead>
             <tr>
               <th>Name</th>
-              <th>Email</th>
               <th>Phone</th>
-              <th>Stage</th>
+              <th>Email</th>
+              <th>Status</th>
+              <th>Priority</th>
               <th>Value</th>
-              <th>Assigned To</th>
-              <th>Won</th>
+              <th>Account Owner</th>
+              <th>Won Date</th>
             </tr>
           </thead>
           <tbody>
-            {clients.map(client => (
-              <tr key={client._id}>
-                <td><Link to={`/customers/${client._id}?from=clients`}>{client.name}</Link></td>
-                <td>{client.email}</td>
-                <td>{client.phone}</td>
-                <td>
-                  <span className="stage-badge" style={{ backgroundColor: client.stage?.color || '#64748b' }}>
-                    {client.stage?.name || 'No stage'}
-                  </span>
-                </td>
-                <td>₹{client.value?.toLocaleString('en-IN') || 0}</td>
-                <td>{client.assignedTo?.name || 'Unassigned'}</td>
-                <td>{new Date(client.createdAt).toLocaleDateString('en-IN')}</td>
-              </tr>
-            ))}
+            {clients.map(client => {
+              const pal = getAvatarColor(client.name);
+              const cleanPhone = (client.phone || '').replace(/\D/g, '');
+              const priority = (client.priority || 'medium').toLowerCase();
+              return (
+                <tr key={client._id}>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+                      <span className="lead-avatar-pill" style={{ background: pal.bg, color: pal.color, width: 28, height: 28, borderRadius: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 750, fontSize: '0.7rem' }}>
+                        {initialsOf(client.name)}
+                      </span>
+                      <div>
+                        <Link to={`/customers/${client._id}?from=clients`} style={{ fontWeight: 700, color: 'var(--text)', textDecoration: 'none' }}>
+                          {client.name}
+                        </Link>
+                        {client.company ? <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{client.company}</div> : null}
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                      {client.phone ? (
+                        <>
+                          <a href={`tel:${client.phone}`} style={{ color: 'var(--text)', textDecoration: 'none', fontWeight: 500, fontSize: '0.78rem' }}>
+                            {client.phone}
+                          </a>
+                          {cleanPhone && (
+                            <a
+                              href={`https://wa.me/${cleanPhone}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              title="Message on WhatsApp"
+                              style={{ color: '#10b981', display: 'inline-flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 700 }}
+                            >
+                              WA
+                            </a>
+                          )}
+                        </>
+                      ) : (
+                        <span style={{ color: 'var(--muted)', fontSize: '0.76rem' }}>—</span>
+                      )}
+                    </div>
+                  </td>
+                  <td>
+                    {client.email ? (
+                      <a href={`mailto:${client.email}`} style={{ color: 'var(--muted)', textDecoration: 'none', fontSize: '0.76rem' }}>
+                        {client.email}
+                      </a>
+                    ) : (
+                      <span style={{ color: 'var(--muted)', fontSize: '0.76rem' }}>—</span>
+                    )}
+                  </td>
+                  <td>
+                    <span
+                      className="stage-badge"
+                      style={{
+                        backgroundColor: client.stage?.color || '#059669',
+                        color: '#fff',
+                        padding: '3px 8px',
+                        borderRadius: 6,
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {client.stage?.name || 'Won'}
+                    </span>
+                  </td>
+                  <td>
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        textTransform: 'capitalize',
+                        background: priority === 'high' ? '#fee2e2' : priority === 'low' ? '#f0fdf4' : '#fef3c7',
+                        color: priority === 'high' ? '#dc2626' : priority === 'low' ? '#16a34a' : '#d97706',
+                      }}
+                    >
+                      {priority}
+                    </span>
+                  </td>
+                  <td>₹{(client.value || 0).toLocaleString('en-IN')}</td>
+                  <td>{client.assignedTo?.name || 'Unassigned'}</td>
+                  <td>{new Date(client.createdAt).toLocaleDateString('en-IN')}</td>
+                </tr>
+              );
+            })}
             {clients.length === 0 && (
-              <tr><td colSpan={7} className="empty-state">No {crmTerms.recordPlural.toLowerCase()} found.</td></tr>
+              <tr><td colSpan={8} className="empty-state">No {crmTerms.recordPlural.toLowerCase()} found.</td></tr>
             )}
           </tbody>
         </table>

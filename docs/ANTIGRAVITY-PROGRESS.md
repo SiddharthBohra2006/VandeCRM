@@ -129,5 +129,8 @@
   - Updated `client/src/api/customers.ts` with `addActivity`, `updateStage`, `transferLead`, `uploadAttachment`, `deleteAttachment`.
   - Enhanced `client/src/pages/customers/CustomersPage.tsx`: Lead initials avatar with deterministic palette, direct `tel:...` and `https://wa.me/...` contact links, 1-click inline stage dropdown update, priority color badges, currency formatting, and Duplicates page navigation button.
   - Enhanced `client/src/pages/customers/CustomerDetailPage.tsx`: Header contact action strip (Call, WhatsApp, Email, Edit, Delete), comprehensive tabbed Activity Composer (Note, Call, Email, WhatsApp, Meeting, Task) with follow-up date/time picker, quick reschedule buttons (+1 Day, +3 Days, +1 Week), timeline search & category filters, full attachment file uploader & downloader/remover, and live sidebar stage & owner controls.
-- **ALL ASSIGNED FUNCTIONAL DOMAINS + PARITY GAPS COMPLETE & VERIFIED (tsc exit 0, vite build exit 0, node syntax exit 0).**
+- **Clients (Won Customers) Sub-View Parity Complete:**
+  - Enhanced `client/src/pages/clients/ClientsPage.tsx` with deterministic avatar color circles, 1-click WhatsApp (`https://wa.me/...`) and direct phone call links, priority badges, formatted currency (`₹...`), won date formatting, and 4-card portfolio KPI metrics matching EJS client view.
+- **ALL ASSIGNED FUNCTIONAL DOMAINS + CLIENTS SUB-VIEW COMPLETE & VERIFIED (tsc exit 0, vite build exit 0, node syntax exit 0).**
+
 
