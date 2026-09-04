@@ -46,6 +46,12 @@ export default function WorkListPage() {
     customFields: {},
   });
 
+  const [showImport, setShowImport] = useState(false);
+  const [importCsvText, setImportCsvText] = useState('');
+  const [importHeaders, setImportHeaders] = useState<string[]>([]);
+  const [importPreviewRows, setImportPreviewRows] = useState<string[][]>([]);
+  const [importing, setImporting] = useState(false);
+
   const currentStatus = searchParams.get('status') || '';
   const currentPriority = searchParams.get('priority') || '';
   const searchQuery = searchParams.get('q') || '';
@@ -196,6 +202,44 @@ export default function WorkListPage() {
     }
   }
 
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || '');
+      setImportCsvText(text);
+      const lines = text.split(/\r?\n/).filter(line => line.trim());
+      if (lines.length > 0) {
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        const rows = lines.slice(1, 6).map(line => line.split(',').map(c => c.trim().replace(/^"|"$/g, '')));
+        setImportHeaders(headers);
+        setImportPreviewRows(rows);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  async function handleConfirmImport(e: React.FormEvent) {
+    e.preventDefault();
+    if (!type || !importCsvText) return;
+    try {
+      setImporting(true);
+      setError('');
+      const res = await workApi.importCsv(type, { csvText: importCsvText });
+      setSuccess(`Imported ${res.created} records (skipped ${res.skipped}).`);
+      setShowImport(false);
+      setImportCsvText('');
+      setImportHeaders([]);
+      setImportPreviewRows([]);
+      await loadWorkList();
+    } catch (err: any) {
+      setError(err.message || 'Failed to import CSV');
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function handleStatusDrag(itemId: string, newStatus: string) {
     if (!itemId || !newStatus) return;
     await handleQuickStatusChange(itemId, newStatus);
@@ -266,6 +310,14 @@ export default function WorkListPage() {
               )}
             </div>
           )}
+          <button
+            type="button"
+            className="btn small"
+            onClick={() => setShowImport(true)}
+            style={{ fontWeight: 600 }}
+          >
+            Import CSV
+          </button>
           <button type="button" className="btn primary" onClick={() => setShowCreate(!showCreate)}>
             {showCreate ? 'Cancel' : `+ Add ${type}`}
           </button>
@@ -495,6 +547,62 @@ export default function WorkListPage() {
             </tbody>
           </table>
         </section>
+      )}
+      {/* Import CSV Modal */}
+      {showImport && (
+        <div className="simple-dialog work-form-dialog" style={{ position: 'fixed', inset: 0, margin: 'auto', zIndex: 60, boxShadow: '0 24px 70px rgba(0,0,0,.35)', maxHeight: '85vh', overflowY: 'auto' }}>
+          <form onSubmit={handleConfirmImport} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Import {workType?.name || type} CSV</h2>
+              <button className="modal-close" type="button" onClick={() => setShowImport(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--muted)' }}>&times;</button>
+            </div>
+            <p className="page-subtitle" style={{ margin: 0, color: 'var(--muted)', fontSize: '0.82rem' }}>
+              Use headers: <code>title</code>, <code>status</code>, <code>assignedTo</code>, <code>priority</code>, <code>deadline</code>, <code>notes</code>, plus each custom-field key.
+            </p>
+            
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleFileChange}
+              style={{ border: '1px dashed var(--border)', padding: '1rem', borderRadius: '8px', background: 'var(--panel-muted)' }}
+            />
+
+            {importHeaders.length > 0 && (
+              <div style={{ marginTop: '0.5rem', border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{ padding: '0.5rem 0.75rem', background: 'var(--panel-muted)', borderBottom: '1px solid var(--border)', fontSize: '0.78rem', fontWeight: 800 }}>
+                  CSV Preview ({importPreviewRows.length} sample row{importPreviewRows.length === 1 ? '' : 's'})
+                </div>
+                <div style={{ overflowX: 'auto', maxHeight: '200px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--panel-muted)', borderBottom: '1px solid var(--border)' }}>
+                        {importHeaders.map((h, i) => (
+                          <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 700 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importPreviewRows.map((r, ri) => (
+                        <tr key={ri} style={{ borderBottom: '1px solid var(--border)' }}>
+                          {importHeaders.map((_, ci) => (
+                            <td key={ci} style={{ padding: '6px 10px' }}>{r[ci] || '—'}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <button className="btn" type="button" onClick={() => setShowImport(false)}>Cancel</button>
+              <button className="btn primary" type="submit" disabled={!importCsvText || importing}>
+                {importing ? 'Importing…' : 'Confirm Import'}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );

@@ -5,6 +5,7 @@ const { hasWorkPermission, isRestrictedUser } = require('../config/roles');
 const { isClosed, isComplete } = require('../utils/workCompletion');
 const { assignableWorkUsers } = require('../utils/workAssignments');
 const { logAudit } = require('../utils/audit');
+const { parseCsv, rowsToObjects } = require('../utils/csv');
 const CustomRecord = require('../models/CustomRecord');
 const WorkType = require('../models/WorkType');
 const Customer = require('../models/Customer');
@@ -201,14 +202,22 @@ router.get('/:type/:id', resolveWorkType, async (req, res, next) => {
     restrictToAssigned(filter, req.user);
 
     const item = await CustomRecord.findOne(filter)
-      .populate('workType assignedTo customer collaborators secondaryAssignee subtasks.assignedTo')
+      .populate('workType assignedTo customer collaborators secondaryAssignee subtasks.assignedTo createdBy')
       .lean();
 
     if (!item) {
       return res.status(404).json({ ok: false, error: 'Record not found.' });
     }
 
-    const [auditLog, users, customers] = await Promise.all([
+    const [childSubtasks, auditLog, users, customers] = await Promise.all([
+      CustomRecord.find({
+        organization,
+        workspace: activeWorkspace,
+        parentRecord: item._id,
+      })
+        .populate('assignedTo')
+        .sort({ createdAt: 1 })
+        .lean(),
       AuditLog.find({
         organization,
         entityType: 'custom_record',
@@ -222,11 +231,13 @@ router.get('/:type/:id', resolveWorkType, async (req, res, next) => {
       Customer.find({ organization, clientCompany: activeWorkspace }).select('name company email').sort({ name: 1 }).lean(),
     ]);
 
+    const combinedSubtasks = (childSubtasks && childSubtasks.length > 0) ? childSubtasks : (item.subtasks || []);
+
     res.json({
       ok: true,
       workType: req.workType,
       data: item,
-      subtasks: item.subtasks || [],
+      subtasks: combinedSubtasks,
       auditLog,
       users,
       customers,
@@ -471,6 +482,82 @@ router.post('/:type/:id/subtasks', resolveWorkType, async (req, res, next) => {
     await item.save();
 
     res.json({ ok: true, data: item.subtasks[item.subtasks.length - 1] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/work/:type/import — Bulk CSV import
+router.post('/:type/import', resolveWorkType, async (req, res, next) => {
+  try {
+    if (!hasWorkPermission(req.user, req.workType, 'create')) {
+      return res.status(403).json({ ok: false, error: 'Permission denied to create in this work area.' });
+    }
+
+    const activeWorkspace = String(req.activeCompanyId);
+    const organization = req.user.organization._id;
+    const { csvText, rows: inputRows } = req.body;
+
+    let rows = inputRows;
+    if (!rows && csvText) {
+      rows = rowsToObjects(parseCsv(csvText));
+    }
+
+    if (!Array.isArray(rows) || !rows.length) {
+      return res.status(400).json({ ok: false, error: 'No valid rows provided for import.' });
+    }
+
+    let created = 0;
+    let skipped = 0;
+    const defaultStatus = req.workType.statuses[0]?.key || 'pending';
+
+    for (const row of rows) {
+      const title = String(row.title || row.name || '').trim();
+      if (!title) {
+        skipped += 1;
+        continue;
+      }
+
+      const status = row.status && req.workType.statuses.some(s => s.key === row.status)
+        ? row.status
+        : defaultStatus;
+
+      const priority = priorities.includes(row.priority) ? row.priority : 'medium';
+      const deadline = row.deadline ? new Date(row.deadline) : null;
+      const notes = row.notes || '';
+
+      const customFields = {};
+      (req.workType.fields || []).forEach(f => {
+        const val = row[f.key] ?? row[f.label] ?? row[`custom_${f.key}`];
+        if (val !== undefined && val !== '') {
+          customFields[f.key] = val;
+        }
+      });
+
+      await CustomRecord.create({
+        organization,
+        workspace: activeWorkspace,
+        module: req.workType._id,
+        title,
+        status,
+        priority,
+        deadline,
+        notes,
+        customFields,
+        createdBy: req.user._id,
+      });
+
+      created += 1;
+    }
+
+    await logAudit(req, {
+      action: 'work_import',
+      entityType: 'custom_record',
+      entityName: req.workType.name,
+      message: `Imported ${created} ${req.workType.name} records from CSV (skipped ${skipped}).`,
+    });
+
+    res.json({ ok: true, created, skipped });
   } catch (error) {
     next(error);
   }

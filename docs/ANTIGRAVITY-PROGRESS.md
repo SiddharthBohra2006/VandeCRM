@@ -59,8 +59,9 @@
   - Registered route in `server/src/server.js` (`node --check` passes).
   - Built `client/src/api/work.ts` API client.
   - Built `client/src/pages/work/WorkCenterPage.tsx`, `WorkListPage.tsx`, and `WorkDetailPage.tsx`.
+  - Ported `WorkDetailPage.tsx` to 100% EJS pixel parity: breadcrumb bar with dynamic icons & status toggle buttons, task brief, assignment overview with collaborator chips, subtasks list with interactive check toggle & inline composer, files & links, custom attributes, task summary card, live audit log timeline, and inline edit mode.
   - Registered routes `/work`, `/work/:type`, and `/work/:type/:id` in `client/src/App.tsx`.
-  - Verified `npm run build` (exit 0) and `node --check` (exit 0).
+  - Verified `npm run build` (exit 0), `tsc --noEmit` (exit 0) and `node --check` (exit 0).
 - **Step 5 (Tasks / Follow-ups) Complete:**
   - Built `server/src/api/tasks.js` (`GET /`, `POST /:id/complete`, `POST /:id/reschedule`) using `Customer`, `Activity`, `Notification` models with `requireApiAuth` self-guarding.
   - Registered route in `server/src/server.js` (`node --check` passes).
@@ -110,4 +111,17 @@
   - Built `client/src/pages/search/SearchPage.tsx` with quick stats cards, multi-module search filter console, date filtering, category buttons, and grouped results.
   - Registered route `/search` in `client/src/App.tsx`.
   - Verified `npm run build` (exit 0) and `node --check` (exit 0).
-- **ALL 11 ASSIGNED FUNCTIONAL DOMAINS COMPLETE & VERIFIED.**
+- **Settings Parity Complete:**
+  - Integrated `WorkTypeBuilder.tsx` visual custom module builder (statuses pipeline, custom fields, presentation views).
+  - Integrated `AutomationsTab.tsx` trigger/action automation rules manager.
+  - Verified `POST /settings/work-types`, `POST /settings/automations`, `POST /settings/automations/:id/toggle`, `POST /settings/automations/:id/delete`.
+- **Work CSV Import Complete:**
+  - Built `POST /api/work/:type/import` bulk CSV import endpoint on server (`parseCsv`, `rowsToObjects`, custom fields mapping, audit logging).
+  - Built `importCsv` client method in `api/work.ts`.
+  - Built `#importWorkDialog` with file picker, header mapping, preview table, and bulk execution in `WorkListPage.tsx`.
+- **Lead Duplicates Management Complete:**
+  - Built `GET /api/customers/duplicates` and `POST /api/customers/duplicates/merge` in `server/src/api/customers.js` (phone normalization, email match grouping, automatic activity/attachment migration, audit logging).
+  - Built `getDuplicates` and `mergeDuplicate` in `client/src/api/customers.ts`.
+  - Built `client/src/pages/customers/DuplicatesPage.tsx` matching `views/customers/duplicates.ejs` (empty state, duplicate cards grid, interactive primary/duplicate selection, and confirmation merge).
+  - Registered route `/customers/duplicates` in `client/src/App.tsx`.
+- **ALL ASSIGNED FUNCTIONAL DOMAINS + PARITY GAPS COMPLETE & VERIFIED (tsc exit 0, vite build exit 0, node syntax exit 0).**

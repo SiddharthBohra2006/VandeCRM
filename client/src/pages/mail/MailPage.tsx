@@ -411,6 +411,25 @@ export default function MailPage() {
                   />
                 </label>
 
+                <div>
+                  <small style={{ color: 'var(--muted)', fontSize: '0.72rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
+                    Insert Merge Tag:
+                  </small>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {['{{name}}', '{{company}}', '{{email}}', '{{phone}}', '{{dealValue}}', '{{user.name}}'].map(tag => (
+                      <button
+                        key={tag}
+                        type="button"
+                        className="btn small outline"
+                        style={{ padding: '2px 8px', fontSize: '0.72rem' }}
+                        onClick={() => setComposeBody(prev => prev + ' ' + tag)}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
                   Body * (Supports variables like &#123;&#123;lead.name&#125;&#125;, &#123;&#123;lead.company&#125;&#125;, &#123;&#123;user.name&#125;&#125;)
                   <textarea

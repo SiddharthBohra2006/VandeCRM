@@ -46,6 +46,7 @@ export default function CompanyDetailPage() {
     metaPixelId: '',
     ga4MeasurementId: '',
     accountOwner: '',
+    assignedUsers: [] as string[],
   });
 
   useEffect(() => {
@@ -90,6 +91,7 @@ export default function CompanyDetailPage() {
         metaPixelId: res.data.metaPixelId || '',
         ga4MeasurementId: res.data.ga4MeasurementId || '',
         accountOwner: res.data.accountOwner?._id || '',
+        assignedUsers: (res.data.assignedUsers || []).map((u: any) => u._id || u),
       });
     } catch (err: any) {
       setError(err.message || 'Failed to load company details');
@@ -271,6 +273,12 @@ export default function CompanyDetailPage() {
                 <div><strong>Location:</strong> {company.location || 'N/A'}</div>
                 <div><strong>Monthly Package:</strong> ₹{(company.monthlyPackage || 0).toLocaleString('en-IN')}</div>
                 <div><strong>Monthly Targets:</strong> {company.monthlyLeadTarget || 0} leads · {company.monthlyVideoTarget || 0} videos · {company.monthlyDesignTarget || 0} designs</div>
+                <div>
+                  <strong>Collaborators:</strong>{' '}
+                  {company.assignedUsers && company.assignedUsers.length > 0
+                    ? company.assignedUsers.map(u => u.name).join(', ')
+                    : 'All team members / unassigned'}
+                </div>
               </div>
             </article>
 
@@ -353,6 +361,44 @@ export default function CompanyDetailPage() {
                   <option value="at-risk">At Risk</option>
                 </select>
               </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
+                Account Owner
+                <select
+                  value={formData.accountOwner}
+                  onChange={e => setFormData({ ...formData, accountOwner: e.target.value })}
+                >
+                  <option value="">Unassigned</option>
+                  {users.map(u => (
+                    <option key={u._id} value={u._id}>{u.name} ({u.role || 'agent'})</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)', marginBottom: '0.5rem' }}>
+                Assigned Team Collaborators
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                {users.map(u => {
+                  const isAssigned = formData.assignedUsers.includes(u._id);
+                  return (
+                    <button
+                      key={u._id}
+                      type="button"
+                      className={`btn small ${isAssigned ? 'primary' : 'outline'}`}
+                      onClick={() => {
+                        const next = isAssigned
+                          ? formData.assignedUsers.filter(uid => uid !== u._id)
+                          : [...formData.assignedUsers, u._id];
+                        setFormData({ ...formData, assignedUsers: next });
+                      }}
+                    >
+                      {isAssigned ? '✓ ' : '+ '} {u.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </article>
 

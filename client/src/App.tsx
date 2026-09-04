@@ -10,6 +10,7 @@ import DashboardPage from './pages/dashboard/DashboardPage';
 import CustomersPage from './pages/customers/CustomersPage';
 import CustomerDetailPage from './pages/customers/CustomerDetailPage';
 import CustomerFormPage from './pages/customers/CustomerFormPage';
+import DuplicatesPage from './pages/customers/DuplicatesPage';
 import ClientsPage from './pages/clients/ClientsPage';
 import CompaniesPage from './pages/companies/CompaniesPage';
 import CompanyDetailPage from './pages/companies/CompanyDetailPage';
@@ -30,6 +31,8 @@ import AnalyticsPage from './pages/analytics/AnalyticsPage';
 import ReportsIndexPage from './pages/reports/ReportsIndexPage';
 import ReportTablePage from './pages/reports/ReportTablePage';
 import ModuleReportBuilderPage from './pages/reports/ModuleReportBuilderPage';
+import NotFoundPage from './pages/errors/NotFoundPage';
+import ForbiddenPage from './pages/errors/ForbiddenPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -59,6 +62,7 @@ export default function App() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/customers/new" element={<CustomerFormPage />} />
+            <Route path="/customers/duplicates" element={<DuplicatesPage />} />
             <Route path="/customers/:id" element={<CustomerDetailPage />} />
             <Route path="/clients" element={<ClientsPage />} />
             <Route path="/campaigns" element={<CampaignsPage />} />
@@ -80,6 +84,8 @@ export default function App() {
             <Route path="/reports" element={<ReportsIndexPage />} />
             <Route path="/reports/module-builder" element={<ModuleReportBuilderPage />} />
             <Route path="/reports/:reportKey" element={<ReportTablePage />} />
+            <Route path="/403" element={<ForbiddenPage />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

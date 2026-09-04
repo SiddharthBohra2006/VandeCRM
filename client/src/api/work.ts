@@ -8,6 +8,10 @@ export interface WorkTypeField {
   options?: string[];
   required?: boolean;
   defaultValue?: any;
+  placeholder?: string;
+  group?: string;
+  min?: number | null;
+  max?: number | null;
 }
 
 export interface WorkTypePresentation {
@@ -130,4 +134,6 @@ export const workApi = {
   delete: (type: string, id: string) => api.delete<{ ok: true }>(`/work/${type}/${id}`),
   createSubtask: (type: string, id: string, data: Partial<WorkSubtask>) =>
     api.post<{ ok: true; data: WorkSubtask }>(`/work/${type}/${id}/subtasks`, data),
+  importCsv: (type: string, data: { csvText?: string; rows?: any[] }) =>
+    api.post<{ ok: true; created: number; skipped: number }>(`/work/${type}/import`, data),
 };
