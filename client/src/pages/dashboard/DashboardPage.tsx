@@ -39,7 +39,7 @@ interface WorkItem {
   _id: string;
   title: string;
   deadline: string;
-  workType?: { key: string; name: string };
+  workType?: { key: string; name: string; color?: string };
 }
 
 interface WeeklyDayItem {
@@ -116,9 +116,13 @@ const ICON_PALETTE: Record<string, string> = {
   check: '#a259ff', video: '#6574ff', palette: '#5287ff', globe: '#679cff',
   'file-text': '#f28a24', calendar: '#16b8a6', 'clipboard-list': '#a259ff',
   target: '#f59e0b', filter: '#16b8a6', sparkles: '#a259ff',
+  'clock-3': '#16b8a6', 'flask-conical': '#a259ff', 'shield-check': '#10b981',
+  'shield': '#10b981', move: '#7886a5', 'refresh-cw': '#7886a5',
+  'activity': '#10b981', 'calendar-clock': '#f59e0b',
 };
 
 const SECTION_CHOICES: [string, string][] = [
+  ['metrics', 'Dashboard metrics'],
   ['work-progress', 'Work progress'],
   ['deadlines', 'Upcoming deadlines'],
   ['pipeline', 'Active pipeline'],
@@ -171,6 +175,7 @@ export default function DashboardPage() {
 
   const [movementFilter, setMovementFilter] = useState<'all' | 'work' | 'leads' | 'campaigns'>('all');
   const [previewMovement, setPreviewMovement] = useState<Movement | null>(null);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -227,7 +232,7 @@ export default function DashboardPage() {
   });
 
   const fieldCard = (f: { key: string; label: string }): DashboardMetricCard => {
-    const allCustomers = dashboard.stageCards.flatMap(c => c.customers);
+    const allCustomers = (dashboard?.stageCards || []).flatMap(c => c.customers || []);
     const total = allCustomers.filter(c => {
       const v = (c as any).customData?.get?.(f.key) ?? (c as any).customData?.[f.key];
       return v !== undefined && v !== null && v !== '' && v !== false;
@@ -240,34 +245,41 @@ export default function DashboardPage() {
       key: `field-${f.key}`,
       defaultVisible: false,
       category: 'Custom Fields',
-      breakdown: `Filled across ${crmTerms.leadPlural.toLowerCase()}`
+      breakdown: `Filled across ${(crmTerms?.leadPlural || 'Leads').toLowerCase()}`
     };
   };
 
   const cards: DashboardMetricCard[] = [
-    { href: '/customers', icon: 'users', value: String(dashboard.stats.totalLeads), label: 'Open Leads', key: 'leads-total', defaultVisible: true, category: 'Leads & Clients' },
-    { href: '/clients', icon: 'building-2', value: String(dashboard.stats.totalClients), label: 'Clients', key: 'clients-total', defaultVisible: true, category: 'Leads & Clients' },
-    { href: '/customers', icon: 'user-plus', value: String(dashboard.stats.newThisWeek), label: 'New Leads This Week', key: 'leads-new-week', defaultVisible: false, category: 'Leads & Clients' },
-    { href: '/customers', icon: 'building-2', value: money.format(dashboard.totalValue), label: 'Pipeline Value', key: 'pipeline-value', defaultVisible: false, category: 'Leads & Clients' },
-    { href: '/customers', icon: 'clock', value: String(dashboard.stats.followupsDue), label: 'Follow-ups Due', key: 'followups-due', defaultVisible: false, category: 'Leads & Clients' },
-    { href: '/customers', icon: 'triangle-alert', value: String(dashboard.stats.staleCustomers), label: 'Stale Leads', key: 'leads-stale', defaultVisible: false, category: 'Leads & Clients' },
-    { href: '/campaigns', icon: 'megaphone', value: money.format(dashboard.stats.adSpend), label: 'Total Ad Spend', key: 'ad-spend', defaultVisible: true, category: 'Finance' },
-    { href: '/work?view=overdue', icon: 'triangle-alert', value: String(dashboard.stats.overdue), label: 'Overdue Work', key: 'work-overdue', defaultVisible: true, category: 'Work & Tasks' },
-    ...dashboard.moduleStats.map(moduleCard),
+    { href: '/customers', icon: 'users', value: String(dashboard.stats?.totalLeads || 0), label: 'Open Leads', key: 'leads-total', defaultVisible: true, category: 'Leads & Clients' },
+    { href: '/clients', icon: 'building-2', value: String(dashboard.stats?.totalClients || 0), label: 'Clients', key: 'clients-total', defaultVisible: true, category: 'Leads & Clients' },
+    { href: '/customers', icon: 'user-plus', value: String(dashboard.stats?.newThisWeek || 0), label: 'New Leads This Week', key: 'leads-new-week', defaultVisible: false, category: 'Leads & Clients' },
+    { href: '/customers', icon: 'building-2', value: money.format(dashboard.totalValue || 0), label: 'Pipeline Value', key: 'pipeline-value', defaultVisible: false, category: 'Leads & Clients' },
+    { href: '/customers', icon: 'clock', value: String(dashboard.stats?.followupsDue || 0), label: 'Follow-ups Due', key: 'followups-due', defaultVisible: false, category: 'Leads & Clients' },
+    { href: '/customers', icon: 'triangle-alert', value: String(dashboard.stats?.staleCustomers || 0), label: 'Stale Leads', key: 'leads-stale', defaultVisible: false, category: 'Leads & Clients' },
+    { href: '/campaigns', icon: 'megaphone', value: money.format(dashboard.stats?.adSpend || 0), label: 'Total Ad Spend', key: 'ad-spend', defaultVisible: true, category: 'Finance' },
+    { href: '/work?view=overdue', icon: 'triangle-alert', value: String(dashboard.stats?.overdue || 0), label: 'Overdue Work', key: 'work-overdue', defaultVisible: true, category: 'Work & Tasks' },
+    ...(dashboard.moduleStats || []).map(moduleCard),
     ...(dashboard.availableDashboardFields || []).map(fieldCard)
   ];
 
-  const weeklyMax = Math.max(1, ...dashboard.weeklyWorkProgress.map(day => day.count));
+  const weeklyMax = Math.max(1, ...(dashboard.weeklyWorkProgress || []).map(day => day.count));
 
-  const hiddenCards = new Set(dashboard.dashboardHiddenCards || []);
+  const defaultHiddenKeys = cards.filter(c => !c.defaultVisible).map(c => c.key);
+  const hiddenCards = new Set(
+    dashboard.dashboardCardsCustomized && dashboard.dashboardHiddenCards !== undefined
+      ? (dashboard.dashboardHiddenCards || [])
+      : (dashboard.dashboardHiddenCards && dashboard.dashboardHiddenCards.length > 0
+          ? dashboard.dashboardHiddenCards
+          : defaultHiddenKeys)
+  );
   const savedOrder = dashboard.dashboardCardOrder || [];
   const orderedCards = [
-    ...cards.sort((a, b) => {
-      const ia = savedOrder.indexOf(a.key);
-      const ib = savedOrder.indexOf(b.key);
-      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
-    })
-  ];
+    ...cards
+  ].sort((a, b) => {
+    const ia = savedOrder.indexOf(a.key);
+    const ib = savedOrder.indexOf(b.key);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
   const visibleCards = orderedCards.filter(card => !hiddenCards.has(card.key));
 
   const movementSampleFeed = dashboard.movementSamples || [];
@@ -277,7 +289,12 @@ export default function DashboardPage() {
   const shownMovements = fullFeed.filter(m => movementFilter === 'all' || m.group === movementFilter);
 
   const openCustomize = () => {
-    setEditHidden(new Set(dashboard.dashboardHiddenCards || []));
+    const activeHidden = dashboard.dashboardCardsCustomized && dashboard.dashboardHiddenCards !== undefined
+      ? (dashboard.dashboardHiddenCards || [])
+      : (dashboard.dashboardHiddenCards && dashboard.dashboardHiddenCards.length > 0
+          ? dashboard.dashboardHiddenCards
+          : defaultHiddenKeys);
+    setEditHidden(new Set(activeHidden));
     setEditOrder([...savedOrder, ...cards.map(c => c.key).filter(k => !(savedOrder || []).includes(k))]);
     setEditSections(new Set(savedSections));
     setPinSearch('');
@@ -291,6 +308,9 @@ export default function DashboardPage() {
       if (visible) next.delete(key); else next.add(key);
       return next;
     });
+    if (visible) {
+      setEditOrder(prev => (prev.includes(key) ? prev : [...prev, key]));
+    }
   };
 
   const reorderPinned = (from: string, to: string) => {
@@ -324,8 +344,8 @@ export default function DashboardPage() {
   };
 
   const resetDefaults = () => {
-    const defaultHiddenKeys = cards.filter(c => !c.defaultVisible).map(c => c.key);
-    setEditHidden(new Set(defaultHiddenKeys));
+    const defaultKeys = cards.filter(c => !c.defaultVisible).map(c => c.key);
+    setEditHidden(new Set(defaultKeys));
     setEditOrder(cards.map(card => card.key));
     setEditSections(new Set());
   };
@@ -349,12 +369,22 @@ export default function DashboardPage() {
   };
   const dragOverModalPinned = (e: DragEvent) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
   };
   const dropModalPinned = (targetKey: string) => (e: DragEvent) => {
     e.preventDefault();
     const sourceKey = dragKey || e.dataTransfer.getData('text/plain');
-    if (sourceKey && sourceKey !== targetKey) {
-      reorderPinned(sourceKey, targetKey);
+    if (sourceKey) {
+      if (editHidden.has(sourceKey)) {
+        setEditHidden(prev => {
+          const next = new Set(prev);
+          next.delete(sourceKey);
+          return next;
+        });
+      }
+      if (sourceKey !== targetKey) {
+        reorderPinned(sourceKey, targetKey);
+      }
     }
     setDragKey(null);
   };
@@ -425,12 +455,34 @@ export default function DashboardPage() {
 
       {error && <div className="notice danger" style={{ margin: '0 0 1rem 0' }}>{error}</div>}
 
+      {dashboard.dashboardViews && dashboard.dashboardViews.length > 0 && (
+        <nav className="lead-view-tabs" aria-label="Dashboard layouts">
+          <a href="/" className={!activeViewId ? 'active' : ''} onClick={e => { e.preventDefault(); setActiveViewId(null); loadDashboard(); }}>My dashboard</a>
+          {dashboard.dashboardViews.map(view => (
+            <a
+              key={view._id}
+              href={`/?dashboardView=${view._id}`}
+              className={activeViewId === view._id ? 'active' : ''}
+              onClick={e => { e.preventDefault(); setActiveViewId(view._id); }}
+            >{view.name}</a>
+          ))}
+        </nav>
+      )}
+
       {isEmptyDashboard && (
-        <section className="dashboard-welcome" aria-label="Workspace ready">
-          <h2>Your workspace is ready 🎉</h2>
-          <p className="dashboard-welcome-sub">
-            Everything is set up for <strong>{activeCompany?.name || 'your CRM'}</strong>. New records and work will appear here automatically.
-          </p>
+        <section className="dashboard-welcome" aria-labelledby="dashboardWelcomeTitle">
+          <div className="dashboard-welcome-copy">
+            <span className="eyebrow">{crmTerms.pipelineName || 'CRM'} · {activeCompany?.name || 'CRM'}</span>
+            <h2 id="dashboardWelcomeTitle">Your workspace is ready</h2>
+            <p>There is no assigned data yet. New records and work will appear here automatically as your team adds or assigns them.</p>
+          </div>
+          <div className="dashboard-quick-links">
+            <Link to="/customers"><Icon name="users" size={18} aria-hidden /><span><strong>Add {crmTerms.leadPlural || 'Leads'}</strong><small>Create or import new records</small></span><Icon name="arrow-right" size={14} aria-hidden /></Link>
+            <Link to="/clients"><Icon name="building-2" size={18} aria-hidden /><span><strong>View Clients</strong><small>Manage your client accounts</small></span><Icon name="arrow-right" size={14} aria-hidden /></Link>
+            <Link to="/work"><Icon name="clipboard-list" size={18} aria-hidden /><span><strong>Open Work</strong><small>Track tasks and projects</small></span><Icon name="arrow-right" size={14} aria-hidden /></Link>
+            <Link to="/campaigns"><Icon name="megaphone" size={18} aria-hidden /><span><strong>Campaigns</strong><small>Manage ad campaigns</small></span><Icon name="arrow-right" size={14} aria-hidden /></Link>
+            <Link to="/settings"><Icon name="settings" size={18} aria-hidden /><span><strong>Settings</strong><small>Configure your workspace</small></span><Icon name="arrow-right" size={14} aria-hidden /></Link>
+          </div>
         </section>
       )}
 
@@ -454,7 +506,7 @@ export default function DashboardPage() {
                   cursor: 'grab'
                 } as CSSProperties}
               >
-                <span className="dashboard-metric-icon">
+                <span className="dashboard-metric-icon" data-icon={card.icon}>
                   <Icon name={card.icon} size={20} />
                 </span>
                 <span className="dashboard-metric-copy">
@@ -477,7 +529,6 @@ export default function DashboardPage() {
                 <span className="card-icon-amber"><Icon name="target" size={18} /></span>
                 <h3>Work progress</h3>
               </div>
-              <span className="badge-amber-subtle">{dashboard.stats.completedWork} completed</span>
             </header>
             <div className="luxury-card-body">
               <div className="progress-meter-row">
@@ -486,185 +537,361 @@ export default function DashboardPage() {
                     <span className="donut-val">{dashboard.stats.deliveredPercent}%</span>
                   </div>
                 </div>
-                <div className="progress-stats-stack">
-                  <div className="progress-stat-pill">
-                    <strong>{dashboard.stats.openWork}</strong>
-                    <span>In progress</span>
-                  </div>
-                  <div className="progress-stat-pill">
-                    <strong>{dashboard.stats.overdue}</strong>
-                    <span>Overdue</span>
-                  </div>
+                <div className="progress-details">
+                  <strong>{dashboard.stats.completedWork || 0} of {(dashboard.stats.completedWork || 0) + (dashboard.stats.openWork || 0)} completed</strong>
+                  <p>{dashboard.stats.openWork || 0} items still in progress</p>
                 </div>
               </div>
 
-              <div className="weekly-bar-chart" aria-label="Work completed this week">
+              {(() => {
+                const weeklyCompleted = dashboard.weeklyWorkProgress.reduce((sum, day) => sum + day.count, 0);
+                return (
+                  <div className="weekly-progress-head"><span>This week</span><strong>{weeklyCompleted} completed</strong></div>
+                );
+              })()}
+              <div className="weekly-bar-chart" aria-label="Tasks completed this week">
                 {dashboard.weeklyWorkProgress.map(day => (
-                  <details className={`bar-col${day.isToday ? ' is-today' : ''}`} key={day.label}>
-                    <summary>
-                      <span className="bar-fill" style={{ height: `${day.count ? Math.max(16, (day.count / weeklyMax) * 100) : 0}%` }} />
-                      <strong className="bar-count">{day.count}</strong>
-                      <small className="bar-label">{day.label}</small>
+                  <details name="weekly-progress-day" className={`bar-col${day.isToday ? ' is-today' : ''}`} key={day.label}>
+                    <summary aria-label={`View ${day.count} tasks completed on ${day.label}`}>
+                      <span className="bar-count">{day.count}</span>
+                      <span className="bar-track"><span className="bar-fill" style={{ height: `${day.count ? Math.max(16, Math.round(day.count / weeklyMax * 100)) : 0}%` }} /></span>
+                      <span className="bar-label">{day.label}</span>
                     </summary>
                     <div className="weekly-day-popover">
-                      <header><span>{day.label}</span><strong>{day.count} items</strong></header>
-                      <ul>
-                        {day.items.map(item => (
-                          <li key={item._id}>
-                            <Link to={`/work/${item.type}/${item._id}`}>{item.title}</Link>
-                            <small>{item.module}</small>
-                          </li>
-                        ))}
-                      </ul>
+                      <header>
+                        <strong>{new Date(day.date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}</strong>
+                        <span>{day.count} completed</span>
+                      </header>
+                      {day.items.length === 0 && <p>No work was completed this day.</p>}
+                      {day.items.map(item => (
+                        <a href={`/work/${item.type || 'task'}/${item._id}`} key={item._id}>
+                          <span><strong>{item.title}</strong><small>{item.module || 'Work'}</small></span>
+                          <time>{new Date(item.completedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</time>
+                        </a>
+                      ))}
                     </div>
                   </details>
                 ))}
               </div>
             </div>
+
+            <footer className="luxury-card-footer">
+              <Link to="/work/task">
+                <span>View all tasks</span>
+                <Icon name="arrow-right" size={14} />
+              </Link>
+            </footer>
           </article>
         )}
 
         {!savedSections.has('deadlines') && (
-          <article className="dashboard-luxury-card deadlines-card">
+          <article className="dashboard-luxury-card work-deadlines-card">
             <header className="luxury-card-head">
               <div className="luxury-card-title">
-                <span className="card-icon-red"><Icon name="clock" size={18} /></span>
-                <h3>Upcoming deadlines</h3>
+                <span className="card-icon-amber"><Icon name="calendar" size={18} /></span>
+                <h3>Work deadlines</h3>
               </div>
-              <span className="badge-red-subtle">{dashboard.upcomingDeadlines.length} due soon</span>
+              <span className="badge-amber-subtle">Overdue + next 7 days</span>
             </header>
             <div className="luxury-card-body">
-              <div className="deadlines-list">
-                {dashboard.upcomingDeadlines.slice(0, 5).map(item => (
-                  <Link to={`/work/${item.workType?.key || 'tasks'}/${item._id}`} className="deadline-item" key={item._id}>
-                    <div className="deadline-info">
-                      <strong>{item.title}</strong>
-                      <span>{item.workType?.name || 'Task'}</span>
-                    </div>
-                    <time dateTime={item.deadline}>{new Date(item.deadline).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</time>
-                  </Link>
-                ))}
-                {dashboard.upcomingDeadlines.length === 0 && (
-                  <div className="card-empty-state">
-                    <Icon name="check-circle-2" size={24} />
-                    <p>No immediate deadlines approaching.</p>
-                  </div>
-                )}
-              </div>
+              {dashboard.upcomingDeadlines.length === 0 ? (
+                <div className="card-empty-state">
+                  <Icon name="check-circle-2" size={24} />
+                  <p>No overdue or upcoming deadlines.</p>
+                </div>
+              ) : (
+                <div className="deadline-items-list">
+                  {dashboard.upcomingDeadlines.slice(0, 6).map(item => {
+                    const isOverdue = item.deadline && new Date(item.deadline) < new Date();
+                    const dotColor = (item as any).workType?.color || '#f59e0b';
+                    return (
+                      <Link to={`/work/${item.workType?.key || 'task'}/${item._id}`} className="deadline-item-row" key={item._id}>
+                        <span className="deadline-dot" style={{ background: dotColor }} />
+                        <strong className="deadline-title">{item.title}</strong>
+                        {isOverdue && <span className="overdue-pill">Overdue</span>}
+                        <time className="deadline-date">{item.deadline ? new Date(item.deadline).toLocaleDateString('en-IN', { day: 'numeric', month: 'numeric', year: 'numeric' }) : '—'}</time>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+
+            <footer className="luxury-card-footer">
+              <Link to="/work">
+                <span>View all deadlines</span>
+                <Icon name="arrow-right" size={14} />
+              </Link>
+            </footer>
           </article>
         )}
 
         {!savedSections.has('attention') && (
-          <article className="dashboard-luxury-card attention-card">
+          <article className="dashboard-luxury-card needs-attention-card">
             <header className="luxury-card-head">
               <div className="luxury-card-title">
-                <span className="card-icon-amber"><Icon name="triangle-alert" size={18} /></span>
+                <span className="card-icon-red"><Icon name="triangle-alert" size={18} /></span>
                 <h3>Needs attention</h3>
               </div>
-              <span className="badge-amber-subtle">{dashboard.attentionCustomers.length} leads</span>
+              <span className="badge-red-subtle">Due or untouched</span>
             </header>
             <div className="luxury-card-body">
-              <div className="attention-list">
-                {dashboard.attentionCustomers.slice(0, 5).map(customer => (
-                  <Link to={`/customers/${customer._id}`} className="attention-item" key={customer._id}>
-                    <div className="attention-avatar">{initials(customer.name)}</div>
-                    <div className="attention-info">
-                      <strong>{customer.name}</strong>
-                      <span>{customer.company || customer.phone || 'Direct Lead'}</span>
-                    </div>
-                    <span className="attention-tag">{customer.nextFollowUpAt ? 'Follow-up due' : 'Stale lead'}</span>
-                  </Link>
-                ))}
-                {dashboard.attentionCustomers.length === 0 && (
-                  <div className="card-empty-state">
-                    <Icon name="sparkles" size={24} />
-                    <p>All leads and clients are up to date.</p>
+              {dashboard.attentionCustomers.length === 0 ? (
+                <div className="attention-empty-banner">
+                  <span className="attention-icon-box"><Icon name="calendar-clock" size={20} /></span>
+                  <div className="attention-text">
+                    <strong>No urgent customer follow-up right now.</strong>
+                    <p>Great! You're all caught up.</p>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="deadline-items-list">
+                  {dashboard.attentionCustomers.slice(0, 5).map(customer => (
+                    <Link to={`/customers/${customer._id}`} className="deadline-item-row" key={customer._id}>
+                      <span className="deadline-dot" style={{ background: '#ef4444' }} />
+                      <strong className="deadline-title">{customer.name}</strong>
+                      <span className="overdue-pill">{customer.nextFollowUpAt ? 'Follow-up due' : 'Untouched'}</span>
+                      <time className="deadline-date">{customer.nextFollowUpAt ? new Date(customer.nextFollowUpAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'numeric', year: 'numeric' }) : '—'}</time>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
+
+            <footer className="luxury-card-footer">
+              <Link to="/tasks">
+                <span>View follow-up tasks</span>
+                <Icon name="arrow-right" size={14} />
+              </Link>
+            </footer>
           </article>
         )}
       </section>
 
       {!savedSections.has('pipeline') && (
-        <section className="dashboard-pipeline-section" aria-label="Active pipeline">
-          <div className="section-head">
-            <h2>Active pipeline</h2>
-            <Link to="/pipeline" className="view-all-link">View board <Icon name="arrow-right" size={14} /></Link>
-          </div>
-          <div className="dashboard-pipeline-grid">
-            {dashboard.stageCards.map(stageCard => (
-              <div
-                className="dashboard-stage-column"
-                key={stageCard.stage._id}
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => moveCustomer(e, stageCard.stage._id)}
+        <section className="pipeline-board pipeline-board-v2" aria-label="Active pipeline">
+          <div className="board-head">
+            <div>
+              <h2>Active {crmTerms.pipelineName?.toLowerCase() || 'pipeline'}</h2>
+              <span>{dashboard.totalCustomers} records across {dashboard.stageCards.length} stages</span>
+            </div>
+            <form className="dashboard-pipeline-filters" onSubmit={e => e.preventDefault()}>
+              <select
+                name="campaign"
+                aria-label="Filter pipeline by campaign"
+                onChange={e => { const v = e.target.value; const url = new URL(window.location.href); if (v) url.searchParams.set('campaign', v); else url.searchParams.delete('campaign'); window.location.href = url.toString(); }}
               >
-                <div className="stage-column-header">
-                  <div className="stage-title-wrap">
-                    <span className="stage-dot" style={{ background: stageCard.stage.color || '#3b82f6' }} />
-                    <h4>{stageCard.stage.name}</h4>
+                <option value="">All Campaigns</option>
+                {(dashboard.campaigns || []).map(c => (
+                  <option key={c._id} value={c._id}>{c.name}</option>
+                ))}
+              </select>
+              <button type="button" className="btn" onClick={() => window.location.reload()}>Reset columns</button>
+              <Link to="/customers/new" className="btn primary"><Icon name="plus" size={14} />Add {crmTerms.leadSingular || 'Lead'}</Link>
+            </form>
+          </div>
+          <div className="pipeline" tabIndex={0} aria-label="Sales pipeline stages">
+            {dashboard.stageCards.map(card => (
+              <article
+                className="stage-column"
+                key={card.stage._id}
+                style={{ '--stage-color': card.stage.color || '#3b82f6' } as CSSProperties}
+                data-stage-id={card.stage._id}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => moveCustomer(e, card.stage._id)}
+              >
+                <header draggable title="Drag to reorder this stage">
+                  <div>
+                    <h2>
+                      <span className="stage-dot" aria-hidden="true" />
+                      <Link to={`/${card.stage.isWon ? 'clients' : 'customers'}?stage=${card.stage._id}`}>{card.stage.name}</Link>
+                    </h2>
+                    <span>{card.count} records{card.stage.isActive ? '' : ' - inactive stage'}</span>
                   </div>
-                  <span className="stage-count-badge">{stageCard.count}</span>
-                </div>
-                <div className="stage-cards-container">
-                  {stageCard.customers.slice(0, 6).map(customer => (
-                    <div
-                      className="pipeline-lead-card"
+                  {card.value > 0 && (
+                    <strong>Rs. {card.value.toLocaleString('en-IN')}</strong>
+                  )}
+                </header>
+                <div className="stage-list">
+                  {card.customers.length === 0 && (
+                    <div className="stage-empty">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="empty-icon" style={{ color: 'var(--muted)', margin: '0 auto 0.25rem' }}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
+                      <strong>No records yet</strong>
+                      <span>Move a record here to get started.</span>
+                    </div>
+                  )}
+                  {card.customers.map(customer => (
+                    <a
+                      className="deal-card"
+                      href={`/customers/${customer._id}`}
                       key={customer._id}
                       draggable
                       onDragStart={e => e.dataTransfer.setData('text/customer-id', customer._id)}
                     >
-                      <Link to={`/customers/${customer._id}`} className="lead-card-title">{customer.name}</Link>
-                      <div className="lead-card-meta">
-                        <span>{customer.company || '—'}</span>
-                        <strong>Rs. {(customer.value || 0).toLocaleString('en-IN')}</strong>
+                      <span className="deal-name">{customer.name}<Icon name="arrow-up-right" size={12} /></span>
+                      <div className="deal-meta">
+                        {(customer as any).clientCompany ? (
+                          <div className="deal-meta-row">
+                            <span className="deal-meta-key">Client</span><span>{(customer as any).clientCompany.name || (customer as any).clientCompany}</span>
+                          </div>
+                        ) : customer.company ? (
+                          <div className="deal-meta-row">
+                            <span className="deal-meta-key">Company</span><span>{customer.company}</span>
+                          </div>
+                        ) : null}
+                        {(customer as any).campaign ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.68rem', color: 'var(--sub)' }}>
+                            <span style={{ fontWeight: 800, textTransform: 'uppercase', color: 'var(--teal)', fontSize: '0.6rem' }}>{(customer as any).campaign.platform}</span>
+                            <span style={{ fontSize: '0.5rem', opacity: 0.5 }}>•</span>
+                            <span>{(customer as any).campaign.name}</span>
+                          </div>
+                        ) : customer.source ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.68rem', color: 'var(--sub)' }}>
+                            <span style={{ fontWeight: 800, textTransform: 'uppercase', color: 'var(--muted)', fontSize: '0.6rem' }}>SOURCE</span>
+                            <span style={{ fontSize: '0.5rem', opacity: 0.5 }}>•</span>
+                            <span>{customer.source}</span>
+                          </div>
+                        ) : null}
                       </div>
-                    </div>
+                      {(() => {
+                        const customData = (customer as any).customData;
+                        const fields = dashboard.availableDashboardFields || [];
+                        const visible = fields.filter((f: any) => {
+                          const val = customData?.get?.(f.key) ?? customData?.[f.key];
+                          return val != null && val !== '';
+                        });
+                        if (!visible.length) return null;
+                        return (
+                          <div className="deal-customs-grid">
+                            {visible.map((f: any) => {
+                              const val = customData?.get?.(f.key) ?? customData?.[f.key];
+                              const display = typeof val === 'boolean' ? (val ? 'Yes' : 'No') : Array.isArray(val) ? val.join(', ') : val;
+                              return (
+                                <div className="deal-custom-item" key={f.key}>
+                                  <span className="deal-custom-label">{f.label}</span>
+                                  <span className="deal-custom-val">{display}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                      <div className="deal-owner">
+                        <span className="deal-owner-avatar" aria-hidden="true">{(customer as any).assignedTo?.name ? (customer as any).assignedTo.name.split(/\s+/).map((p: string) => p[0]).slice(0, 2).join('').toUpperCase() : '–'}</span>
+                        <span>{(customer as any).assignedTo?.name || 'Unassigned'}</span>
+                        {customer.updatedAt && <time dateTime={new Date(customer.updatedAt).toISOString()}>{new Date(customer.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</time>}
+                      </div>
+                      <div className="deal-card-footer">
+                        <div className="label-row">
+                          {customer.labels?.slice(0, 2).map((label: any) => (
+                            <span className="pill" style={{ '--pill': label.color } as CSSProperties} key={label._id || label.name}>{label.name}</span>
+                          ))}
+                        </div>
+                        {customer.value && customer.value > 0 && (
+                          <span className="deal-value">Rs. {customer.value.toLocaleString('en-IN')}</span>
+                        )}
+                      </div>
+                    </a>
                   ))}
-                  {stageCard.customers.length === 0 && (
-                    <div className="empty-stage-placeholder">Drop leads here</div>
-                  )}
                 </div>
-              </div>
+                <a className="stage-view-link" href={`/${card.stage.isWon ? 'clients' : 'customers'}?stage=${card.stage._id}`}>View stage<Icon name="arrow-right" size={12} /></a>
+              </article>
             ))}
           </div>
+          <footer className="pipeline-footer">
+            <span><Icon name="move" size={14} />Drag cards to change stage · Click a card to open it</span>
+            <div>
+              <a href="/customers">View all leads<Icon name="arrow-up-right" size={12} /></a>
+            </div>
+          </footer>
         </section>
       )}
 
       {!savedSections.has('recent') && (
-        <section className="dashboard-movements-section">
-          <div className="section-head">
-            <h2>Recent movements</h2>
-            <div className="movement-filter-pills">
-              {(['all', 'work', 'leads', 'campaigns'] as const).map(tab => (
-                <button
-                  key={tab}
-                  type="button"
-                  className={`filter-pill${movementFilter === tab ? ' active' : ''}`}
-                  onClick={() => setMovementFilter(tab)}
-                >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                </button>
-              ))}
+        <article className="business-panel movement-panel movement-panel-v2" data-movement-feed>
+          <header className="movement-header">
+            <div className="movement-heading">
+              <span className="movement-heading-icon"><Icon name="activity" size={18} aria-hidden /></span>
+              <div><h2>Recent movements</h2><p>What your team has been working on.</p></div>
             </div>
+            <span className={`movement-count${isSampleFeed ? ' movement-sample-badge' : ''}`}>{isSampleFeed ? 'Sample activity' : `${fullFeed.length} latest updates`}</span>
+          </header>
+          <div className="movement-toolbar">
+            <div className="movement-tabs" role="group" aria-label="Filter recent movements">
+              {(['all', 'work', 'leads', 'campaigns'] as const)
+                .filter(key => key === 'all' || fullFeed.some(item => item.group === key))
+                .map(key => (
+                  <button
+                    key={key}
+                    type="button"
+                    data-movement-filter={key}
+                    aria-pressed={movementFilter === key}
+                    className={movementFilter === key ? 'active' : ''}
+                    onClick={() => setMovementFilter(key)}
+                  >
+                    {key === 'all' ? 'All activity' : key.charAt(0).toUpperCase() + key.slice(1)}
+                    <span>{key === 'all' ? fullFeed.length : fullFeed.filter(item => item.group === key).length}</span>
+                  </button>
+                ))}
+            </div>
+            <span className="movement-period"><Icon name="clock-3" size={13} />Latest first</span>
           </div>
-          <div className="movement-feed-card">
-            {shownMovements.slice(0, 8).map(movement => (
-              <div className="movement-feed-item" key={movement.id}>
-                <div className="movement-icon-wrap"><Icon name={movement.icon || 'activity'} size={14} /></div>
-                <div className="movement-content">
-                  <div className="movement-meta"><strong>{movement.actor}</strong> <span>{movement.action || 'updated'}</span></div>
-                  <Link to={movement.href || '#'} className="movement-title">{movement.title}</Link>
-                  <p className="movement-msg">{movement.message}</p>
-                </div>
-                <time className="movement-time">{relativeTime(movement.createdAt)}</time>
+          {isSampleFeed && fullFeed.length > 0 && <p className="movement-demo-note"><Icon name="flask-conical" size={13} />Preview data · These examples will be replaced by real activity as your team works.</p>}
+          {fullFeed.length === 0 ? (
+            <div className="movement-empty"><p>No activity recorded yet. Updates will appear here when accessible records change.</p></div>
+          ) : (
+            <ol className="movement-list">
+              {shownMovements.map(movement => {
+                const date = new Date(movement.createdAt);
+                const timeOfDay = date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                const tone = movement.tone || (movement.group === 'leads' ? 'amber' : movement.group === 'campaigns' ? 'violet' : 'blue');
+                return (
+                  <li className="movement-item" key={movement.id} data-movement-group={movement.group || 'work'} data-tone={tone}>
+                    <div className="movement-avatar-wrap">
+                      <span className="movement-avatar" aria-hidden>{initials(movement.actor)}</span>
+                      <span className="movement-action-icon"><Icon name={movement.icon || 'activity'} size={12} /></span>
+                    </div>
+                    <div className="movement-content">
+                      <div className="movement-meta"><strong>{movement.actor}</strong><span>{movement.action || 'made an update'}</span></div>
+                      {movement.href ? (
+                        <a className="movement-record" href={movement.href}>{movement.title}<Icon name="arrow-up-right" size={12} /></a>
+                      ) : movement.sample ? (
+                        <button type="button" className="movement-record movement-preview-trigger" onClick={() => setPreviewMovement(movement)}>{movement.title}<Icon name="arrow-up-right" size={12} /></button>
+                      ) : (
+                        <strong className="movement-record">{movement.title}</strong>
+                      )}
+                      <p>{movement.message}</p>
+                      <div className="movement-tags">
+                        <span className="movement-category">{movement.category}</span>
+                        {movement.status && <span className="movement-status"><span aria-hidden />{movement.status}</span>}
+                      </div>
+                    </div>
+                    <time dateTime={date.toISOString()} title={date.toLocaleString('en-IN')}>
+                      {relativeTime(movement.createdAt)}<small>{timeOfDay}</small>
+                    </time>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+          <footer className="movement-footer">
+            <span>
+              <Icon name={isSampleFeed ? 'info' : 'shield-check'} size={13} />
+              {isSampleFeed ? 'Sample names and events · No records added to your CRM' : 'Activity from records you can access in this CRM'}
+            </span>
+            <a href="/" onClick={e => { e.preventDefault(); loadDashboard(); }}>Refresh activity<Icon name="refresh-cw" size={12} /></a>
+          </footer>
+          {previewMovement && (
+            <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)' }} onClick={e => { if (e.target === e.currentTarget) setPreviewMovement(null); }}>
+              <div style={{ background: 'var(--panel)', borderRadius: 12, padding: '1.5rem', maxWidth: 420, width: '90%', border: '1px solid var(--border)' }}>
+                <h3 style={{ margin: '0 0 0.5rem', fontSize: '1rem' }}>{previewMovement.title}</h3>
+                <p style={{ margin: '0 0 0.75rem', fontSize: '0.82rem', color: 'var(--muted)' }}>{previewMovement.message}</p>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{previewMovement.category}{previewMovement.status ? ` · ${previewMovement.status}` : ''}</div>
+                <button type="button" className="btn" style={{ marginTop: '1rem' }} onClick={() => setPreviewMovement(null)}>Close</button>
               </div>
-            ))}
-          </div>
-        </section>
+            </div>
+          )}
+        </article>
       )}
 
       {customizeOpen && (
@@ -749,7 +976,14 @@ export default function DashboardPage() {
                                 {groupCards.map(card => {
                                   const theme = getCardTheme(card.icon);
                                   return (
-                                    <div className="pin-card-item pin-avail-item" key={card.key}>
+                                    <div
+                                      className="pin-card-item pin-avail-item"
+                                      key={card.key}
+                                      draggable
+                                      onDragStart={dragStartModalPinned(card.key)}
+                                      onDragEnd={() => setDragKey(null)}
+                                      style={{ cursor: 'grab' }}
+                                    >
                                       <span className="pin-item-icon" style={{ color: theme.color, background: theme.bg }}>
                                         <Icon name={card.icon} size={14} />
                                       </span>
@@ -786,7 +1020,24 @@ export default function DashboardPage() {
                         <small>Drag to reorder • Click ✕ to remove</small>
                       </div>
 
-                      <div className="pin-pinned-list" id="pinnedCardsList">
+                      <div
+                        className="pin-pinned-list"
+                        id="pinnedCardsList"
+                        onDragOver={dragOverModalPinned}
+                        onDrop={e => {
+                          e.preventDefault();
+                          const sourceKey = dragKey || e.dataTransfer.getData('text/plain');
+                          if (sourceKey && editHidden.has(sourceKey)) {
+                            setEditHidden(prev => {
+                              const next = new Set(prev);
+                              next.delete(sourceKey);
+                              return next;
+                            });
+                            setEditOrder(prev => (prev.includes(sourceKey) ? prev : [...prev, sourceKey]));
+                          }
+                          setDragKey(null);
+                        }}
+                      >
                         {pinnedCards.map(card => {
                           const theme = getCardTheme(card.icon);
                           return (
