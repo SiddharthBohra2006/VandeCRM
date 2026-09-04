@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { settingsApi, SettingsResponse, Terminology, ThemeColors, AutomationRule } from '../../api/settings';
 import { WorkType } from '../../api/work';
 import { Stage, Label, CustomField } from '../../types';
@@ -8,12 +8,66 @@ import WorkTypeBuilder from './WorkTypeBuilder';
 import AutomationsTab from './AutomationsTab';
 import Icon from '../../components/Icons';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { THEME_PRESETS, applyThemePreset } from '../../theme';
+
+const STAGE_GRID = '24px 1.5fr 70px 80px 80px 80px 80px 110px';
+const STAGE_HEADER = [
+  ['', ''],
+  ['Stage Name', 'left'],
+  ['Color', 'center'],
+  ['Won?', 'center'],
+  ['Lost?', 'center'],
+  ['Default?', 'center'],
+  ['Active?', 'center'],
+  ['Action', 'right'],
+] as const;
+
+interface StageDraft {
+  name: string;
+  color: string;
+  isWon: boolean;
+  isLost: boolean;
+  isDefault: boolean;
+  isActive: boolean;
+}
+interface LabelDraft {
+  name: string;
+  color: string;
+  isHighPotential: boolean;
+  isActive: boolean;
+}
+interface FieldDraft {
+  label: string;
+  type: string;
+  options: string;
+  required: boolean;
+  isActive: boolean;
+}
+
+type FieldType = 'text' | 'number' | 'date' | 'select' | 'checkbox';
+
+const FIELD_TYPES: { value: FieldType; label: string }[] = [
+  { value: 'text', label: 'Text' },
+  { value: 'number', label: 'Number' },
+  { value: 'date', label: 'Date' },
+  { value: 'select', label: 'Dropdown choices' },
+  { value: 'checkbox', label: 'Yes / no' },
+];
+
+const DEFAULT_THEME: ThemeColors = {
+  gold: '#b58d00',
+  teal: '#0f766e',
+  background: '#ffffff',
+  surface: '#ffffff',
+  text: '#121214',
+};
 
 export default function SettingsPage() {
   const { user, activeCompany } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const activeCategory = searchParams.get('category') || 'stages';
+  const isAdmin = user?.role === 'admin';
 
   const [stages, setStages] = useState<Stage[]>([]);
   const [labels, setLabels] = useState<Label[]>([]);
@@ -42,13 +96,7 @@ export default function SettingsPage() {
     recordPlural: 'Deliverables',
     pipelineName: 'Pipeline',
   });
-  const [theme, setTheme] = useState<ThemeColors>({
-    gold: '#b58d00',
-    teal: '#0f766e',
-    background: '#ffffff',
-    surface: '#ffffff',
-    text: '#121214',
-  });
+  const [theme, setTheme] = useState<ThemeColors>(DEFAULT_THEME);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -59,19 +107,26 @@ export default function SettingsPage() {
   const [newStageColor, setNewStageColor] = useState('#475569');
   const [newStageWon, setNewStageWon] = useState(false);
   const [newStageLost, setNewStageLost] = useState(false);
+  const [newStageDefault, setNewStageDefault] = useState(false);
   const [addingStage, setAddingStage] = useState(false);
+  const [stageDrafts, setStageDrafts] = useState<Record<string, StageDraft>>({});
+  const [dragStageId, setDragStageId] = useState<string | null>(null);
 
   // Field form
   const [newFieldLabel, setNewFieldLabel] = useState('');
-  const [newFieldType, setNewFieldType] = useState('text');
+  const [newFieldType, setNewFieldType] = useState<FieldType>('text');
   const [newFieldOptions, setNewFieldOptions] = useState('');
   const [newFieldRequired, setNewFieldRequired] = useState(false);
   const [addingField, setAddingField] = useState(false);
+  const [fieldDrafts, setFieldDrafts] = useState<Record<string, FieldDraft>>({});
+  const [dragFieldId, setDragFieldId] = useState<string | null>(null);
 
   // Label form
   const [newLabelName, setNewLabelName] = useState('');
-  const [newLabelColor, setNewLabelColor] = useState('#64748b');
+  const [newLabelColor, setNewLabelColor] = useState('#2563eb');
+  const [newLabelHighPotential, setNewLabelHighPotential] = useState(false);
   const [addingLabel, setAddingLabel] = useState(false);
+  const [labelDrafts, setLabelDrafts] = useState<Record<string, LabelDraft>>({});
 
   // Terminology form
   const [termForm, setTermForm] = useState<Terminology>(terminology);
@@ -97,7 +152,7 @@ export default function SettingsPage() {
         setTermForm(res.terminology);
       }
       if (res.organization?.theme) {
-        setTheme(res.organization.theme);
+        setTheme({ ...DEFAULT_THEME, ...res.organization.theme });
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load settings');
@@ -112,7 +167,31 @@ export default function SettingsPage() {
     setSearchParams(updated);
   }
 
-  // Stage actions
+  const sd = (s: Stage): StageDraft => stageDrafts[s._id] || {
+    name: s.name,
+    color: s.color || '#64748b',
+    isWon: s.isWon,
+    isLost: s.isLost,
+    isDefault: s.isDefault,
+    isActive: s.isActive !== false,
+  };
+
+  const fd = (f: CustomField): FieldDraft => fieldDrafts[f._id] || {
+    label: f.label,
+    type: f.type || 'text',
+    options: (f.options || []).join(', '),
+    required: f.required,
+    isActive: f.isActive !== false,
+  };
+
+  const ld = (l: Label): LabelDraft => labelDrafts[l._id] || {
+    name: l.name,
+    color: l.color || '#2563eb',
+    isHighPotential: l.isHighPotential,
+    isActive: l.isActive !== false,
+  };
+
+  // ==================== STAGES ====================
   async function handleAddStage(e: React.FormEvent) {
     e.preventDefault();
     if (!newStageName.trim()) return;
@@ -123,11 +202,14 @@ export default function SettingsPage() {
         color: newStageColor,
         isWon: newStageWon,
         isLost: newStageLost,
+        isDefault: newStageDefault,
+        order: 80,
       });
       setNewStageName('');
       setNewStageWon(false);
       setNewStageLost(false);
-      setSuccess('Stage created.');
+      setNewStageDefault(false);
+      setSuccess('Stage added.');
       await loadSettings();
     } catch (err: any) {
       setError(err.message || 'Failed to create stage');
@@ -136,11 +218,30 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleUpdateStage(id: string) {
+    const draft = sd(stages.find(s => s._id === id)!);
+    try {
+      await settingsApi.updateStage(id, {
+        name: draft.name.trim(),
+        color: draft.color,
+        isWon: draft.isWon,
+        isLost: draft.isLost,
+        isDefault: draft.isDefault,
+        isActive: draft.isActive,
+      });
+      setSuccess('Stage updated.');
+      setStageDrafts(prev => { const n = { ...prev }; delete n[id]; return n; });
+      await loadSettings();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update stage');
+    }
+  }
+
   function handleDeleteStage(id: string, name: string) {
     setConfirmState({
       open: true,
       title: 'Delete Stage',
-      message: `Delete stage "${name}"? Leads currently in this stage should be moved first.`,
+      message: `Delete stage "${name}"? Records currently in this stage should be moved first.`,
       action: async () => {
         try {
           await settingsApi.deleteStage(id);
@@ -155,7 +256,16 @@ export default function SettingsPage() {
     });
   }
 
-  // Field actions
+  async function saveStageOrder() {
+    const ids = stages.map(s => s._id);
+    try {
+      await settingsApi.reorderStages(ids);
+    } catch (err: any) {
+      setError(err.message || 'Failed to save stage order');
+    }
+  }
+
+  // ==================== FIELDS ====================
   async function handleAddField(e: React.FormEvent) {
     e.preventDefault();
     if (!newFieldLabel.trim()) return;
@@ -170,16 +280,36 @@ export default function SettingsPage() {
         type: newFieldType,
         options: opts,
         required: newFieldRequired,
+        entity: 'customer',
+        order: 50,
       });
       setNewFieldLabel('');
       setNewFieldOptions('');
       setNewFieldRequired(false);
-      setSuccess('Field created.');
+      setSuccess('Field added to form.');
       await loadSettings();
     } catch (err: any) {
       setError(err.message || 'Failed to create field');
     } finally {
       setAddingField(false);
+    }
+  }
+
+  async function handleUpdateField(id: string) {
+    const draft = fd(fields.find(f => f._id === id)!);
+    try {
+      await settingsApi.updateField(id, {
+        label: draft.label.trim(),
+        type: draft.type,
+        options: draft.options.split(',').map(o => o.trim()).filter(Boolean),
+        required: draft.required,
+        isActive: draft.isActive,
+      });
+      setSuccess('Field updated.');
+      setFieldDrafts(prev => { const n = { ...prev }; delete n[id]; return n; });
+      await loadSettings();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update field');
     }
   }
 
@@ -202,7 +332,16 @@ export default function SettingsPage() {
     });
   }
 
-  // Label actions
+  async function saveFieldOrder() {
+    const ids = fields.map(f => f._id);
+    try {
+      await settingsApi.reorderFields(ids);
+    } catch (err: any) {
+      setError(err.message || 'Failed to save field order');
+    }
+  }
+
+  // ==================== LABELS ====================
   async function handleAddLabel(e: React.FormEvent) {
     e.preventDefault();
     if (!newLabelName.trim()) return;
@@ -211,14 +350,34 @@ export default function SettingsPage() {
       await settingsApi.createLabel({
         name: newLabelName.trim(),
         color: newLabelColor,
+        isHighPotential: newLabelHighPotential,
       });
       setNewLabelName('');
-      setSuccess('Tag created.');
+      setNewLabelColor('#2563eb');
+      setNewLabelHighPotential(false);
+      setSuccess('Tag added.');
       await loadSettings();
     } catch (err: any) {
       setError(err.message || 'Failed to create tag');
     } finally {
       setAddingLabel(false);
+    }
+  }
+
+  async function handleUpdateLabel(id: string) {
+    const draft = ld(labels.find(l => l._id === id)!);
+    try {
+      await settingsApi.updateLabel(id, {
+        name: draft.name.trim(),
+        color: draft.color,
+        isHighPotential: draft.isHighPotential,
+        isActive: draft.isActive,
+      });
+      setSuccess('Tag updated.');
+      setLabelDrafts(prev => { const n = { ...prev }; delete n[id]; return n; });
+      await loadSettings();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update tag');
     }
   }
 
@@ -241,7 +400,7 @@ export default function SettingsPage() {
     });
   }
 
-  // Terminology
+  // ==================== TERMINOLOGY ====================
   async function handleSaveTerminology(e: React.FormEvent) {
     e.preventDefault();
     try {
@@ -256,580 +415,398 @@ export default function SettingsPage() {
     }
   }
 
-  // Theme presets
-  async function handleApplyThemePreset(gold: string, teal: string) {
+  // ==================== THEME ====================
+  async function handleApplyTheme(gold: string, teal: string, background: string, surface: string, text: string) {
     try {
-      await settingsApi.updateTheme({ gold, teal });
-      setTheme(prev => ({ ...prev, gold, teal }));
-      document.documentElement.style.setProperty('--gold', gold);
-      document.documentElement.style.setProperty('--teal', teal);
+      await settingsApi.updateTheme({ gold, teal, background, surface, text });
+      const preset = THEME_PRESETS.find(p =>
+        p.gold.toLowerCase() === gold.toLowerCase() &&
+        p.bg.toLowerCase() === background.toLowerCase() &&
+        p.surface.toLowerCase() === surface.toLowerCase()
+      );
+      if (preset) {
+        applyThemePreset(preset);
+      } else {
+        applyThemePreset({
+          name: 'Custom',
+          description: 'Custom',
+          type: isDark(background) ? 'dark' : 'light',
+          gold,
+          teal,
+          bg: background,
+          surface,
+          text,
+        });
+      }
+      setTheme({ gold, teal, background, surface, text });
       setSuccess('Theme updated.');
     } catch (err: any) {
       setError(err.message || 'Failed to update theme');
     }
   }
 
-  if (loading && stages.length === 0) {
+  function activePresetKey(): string | null {
+    for (const p of THEME_PRESETS) {
+      if (
+        String(p.gold).toLowerCase() === String(theme.gold).toLowerCase() &&
+        String(p.bg).toLowerCase() === String(theme.background).toLowerCase() &&
+        String(p.surface).toLowerCase() === String(theme.surface).toLowerCase()
+      ) return p.name;
+    }
+    return null;
+  }
+
+  if (loading && stages.length === 0 && fields.length === 0) {
     return <div className="loading" style={{ padding: '2rem', textAlign: 'center' }}>Loading settings...</div>;
   }
 
+  const categories = [
+    { id: 'stages', label: terminology.pipelineName, admin: false },
+    { id: 'fields', label: `${terminology.recordSingular} form`, admin: false },
+    { id: 'labels', label: `${terminology.recordSingular} tags`, admin: false },
+    { id: 'work-types', label: 'Custom modules', admin: true },
+    { id: 'terminology', label: 'CRM names', admin: true },
+    { id: 'automations', label: 'Automations', admin: true },
+    { id: 'appearance', label: 'Look & feel', admin: false },
+  ].filter(c => (c.admin ? isAdmin : true));
+
+  const visibleStageOrder = [...stages];
+  const visibleFieldOrder = [...fields];
+
   return (
     <div className="page-container">
-      {error && <div className="auth-error" style={{ marginBottom: '1rem' }}>{error}</div>}
-      {success && <div className="notice success" style={{ marginBottom: '1rem' }}>{success}</div>}
-
-      <section className="page-head" style={{ marginBottom: '1.5rem' }}>
+      <section className="page-head">
         <div>
           <p className="eyebrow">Admin</p>
-          <h1 style={{ margin: '0.2rem 0' }}>CRM customization</h1>
-          <p className="page-subtitle">Configure pipeline stages, custom fields, tags, and workspace terminology.</p>
+          <h1>CRM customization</h1>
         </div>
+        {isAdmin && <Link className="btn primary" to="/settings/setup">Company setup</Link>}
       </section>
 
-      {/* Categories Navigation */}
-      <nav style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.6rem', flexWrap: 'wrap' }}>
-        {[
-          { id: 'stages', label: `${terminology.pipelineName} Stages` },
-          { id: 'fields', label: `${terminology.leadSingular} Form Fields` },
-          { id: 'labels', label: `${terminology.leadSingular} Tags` },
-          { id: 'work-types', label: 'Custom Modules' },
-          { id: 'automations', label: 'Automations' },
-          { id: 'terminology', label: 'CRM Names' },
-          { id: 'appearance', label: 'Look & Feel' },
-        ].map(cat => (
+      {error && <div className="notice danger" style={{ marginBottom: '1rem' }}>{error}</div>}
+      {success && <div className="notice success" style={{ marginBottom: '1rem' }}>{success}</div>}
+
+      <nav className="settings-category-nav" aria-label="Settings categories">
+        {categories.map(cat => (
           <button
             key={cat.id}
             type="button"
-            className="btn small"
+            data-settings-category={cat.id}
+            className={activeCategory === cat.id ? 'active' : ''}
             onClick={() => handleCategoryChange(cat.id)}
-            style={{
-              background: activeCategory === cat.id ? 'var(--gold-dim, rgba(245, 158, 11, 0.15))' : 'var(--panel)',
-              borderColor: activeCategory === cat.id ? 'var(--gold)' : 'var(--border)',
-              color: 'var(--text)',
-              fontWeight: 800,
-            }}
           >
             {cat.label}
           </button>
         ))}
       </nav>
+      <p className="settings-scope-note">
+        Editing <strong>{activeCompany?.name || 'your workspace'}</strong>. Select a tab above; changes apply only after you save.
+      </p>
 
-      {/* STAGES TAB */}
-      {activeCategory === 'stages' && (
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
-          <article className="team-card" style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)', padding: '1.5rem' }}>
-            <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '1rem' }}>Add Pipeline Stage</h2>
-            <form onSubmit={handleAddStage} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-                Stage Name *
-                <input
-                  required
-                  placeholder="e.g. Discovery Call Booked"
-                  value={newStageName}
-                  onChange={e => setNewStageName(e.target.value)}
-                />
-              </label>
+      <section className="settings-grid">
+        {/* ============ AUTOMATIONS ============ */}
+        {isAdmin && (
+          <article className="settings-panel wide" data-settings-panel="automations" hidden={activeCategory !== 'automations'}>
+            <AutomationsTab
+              stages={stages}
+              labels={labels}
+              workTypes={workTypes}
+              users={users}
+              automations={automations}
+              leadSingular={terminology.leadSingular}
+              onChanged={loadSettings}
+            />
+          </article>
+        )}
 
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-                Stage Color
-                <input
-                  type="color"
-                  value={newStageColor}
-                  onChange={e => setNewStageColor(e.target.value)}
-                  style={{ height: '36px', width: '60px', padding: '2px', border: 'none' }}
-                />
-              </label>
-
-              <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.85rem' }}>
-                  <input
-                    type="checkbox"
-                    checked={newStageWon}
-                    onChange={e => { setNewStageWon(e.target.checked); if (e.target.checked) setNewStageLost(false); }}
-                  />
-                  Won Deal Stage
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.85rem' }}>
-                  <input
-                    type="checkbox"
-                    checked={newStageLost}
-                    onChange={e => { setNewStageLost(e.target.checked); if (e.target.checked) setNewStageWon(false); }}
-                  />
-                  Lost Deal Stage
-                </label>
+        {/* ============ CUSTOM MODULES ============ */}
+        {isAdmin && (
+          <article className="settings-panel wide" data-settings-panel="work-types" hidden={activeCategory !== 'work-types'}>
+            <div className="module-settings-head">
+              <div>
+                <h2>Custom modules</h2>
+                <p className="page-subtitle">Create a business record such as Patient, Student, Order, Property, Project, or Case. Each module gets its own fields and workflow.</p>
               </div>
-
-              <button className="btn primary" type="submit" disabled={addingStage} style={{ marginTop: '0.5rem' }}>
-                {addingStage ? 'Adding...' : '+ Add Stage'}
+              <button className="btn primary" type="button" onClick={() => { setBuilderTarget(null); setBuilderOpen(true); }}>
+                + Create module
               </button>
-            </form>
-          </article>
-
-          <article className="team-card" style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)', padding: '1.5rem' }}>
-            <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '1rem' }}>Current Stages ({stages.length})</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {stages.map(stage => (
-                <div
-                  key={stage._id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '0.75rem 1rem',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    background: 'var(--bg-soft, rgba(255,255,255,0.02))',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: stage.color || 'var(--muted)' }} />
-                    <strong style={{ fontSize: '0.9rem' }}>{stage.name}</strong>
-                    {stage.isWon && <span className="stage-badge" style={{ backgroundColor: 'var(--teal)', fontSize: '0.65rem' }}>WON</span>}
-                    {stage.isLost && <span className="stage-badge" style={{ backgroundColor: 'var(--red)', fontSize: '0.65rem' }}>LOST</span>}
-                    {stage.isDefault && <span className="stage-badge" style={{ backgroundColor: 'var(--gold)', fontSize: '0.65rem' }}>DEFAULT</span>}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn small danger"
-                    onClick={() => handleDeleteStage(stage._id, stage.name)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
             </div>
-          </article>
-        </section>
-      )}
 
-      {/* FIELDS TAB */}
-      {activeCategory === 'fields' && (
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
-          <article className="team-card" style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)', padding: '1.5rem' }}>
-            <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '1rem' }}>Add Custom Field</h2>
-            <form onSubmit={handleAddField} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-                Field Label *
-                <input
-                  required
-                  placeholder="e.g. Budget Range"
-                  value={newFieldLabel}
-                  onChange={e => setNewFieldLabel(e.target.value)}
-                />
-              </label>
-
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-                Data Type
-                <select
-                  value={newFieldType}
-                  onChange={e => setNewFieldType(e.target.value)}
-                >
-                  <option value="text">Text</option>
-                  <option value="number">Number</option>
-                  <option value="currency">Currency (INR)</option>
-                  <option value="select">Dropdown Select</option>
-                  <option value="date">Date</option>
-                  <option value="checkbox">Checkbox (Yes/No)</option>
-                </select>
-              </label>
-
-              {newFieldType === 'select' && (
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-                  Dropdown Options (comma-separated)
-                  <input
-                    placeholder="Option 1, Option 2, Option 3"
-                    value={newFieldOptions}
-                    onChange={e => setNewFieldOptions(e.target.value)}
-                  />
-                </label>
-              )}
-
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.85rem', marginTop: '0.5rem' }}>
-                <input
-                  type="checkbox"
-                  checked={newFieldRequired}
-                  onChange={e => setNewFieldRequired(e.target.checked)}
-                />
-                Required Field
-              </label>
-
-              <button className="btn primary" type="submit" disabled={addingField} style={{ marginTop: '0.5rem' }}>
-                {addingField ? 'Adding...' : '+ Add Field'}
-              </button>
-            </form>
-          </article>
-
-          <article className="team-card" style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)', padding: '1.5rem' }}>
-            <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '1rem' }}>Custom Fields ({fields.length})</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {fields.length === 0 ? (
-                <p className="empty" style={{ color: 'var(--muted)' }}>No custom fields added yet.</p>
-              ) : (
-                fields.map(f => (
-                  <div
-                    key={f._id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '0.75rem 1rem',
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                      background: 'var(--bg-soft, rgba(255,255,255,0.02))',
-                    }}
-                  >
-                    <div>
-                      <strong style={{ fontSize: '0.9rem' }}>{f.label}</strong>
-                      <small style={{ display: 'block', color: 'var(--muted)', fontSize: '0.75rem' }}>
-                        Type: {f.type} {f.required ? '· Required' : ''}
-                      </small>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn small danger"
-                      onClick={() => handleDeleteField(f._id, f.label)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </article>
-        </section>
-      )}
-
-      {/* LABELS TAB */}
-      {activeCategory === 'labels' && (
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
-          <article className="team-card" style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)', padding: '1.5rem' }}>
-            <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '1rem' }}>Add Lead Tag</h2>
-            <form onSubmit={handleAddLabel} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-                Tag Name *
-                <input
-                  required
-                  placeholder="e.g. VIP Client"
-                  value={newLabelName}
-                  onChange={e => setNewLabelName(e.target.value)}
-                />
-              </label>
-
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-                Tag Color
-                <input
-                  type="color"
-                  value={newLabelColor}
-                  onChange={e => setNewLabelColor(e.target.value)}
-                  style={{ height: '36px', width: '60px', padding: '2px', border: 'none' }}
-                />
-              </label>
-
-              <button className="btn primary" type="submit" disabled={addingLabel} style={{ marginTop: '0.5rem' }}>
-                {addingLabel ? 'Adding...' : '+ Add Tag'}
-              </button>
-            </form>
-          </article>
-
-          <article className="team-card" style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)', padding: '1.5rem' }}>
-            <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '1rem' }}>Tags ({labels.length})</h2>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-              {labels.map(lbl => (
-                <div
-                  key={lbl._id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    padding: '0.35rem 0.75rem',
-                    border: `1px solid ${lbl.color || 'var(--border)'}`,
-                    borderRadius: '20px',
-                    fontSize: '0.8rem',
-                  }}
-                >
-                  <span style={{ fontWeight: 700 }}>{lbl.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteLabel(lbl._id, lbl.name)}
-                    style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: '0.9rem', padding: 0 }}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          </article>
-        </section>
-      )}
-
-      {/* TERMINOLOGY TAB */}
-      {activeCategory === 'terminology' && (
-        <article className="team-card" style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)', padding: '1.5rem', maxWidth: '600px' }}>
-          <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '1rem' }}>CRM Naming & Terminology</h2>
-          <form onSubmit={handleSaveTerminology} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Lead Singular Name
-              <input
-                required
-                value={termForm.leadSingular}
-                onChange={e => setTermForm({ ...termForm, leadSingular: e.target.value })}
-              />
-            </label>
-
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Lead Plural Name
-              <input
-                required
-                value={termForm.leadPlural}
-                onChange={e => setTermForm({ ...termForm, leadPlural: e.target.value })}
-              />
-            </label>
-
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Deliverable / Task Singular Name
-              <input
-                required
-                value={termForm.recordSingular}
-                onChange={e => setTermForm({ ...termForm, recordSingular: e.target.value })}
-              />
-            </label>
-
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Deliverable / Task Plural Name
-              <input
-                required
-                value={termForm.recordPlural}
-                onChange={e => setTermForm({ ...termForm, recordPlural: e.target.value })}
-              />
-            </label>
-
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Pipeline Board Name
-              <input
-                required
-                value={termForm.pipelineName}
-                onChange={e => setTermForm({ ...termForm, pipelineName: e.target.value })}
-              />
-            </label>
-
-            <button className="btn primary" type="submit" disabled={savingTerms} style={{ marginTop: '0.5rem', alignSelf: 'flex-start' }}>
-              {savingTerms ? 'Saving...' : 'Save Terminology'}
-            </button>
-          </form>
-        </article>
-      )}
-
-      {/* APPEARANCE TAB */}
-      {activeCategory === 'appearance' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <article className="team-card" style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)', padding: '1.5rem' }}>
-            <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Theme Presets</h2>
-            <p style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-              Choose a curated color palette for your organization.
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
-              {[
-                { name: 'Vande Classic Dark', gold: '#ffcc00', teal: '#00bcd4' },
-                { name: 'Warm Amber & Emerald', gold: '#f59e0b', teal: '#10b981' },
-                { name: 'Royal Indigo & Cyan', gold: '#6366f1', teal: '#06b6d4' },
-                { name: 'Crimson & Slate', gold: '#e11d48', teal: '#0f766e' },
-                { name: 'Sunset Orange & Sky', gold: '#ea580c', teal: '#0284c7' },
-                { name: 'Violet & Rose', gold: '#8b5cf6', teal: '#f43f5e' },
-              ].map(preset => (
-                <div
-                  key={preset.name}
-                  style={{
-                    padding: '1rem',
-                    border: `1px solid ${theme.gold === preset.gold && theme.teal === preset.teal ? 'var(--gold)' : 'var(--border)'}`,
-                    borderRadius: '8px',
-                    background: 'var(--bg-soft, rgba(255,255,255,0.02))',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.75rem',
-                  }}
-                >
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    <div style={{ width: '24px', height: '24px', borderRadius: '4px', background: preset.gold }} title={`Primary: ${preset.gold}`} />
-                    <div style={{ width: '24px', height: '24px', borderRadius: '4px', background: preset.teal }} title={`Secondary: ${preset.teal}`} />
-                    {theme.gold === preset.gold && theme.teal === preset.teal && (
-                      <span className="pill" style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--gold)' }}>Active</span>
-                    )}
-                  </div>
-                  <strong style={{ fontSize: '0.9rem' }}>{preset.name}</strong>
-                  <button
-                    type="button"
-                    className="btn small outline"
-                    onClick={() => handleApplyThemePreset(preset.gold, preset.teal)}
-                  >
-                    Apply Preset
-                  </button>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          <article className="team-card" style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--panel)', padding: '1.5rem' }}>
-            <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Custom Brand Colors</h2>
-            <p style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-              Define precise brand colors for accent buttons, focus states, and key metrics.
-            </p>
-            <form
-              onSubmit={e => {
-                e.preventDefault();
-                handleApplyThemePreset(theme.gold, theme.teal);
-              }}
-              style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}
-            >
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem' }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-                  Primary Brand Color (--gold)
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    <input
-                      type="color"
-                      value={theme.gold || '#ffcc00'}
-                      onChange={e => setTheme({ ...theme, gold: e.target.value })}
-                      style={{ height: '38px', width: '50px', padding: '2px', border: 'none', borderRadius: '4px' }}
-                    />
-                    <input
-                      type="text"
-                      value={theme.gold || '#ffcc00'}
-                      onChange={e => setTheme({ ...theme, gold: e.target.value })}
-                      style={{ flex: 1, textTransform: 'uppercase' }}
-                    />
-                  </div>
-                </label>
-
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-                  Secondary Accent Color (--teal)
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    <input
-                      type="color"
-                      value={theme.teal || '#00bcd4'}
-                      onChange={e => setTheme({ ...theme, teal: e.target.value })}
-                      style={{ height: '38px', width: '50px', padding: '2px', border: 'none', borderRadius: '4px' }}
-                    />
-                    <input
-                      type="text"
-                      value={theme.teal || '#00bcd4'}
-                      onChange={e => setTheme({ ...theme, teal: e.target.value })}
-                      style={{ flex: 1, textTransform: 'uppercase' }}
-                    />
-                  </div>
-                </label>
-              </div>
-
-              {/* Live UI Elements Preview */}
-              <div style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--bg-soft, rgba(255,255,255,0.02))' }}>
-                <p style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)', margin: '0 0 0.75rem 0' }}>Live UI Preview</p>
-                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button type="button" className="btn primary" style={{ background: theme.gold, color: '#000', borderColor: theme.gold }}>Primary Action</button>
-                  <button type="button" className="btn" style={{ borderColor: theme.teal, color: theme.teal }}>Secondary Action</button>
-                  <span className="stage-badge" style={{ backgroundColor: theme.gold, color: '#000', padding: '3px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700 }}>Stage Badge</span>
-                  <span className="pill" style={{ borderColor: theme.teal, color: theme.teal, padding: '3px 8px', borderRadius: '12px', fontSize: '0.75rem' }}>Active Filter</span>
-                </div>
-              </div>
-
-              <button className="btn primary" type="submit" style={{ alignSelf: 'flex-start', marginTop: '0.5rem' }}>
-                Save Custom Brand Colors
-              </button>
-            </form>
-          </article>
-        </div>
-      )}
-      {/* CUSTOM WORK TYPES (MODULES) TAB */}
-      {activeCategory === 'work-types' && (
-        <section>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '10px' }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Custom Sidebar Modules</h2>
-              <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '0.85rem' }}>
-                Create and customize deliverable workflows, status pipelines, and custom fields.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="btn primary"
-              onClick={() => { setBuilderTarget(null); setBuilderOpen(true); }}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Icon name="plus" size={16} />
-              <span>Add Module</span>
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-            {workTypes.map(wt => (
-              <div
-                key={wt._id}
-                className="module-card"
-                style={{
-                  border: '1px solid var(--border)',
-                  borderRadius: '12px',
-                  background: 'var(--panel)',
-                  padding: '1.25rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.85rem',
-                  '--module-color': wt.color || 'var(--gold)',
-                } as any}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 8, background: 'var(--panel-muted, rgba(255,255,255,0.05))', color: wt.color || 'var(--gold)' }}>
-                      <Icon name={wt.icon || 'clipboard-list'} size={20} />
-                    </span>
-                    <div>
-                      <strong style={{ fontSize: '1rem', display: 'block' }}>{wt.name}</strong>
-                      <code style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>/work/{wt.key}</code>
-                    </div>
-                  </div>
-                  <span className={`stage-badge ${wt.isActive !== false ? 'done' : 'pending'}`} style={{ fontSize: '0.7rem' }}>
-                    {wt.isActive !== false ? 'Active' : 'Disabled'}
+            <div className="module-card-list">
+              {workTypes.map(item => (
+                <article key={item._id} className="module-card" style={{ '--module-color': item.color || 'var(--gold)' } as React.CSSProperties}>
+                  <span className="module-card-icon">
+                    <Icon name={(item.icon as any) || 'clipboard-list'} size={19} />
                   </span>
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', fontSize: '0.78rem', color: 'var(--muted)' }}>
-                  <span>{wt.statuses?.length || 0} statuses</span>
-                  <span>•</span>
-                  <span>{wt.fields?.length || 0} fields</span>
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
-                  <button
-                    type="button"
-                    className="btn small outline"
-                    style={{ flex: 1 }}
-                    onClick={() => { setBuilderTarget(wt); setBuilderOpen(true); }}
-                  >
-                    Edit Module
+                  <div>
+                    <strong>{item.name}</strong>
+                    <small>/{item.key} · {item.statuses?.length || 0} statuses · {item.fields?.length || 0} fields</small>
+                  </div>
+                  <span className={`module-state ${item.isActive ? '' : 'inactive'}`}>{item.isActive ? 'Active' : 'Hidden'}</span>
+                  <button className="btn small" type="button" onClick={() => { setBuilderTarget(item); setBuilderOpen(true); }}>
+                    Customize
                   </button>
-                </div>
-              </div>
+                </article>
+              ))}
+              {workTypes.length === 0 && <p className="empty">No work modules yet. Create the first one.</p>}
+            </div>
+
+            {builderOpen && (
+              <WorkTypeBuilder
+                workType={builderTarget}
+                onClose={() => { setBuilderOpen(false); setBuilderTarget(null); }}
+                onChanged={loadSettings}
+              />
+            )}
+          </article>
+        )}
+
+        {/* ============ APPEARANCE ============ */}
+        <article className="settings-panel wide" data-settings-panel="appearance" hidden={activeCategory !== 'appearance'}>
+          <h2>UI Theme Customization</h2>
+          <p style={{ color: 'var(--muted)', fontSize: '0.78rem', marginBottom: '1.25rem' }}>
+            Select a curated theme preset. Applying a theme will instantly update the interface with a smooth color ripple wave.
+          </p>
+
+          <div className="theme-presets-grid" style={{ marginBottom: '1.5rem' }}>
+            {THEME_PRESETS.map(preset => (
+              <ThemeCard
+                key={preset.name}
+                preset={preset}
+                active={activePresetKey() === preset.name}
+                onClick={() => handleApplyTheme(preset.gold, preset.teal, preset.bg, preset.surface, preset.text)}
+              />
             ))}
           </div>
 
-          {builderOpen && (
-            <WorkTypeBuilder
-              workType={builderTarget}
-              onClose={() => { setBuilderOpen(false); setBuilderTarget(null); }}
-              onChanged={loadSettings}
-            />
-          )}
-        </section>
-      )}
+          {/* Advanced Collapsible */}
+          <details style={{ marginTop: '1rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+            <summary style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--gold)', cursor: 'pointer', userSelect: 'none' }}>
+              🛠️ Advanced: Custom Colors
+            </summary>
+            <form
+              className="palette-form"
+              style={{ marginTop: '1rem' }}
+              onSubmit={e => {
+                e.preventDefault();
+                handleApplyTheme(theme.gold, theme.teal, theme.background, theme.surface, theme.text);
+              }}
+            >
+              <label>Gold accent<input type="color" value={theme.gold} onChange={e => setTheme({ ...theme, gold: e.target.value })} /></label>
+              <label>Teal accent<input type="color" value={theme.teal} onChange={e => setTheme({ ...theme, teal: e.target.value })} /></label>
+              <label>Background<input type="color" value={theme.background} onChange={e => setTheme({ ...theme, background: e.target.value })} /></label>
+              <label>Surface<input type="color" value={theme.surface} onChange={e => setTheme({ ...theme, surface: e.target.value })} /></label>
+              <label>Text<input type="color" value={theme.text} onChange={e => setTheme({ ...theme, text: e.target.value })} /></label>
+              <button className="btn primary" type="submit">Save Palette</button>
+            </form>
+          </details>
+        </article>
 
-      {/* AUTOMATIONS TAB */}
-      {activeCategory === 'automations' && (
-        <AutomationsTab
-          stages={stages}
-          labels={labels}
-          workTypes={workTypes}
-          users={users}
-          automations={automations}
-          leadSingular={terminology.leadSingular}
-          onChanged={loadSettings}
-        />
-      )}
+        {/* ============ STAGES ============ */}
+        <article className="settings-panel wide" data-settings-panel="stages" hidden={activeCategory !== 'stages'}>
+          <div className="panel-title-row">
+            <div>
+              <h2>{terminology.pipelineName}</h2>
+              <p className="page-subtitle">A stage is one step in your sales process. {terminology.recordPlural} move through these steps from first enquiry to a final result.</p>
+            </div>
+            <span>Drag to change the order</span>
+          </div>
+          <div className="settings-explainer">
+            <strong>How to use this</strong>
+            <span>Use <b>Default</b> for where new {terminology.recordPlural.toLowerCase()} begin. Use <b>Won</b> or <b>Lost</b> only for final outcomes. Keep a stage <b>Active</b> while your team should be able to use it.</span>
+          </div>
+
+          <form onSubmit={handleAddStage} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.25rem', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: '8px', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px', gap: '1rem' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 700, fontSize: '0.8rem' }}>
+                New stage name
+                <input name="name" placeholder="Example: Demo booked" required className="form-control" style={{ width: '100%' }} value={newStageName} onChange={e => setNewStageName(e.target.value)} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 700, fontSize: '0.8rem', textAlign: 'center' }}>
+                Color
+                <input type="color" value={newStageColor} onChange={e => setNewStageColor(e.target.value)} style={{ width: '100%', height: '38px', padding: '0.2rem', cursor: 'pointer' }} />
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'normal', color: 'var(--text)' }}>
+                <input type="checkbox" style={{ width: 'auto', minHeight: 'auto' }} checked={newStageWon} onChange={e => { setNewStageWon(e.target.checked); if (e.target.checked) setNewStageLost(false); }} />
+                This means a sale is won
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'normal', color: 'var(--text)' }}>
+                <input type="checkbox" style={{ width: 'auto', minHeight: 'auto' }} checked={newStageLost} onChange={e => { setNewStageLost(e.target.checked); if (e.target.checked) setNewStageWon(false); }} />
+                This means a {terminology.recordSingular.toLowerCase()} is lost
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'normal', color: 'var(--text)' }}>
+                <input type="checkbox" style={{ width: 'auto', minHeight: 'auto' }} checked={newStageDefault} onChange={e => setNewStageDefault(e.target.checked)} />
+                New {terminology.recordPlural.toLowerCase()} start here
+              </label>
+            </div>
+            <button className="btn primary" type="submit" disabled={addingStage} style={{ alignSelf: 'flex-start', padding: '0.6rem 1.5rem' }}>
+              {addingStage ? 'Adding...' : 'Add Stage'}
+            </button>
+          </form>
+
+          <div id="stageReorderList" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div className="stage-list-header desktop-only" style={{ display: 'grid', gridTemplateColumns: STAGE_GRID, gap: '.5rem', padding: '0.5rem .62rem', fontSize: '0.72rem', fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)', marginBottom: '0.25rem' }}>
+              {STAGE_HEADER.map(([label, align], i) => (
+                <span key={i} style={{ textAlign: align as any }}>{label}</span>
+              ))}
+            </div>
+            {visibleStageOrder.map(stage => {
+              const d = sd(stage);
+              return (
+                <form
+                  key={stage._id}
+                  className={`settings-row draggable-stage ${dragStageId === stage._id ? 'is-dragging' : ''}`}
+                  draggable
+                  onDragStart={() => setDragStageId(stage._id)}
+                  onDragEnd={() => {
+                    setDragStageId(null);
+                    saveStageOrder();
+                  }}
+                  onDragOver={e => {
+                    e.preventDefault();
+                    const target = e.currentTarget;
+                    if (!dragStageId || dragStageId === stage._id) return;
+                    const rect = target.getBoundingClientRect();
+                    const after = e.clientY > rect.top + rect.height / 2;
+                    const container = target.parentElement!;
+                    const dragged = document.querySelector(`[data-stage-id="${dragStageId}"]`);
+                    if (dragged) container.insertBefore(dragged, after ? target.nextSibling : target);
+                  }}
+                  style={{ display: 'grid', gridTemplateColumns: STAGE_GRID, gap: '.5rem', alignItems: 'center', padding: '.62rem', border: '1px solid var(--border)', borderRadius: '8px', marginBottom: 0, background: 'var(--panel)' }}
+                  onSubmit={e => { e.preventDefault(); handleUpdateStage(stage._id); }}
+                >
+                  <span className="drag-handle" title="Drag to change this stage's position" style={{ cursor: 'grab', color: 'var(--teal)', fontWeight: 900, userSelect: 'none' }}>⋮⋮</span>
+                  <input name="name" value={d.name} required className="form-control" placeholder="Stage name" style={{ width: '100%' }} onChange={e => setStageDrafts(prev => ({ ...prev, [stage._id]: { ...d, name: e.target.value } }))} />
+                  <input type="color" value={d.color} style={{ width: '100%', height: '32px', padding: '0.1rem', cursor: 'pointer' }} title="Stage color" onChange={e => setStageDrafts(prev => ({ ...prev, [stage._id]: { ...d, color: e.target.value } }))} />
+                  <input type="checkbox" title="Won sale" style={{ justifySelf: 'center', width: 'auto', minHeight: 'auto' }} checked={d.isWon} onChange={e => setStageDrafts(prev => ({ ...prev, [stage._id]: { ...d, isWon: e.target.checked } }))} />
+                  <input type="checkbox" title="Lost lead" style={{ justifySelf: 'center', width: 'auto', minHeight: 'auto' }} checked={d.isLost} onChange={e => setStageDrafts(prev => ({ ...prev, [stage._id]: { ...d, isLost: e.target.checked } }))} />
+                  <input type="checkbox" title="Starting stage" style={{ justifySelf: 'center', width: 'auto', minHeight: 'auto' }} checked={d.isDefault} onChange={e => setStageDrafts(prev => ({ ...prev, [stage._id]: { ...d, isDefault: e.target.checked } }))} />
+                  <input type="checkbox" title="Available to team" style={{ justifySelf: 'center', width: 'auto', minHeight: 'auto' }} checked={d.isActive} onChange={e => setStageDrafts(prev => ({ ...prev, [stage._id]: { ...d, isActive: e.target.checked } }))} />
+                  <button className="btn small" type="submit" style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.75rem' }}>Save changes</button>
+                </form>
+              );
+            })}
+          </div>
+        </article>
+
+        {/* ============ LABELS ============ */}
+        <article className="settings-panel wide" data-settings-panel="labels" hidden={activeCategory !== 'labels'}>
+          <h2>{terminology.recordSingular} tags</h2>
+          <p className="page-subtitle">Tags help your team spot and group similar {terminology.recordPlural.toLowerCase()}. They do not change a {terminology.recordSingular.toLowerCase()}'s {terminology.pipelineName.toLowerCase()} stage.</p>
+          <form onSubmit={handleAddLabel} className="inline-form">
+            <label>Tag name<input name="name" placeholder="Example: High priority" required value={newLabelName} onChange={e => setNewLabelName(e.target.value)} /></label>
+            <label>Tag color<input type="color" value={newLabelColor} onChange={e => setNewLabelColor(e.target.value)} /></label>
+            <label><input type="checkbox" checked={newLabelHighPotential} onChange={e => setNewLabelHighPotential(e.target.checked)} /> Count as high potential</label>
+            <button className="btn primary" type="submit" disabled={addingLabel}>{addingLabel ? 'Adding...' : 'Add tag'}</button>
+          </form>
+
+          {labels.map(label => {
+            const d = ld(label);
+            return (
+              <form key={label._id} className="label-card" onSubmit={e => { e.preventDefault(); handleUpdateLabel(label._id); }}>
+                <input type="color" value={d.color} aria-label={`Color for ${label.name}`} onChange={e => setLabelDrafts(prev => ({ ...prev, [label._id]: { ...d, color: e.target.value } }))} />
+                <label>Tag name<input name="name" value={d.name} required onChange={e => setLabelDrafts(prev => ({ ...prev, [label._id]: { ...d, name: e.target.value } }))} /></label>
+                <label><input type="checkbox" checked={d.isHighPotential} onChange={e => setLabelDrafts(prev => ({ ...prev, [label._id]: { ...d, isHighPotential: e.target.checked } }))} /> Count as high potential</label>
+                <label><input type="checkbox" checked={d.isActive} onChange={e => setLabelDrafts(prev => ({ ...prev, [label._id]: { ...d, isActive: e.target.checked } }))} /> Available to team</label>
+                <button className="btn small" type="submit">Save tag</button>
+              </form>
+            );
+          })}
+        </article>
+
+        {/* ============ FIELDS ============ */}
+        <article className="settings-panel wide" data-settings-panel="fields" hidden={activeCategory !== 'fields'}>
+          <h2>{terminology.recordSingular} form builder</h2>
+          <p className="page-subtitle">Choose exactly what your team records for each {terminology.leadSingular.toLowerCase()}. These fields appear when creating or editing a {terminology.leadSingular.toLowerCase()} in {activeCompany?.name || 'your workspace'}.</p>
+          <div className="settings-explainer">
+            <strong>Build the form</strong>
+            <span>Use <b>Text</b> for words, <b>Number</b> for amounts, <b>Date</b> for dates, <b>Dropdown</b> for fixed choices, and <b>Checkbox</b> for yes/no. Mark a field Required only when every record must have it.</span>
+          </div>
+          <form onSubmit={handleAddField} className="inline-form field-form">
+            <label>Question / field name<input name="label" placeholder="Example: Budget range" required value={newFieldLabel} onChange={e => setNewFieldLabel(e.target.value)} /></label>
+            <label>Answer type
+              <select value={newFieldType} onChange={e => setNewFieldType(e.target.value as FieldType)}>
+                {FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </label>
+            <label>Choices (only for dropdown)<input name="options" placeholder="Example: Small, Medium, Large" value={newFieldOptions} onChange={e => setNewFieldOptions(e.target.value)} /></label>
+            <label className="mini-check"><input type="checkbox" checked={newFieldRequired} onChange={e => setNewFieldRequired(e.target.checked)} /> Must be filled in</label>
+            <button className="btn primary" type="submit" disabled={addingField}>{addingField ? 'Adding...' : 'Add to form'}</button>
+          </form>
+
+          <div className="form-preview">
+            <strong>Current form preview</strong>
+            <span>These are the extra questions your team sees.</span>
+            <div>
+              {fields.filter(f => f.isActive).map(f => (
+                <label key={f._id}>{f.label}{f.required ? ' *' : ''}<input disabled placeholder={f.type === 'select' ? (f.options || []).join(' / ') : `Enter ${f.label.toLowerCase()}`} /></label>
+              ))}
+            </div>
+          </div>
+
+          <div className="field-card-list">
+            {visibleFieldOrder.map(field => {
+              const d = fd(field);
+              return (
+                <form
+                  key={field._id}
+                  className="field-card"
+                  draggable
+                  onDragStart={() => setDragFieldId(field._id)}
+                  onDragEnd={() => { setDragFieldId(null); saveFieldOrder(); }}
+                  onDragOver={e => {
+                    e.preventDefault();
+                    if (!dragFieldId || dragFieldId === field._id) return;
+                    const target = e.currentTarget;
+                    const container = target.parentElement!;
+                    const dragged = document.querySelector(`[data-field-id="${dragFieldId}"]`);
+                    if (dragged) container.insertBefore(dragged, e.clientY > target.getBoundingClientRect().top + target.offsetHeight / 2 ? target.nextSibling : target);
+                  }}
+                  onSubmit={e => { e.preventDefault(); handleUpdateField(field._id); }}
+                >
+                  <input type="hidden" name="entity" value={field.entity || 'customer'} />
+                  <div className="field-card-head">
+                    <span className="drag-handle" title="Drag to reorder">⋮⋮</span>
+                    <strong>{field.label}</strong>
+                    <span>{d.isActive ? 'Included on form' : 'Not on form'}</span>
+                  </div>
+                  <label>Name<input name="label" value={d.label} required onChange={e => setFieldDrafts(prev => ({ ...prev, [field._id]: { ...d, label: e.target.value } }))} /></label>
+                  <label>Answer type
+                    <select value={d.type} onChange={e => setFieldDrafts(prev => ({ ...prev, [field._id]: { ...d, type: e.target.value } }))}>
+                      {FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  </label>
+                  <label>Dropdown choices<input name="options" value={d.options} placeholder="Only used for dropdowns" onChange={e => setFieldDrafts(prev => ({ ...prev, [field._id]: { ...d, options: e.target.value } }))} /></label>
+                  <div className="field-card-actions">
+                    <label><input type="checkbox" checked={d.required} onChange={e => setFieldDrafts(prev => ({ ...prev, [field._id]: { ...d, required: e.target.checked } }))} /> Required</label>
+                    <label><input type="checkbox" checked={d.isActive} onChange={e => setFieldDrafts(prev => ({ ...prev, [field._id]: { ...d, isActive: e.target.checked } }))} /> Include on form</label>
+                    <button className="btn small" type="submit">Save field</button>
+                  </div>
+                </form>
+              );
+            })}
+            {fields.length === 0 && <p className="empty">No fields added yet. Create the first one.</p>}
+          </div>
+        </article>
+
+        {/* ============ TERMINOLOGY ============ */}
+        {isAdmin && (
+          <article className="settings-panel" data-settings-panel="terminology" hidden={activeCategory !== 'terminology'}>
+            <h2>CRM names</h2>
+            <p className="page-subtitle">Use the words your business uses. Example: Potential Booking / Guest, Student / Enrolled Student, or Lead / Client. This updates labels only, never saved data.</p>
+            <form onSubmit={handleSaveTerminology} className="inline-form">
+              <label>One lead<input name="leadSingular" value={termForm.leadSingular} required onChange={e => setTermForm({ ...termForm, leadSingular: e.target.value })} /></label>
+              <label>Many leads<input name="leadPlural" value={termForm.leadPlural} required onChange={e => setTermForm({ ...termForm, leadPlural: e.target.value })} /></label>
+              <label>One client<input name="recordSingular" value={termForm.recordSingular} required onChange={e => setTermForm({ ...termForm, recordSingular: e.target.value })} /></label>
+              <label>Many clients<input name="recordPlural" value={termForm.recordPlural} required onChange={e => setTermForm({ ...termForm, recordPlural: e.target.value })} /></label>
+              <label>Pipeline name<input name="pipelineName" value={termForm.pipelineName} required onChange={e => setTermForm({ ...termForm, pipelineName: e.target.value })} /></label>
+              <button className="btn primary" type="submit" disabled={savingTerms}>{savingTerms ? 'Saving...' : 'Save names'}</button>
+            </form>
+          </article>
+        )}
+      </section>
 
       <ConfirmDialog
         open={confirmState.open}
@@ -840,6 +817,60 @@ export default function SettingsPage() {
         onConfirm={confirmState.action}
         onCancel={() => setConfirmState(prev => ({ ...prev, open: false }))}
       />
+    </div>
+  );
+}
+
+function isDark(hex: string): boolean {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+  if (!m) return false;
+  const r = parseInt(m[1], 16);
+  const g = parseInt(m[2], 16);
+  const b = parseInt(m[3], 16);
+  return r + g + b < 382;
+}
+
+function ThemeCard({ preset, active, onClick }: {
+  preset: typeof THEME_PRESETS[number];
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <div className={`theme-card ${active ? 'is-active' : ''}`} onClick={onClick}>
+      <div className="theme-card-mockup" style={{ background: preset.bg, border: `1px solid ${preset.type === 'dark' ? '#1e293b' : '#e7e5e4'}` }}>
+        <div style={{ width: 22, background: preset.surface, borderRight: `1px solid ${preset.type === 'dark' ? '#1e293b' : '#e7e5e4'}`, display: 'flex', flexDirection: 'column', padding: '6px 3px', gap: 4 }}>
+          <div style={{ width: 10, height: 10, borderRadius: 3, background: preset.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontSize: 6, fontWeight: 800 }}>V</div>
+          <div style={{ width: 14, height: 3, borderRadius: 1, background: preset.gold, opacity: 0.8 }} />
+          <div style={{ width: 14, height: 3, borderRadius: 1, background: preset.text, opacity: 0.3 }} />
+          <div style={{ width: 14, height: 3, borderRadius: 1, background: preset.text, opacity: 0.3 }} />
+        </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ height: 14, background: preset.surface, borderBottom: `1px solid ${preset.type === 'dark' ? '#1e293b' : '#e7e5e4'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px' }}>
+            <div style={{ width: 30, height: 4, borderRadius: 1, background: preset.text, opacity: 0.25 }} />
+            <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+              <div style={{ width: 5, height: 5, borderRadius: '50%', background: preset.gold }} />
+              <div style={{ width: 5, height: 5, borderRadius: '50%', background: preset.text, opacity: 0.4 }} />
+            </div>
+          </div>
+          <div style={{ flex: 1, padding: 6, display: 'flex', gap: 4, background: preset.bg }}>
+            <div style={{ flex: 1, background: preset.surface, border: `1px solid ${preset.type === 'dark' ? '#1e293b' : '#e7e5e4'}`, borderRadius: 4, padding: 4, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <div style={{ width: 12, height: 2, borderRadius: 1, background: preset.text, opacity: 0.4 }} />
+              <div style={{ width: 25, height: 5, borderRadius: 1.5, background: preset.gold }} />
+            </div>
+            <div style={{ flex: 1, background: preset.surface, border: `1px solid ${preset.type === 'dark' ? '#1e293b' : '#e7e5e4'}`, borderRadius: 4, padding: 4, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <div style={{ width: 12, height: 2, borderRadius: 1, background: preset.text, opacity: 0.4 }} />
+              <div style={{ width: 20, height: 4, borderRadius: 1.5, background: preset.teal }} />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="theme-card-info">
+        <span className="theme-card-name">{preset.name}</span>
+        <span className="theme-type-tag">{preset.description}</span>
+      </div>
+      <span className="active-badge-indicator">
+        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </span>
     </div>
   );
 }

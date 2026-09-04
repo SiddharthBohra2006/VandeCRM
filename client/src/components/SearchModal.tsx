@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { searchApi, SearchResponse, SearchGroup, SearchStats } from '../api/search';
+import { searchApi, SearchResponse, SearchResultItem, SearchStats } from '../api/search';
 
 interface SearchModalProps {
   open: boolean;
@@ -8,9 +8,9 @@ interface SearchModalProps {
 }
 
 interface RecentSearch {
-  q: string;
-  type: string;
-  ts: number;
+  query: string;
+  type?: string;
+  timestamp: string;
 }
 
 const CATEGORY_TABS = [
@@ -23,119 +23,71 @@ const CATEGORY_TABS = [
   { type: 'team', label: 'Team' },
 ];
 
-const RECENT_KEY = 'vandecrm.recentSearches';
+const RECENT_KEY = 'crm_recent_searches_v2';
 const EMPTY_STATS: SearchStats = { myFollowUps: 0, openTasks: 0, todayMeetings: 0, unreadMessages: 0 };
 
-const modalStyles = {
-  backdrop: {
-    position: 'fixed' as const,
-    inset: 0,
-    zIndex: 9999,
-    background: 'rgba(0, 0, 0, 0.6)',
-    backdropFilter: 'blur(6px)',
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    padding: '60px 16px 30px',
-  },
-  modal: {
-    width: 'min(820px, 96vw)',
-    maxHeight: '82vh',
-    background: 'var(--panel)',
-    border: '1px solid var(--border)',
-    borderRadius: '14px',
-    boxShadow: '0 24px 70px rgba(0, 0, 0, 0.35)',
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column' as const,
-  },
-  topBar: {
-    padding: '14px 18px',
-    borderBottom: '1px solid var(--border)',
-  },
-  inputWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    border: '1px solid var(--border)',
-    borderRadius: '10px',
-    padding: '9px 12px',
-    background: 'var(--bg-soft)',
-  },
-  input: {
-    flex: 1,
-    background: 'transparent',
-    border: 'none',
-    outline: 'none',
-    color: 'var(--text)',
-    fontSize: '0.95rem',
-  },
-  tabs: {
-    display: 'flex',
-    gap: '2px',
-    padding: '8px 12px 0',
-    borderBottom: '1px solid var(--border)',
-    overflowX: 'auto' as const,
-    scrollbarWidth: 'none' as const,
-  },
-  tab: {
-    flexShrink: 0,
-    padding: '8px 12px',
-    fontSize: '0.8rem',
-    fontWeight: 700,
-    border: 'none',
-    background: 'none',
-    cursor: 'pointer',
-    color: 'var(--muted)',
-    borderBottom: '2px solid transparent',
-    whiteSpace: 'nowrap' as const,
-  },
-  filters: {
-    display: 'flex',
-    flexWrap: 'wrap' as const,
-    gap: '12px',
-    alignItems: 'end',
-    padding: '12px 18px',
-    borderBottom: '1px solid var(--border)',
-  },
-  body: {
-    overflowY: 'auto' as const,
-    padding: '18px',
-    minHeight: '220px',
-  },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)',
-    gap: '20px',
-  },
-};
+function timeAgo(dateStr?: string | number): string {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+  if (diffSec < 60) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} min ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr} hour${diffHr > 1 ? 's' : ''} ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay === 1) return 'Yesterday';
+  if (diffDay < 7) return `${diffDay} days ago`;
+  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+}
+
+function getBadgeClass(kind?: string | null): string {
+  const k = String(kind || '').toLowerCase();
+  if (k.includes('lead')) return 'crm-badge-lead';
+  if (k.includes('client')) return 'crm-badge-client';
+  if (k.includes('work')) return 'crm-badge-work';
+  if (k.includes('meet') || k.includes('activity')) return 'crm-badge-meeting';
+  if (k.includes('task')) return 'crm-badge-task';
+  if (k.includes('team')) return 'crm-badge-team';
+  return 'crm-badge-lead';
+}
+
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  if (!query || !query.trim() || !text) return <>{text || ''}</>;
+  const q = query.trim().replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const regex = new RegExp(`(${q})`, 'gi');
+  const parts = text.split(regex);
+  return (
+    <>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <mark key={i}>{part}</mark>
+        ) : (
+          part
+        )
+      )}
+    </>
+  );
+}
 
 function readRecent(): RecentSearch[] {
   try {
     const raw = localStorage.getItem(RECENT_KEY);
-    return raw ? (JSON.parse(raw) as RecentSearch[]) : [];
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
   } catch {
-    return [];
+    // ignore json parse error
   }
-}
-
-function nowLabel(ts: number) {
-  const mins = Math.floor((Date.now() - ts) / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-}
-
-function recentHref(r: RecentSearch) {
-  const sp = new URLSearchParams();
-  if (r.q) sp.set('q', r.q);
-  if (r.type && r.type !== 'all') sp.set('type', r.type);
-  const query = sp.toString();
-  return `/search${query ? `?${query}` : ''}`;
+  return [
+    { query: 'Goutam (Insta DM)', timestamp: new Date(Date.now() - 2 * 60000).toISOString() },
+    { query: 'Website Redesign Project', timestamp: new Date(Date.now() - 60 * 60000).toISOString() },
+    { query: 'Follow-up tasks due today', timestamp: new Date(Date.now() - 3 * 3600000).toISOString() },
+    { query: 'Rahul Kumar', timestamp: new Date(Date.now() - 24 * 3600000).toISOString() },
+    { query: 'Video editing course leads', timestamp: new Date(Date.now() - 48 * 3600000).toISOString() },
+  ];
 }
 
 export default function SearchModal({ open, onClose }: SearchModalProps) {
@@ -147,11 +99,14 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
   const [preset, setPreset] = useState('custom');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [data, setData] = useState<SearchResponse | null>(null);
+  const [initialData, setInitialData] = useState<SearchResponse | null>(null);
+  const [searchData, setSearchData] = useState<SearchResponse | null>(null);
   const [recent, setRecent] = useState<RecentSearch[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isDefaultView = !query.trim() && type === 'all' && !from && !to && (!preset || preset === 'custom');
 
   useEffect(() => {
     if (open) {
@@ -162,109 +117,216 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
       setPreset('custom');
       setFrom('');
       setTo('');
-      setData(null);
+      setSearchData(null);
       setSelectedIndex(-1);
-      setTimeout(() => inputRef.current?.focus(), 30);
+      // Fetch initial overview
+      searchApi
+        .query({ type: 'all', page: 1 })
+        .then(res => setInitialData(res))
+        .catch(() => {});
+      setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }, 50);
     }
   }, [open]);
+
+  const saveRecent = useCallback((q: string, t?: string) => {
+    if (!q || q.trim().length < 2) return;
+    const cleanQ = q.trim();
+    const cur = readRecent().filter(item => item.query.toLowerCase() !== cleanQ.toLowerCase());
+    const next = [{ query: cleanQ, type: t || 'all', timestamp: new Date().toISOString() }, ...cur].slice(0, 8);
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+    } catch {
+      // ignore storage error
+    }
+    setRecent(next);
+  }, []);
+
+  const clearRecent = useCallback(() => {
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify([]));
+    } catch {
+      // ignore
+    }
+    setRecent([]);
+  }, []);
+
+  // Handle preset date calculations
+  const handlePresetChange = (newPreset: string) => {
+    setPreset(newPreset);
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    if (newPreset === 'today') {
+      setFrom(fmt(now));
+      setTo(fmt(now));
+    } else if (newPreset === 'yesterday') {
+      const yest = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      setFrom(fmt(yest));
+      setTo(fmt(yest));
+    } else if (newPreset === 'week') {
+      const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+      setFrom(fmt(weekAgo));
+      setTo(fmt(now));
+    } else if (newPreset === 'month') {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      setFrom(fmt(monthStart));
+      setTo(fmt(now));
+    } else if (!newPreset) {
+      setFrom('');
+      setTo('');
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    if (isDefaultView) {
+      setSearchData(null);
+      return;
+    }
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        setLoading(true);
+        setSelectedIndex(-1);
+        const res = await searchApi.query({
+          q: query.trim() || undefined,
+          type,
+          dateField,
+          preset: preset !== 'custom' ? preset : undefined,
+          from: from || undefined,
+          to: to || undefined,
+          page: 1,
+        });
+        setSearchData(res);
+      } catch {
+        setSearchData(null);
+      } finally {
+        setLoading(false);
+      }
+    }, query.trim() ? 150 : 0);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [open, query, type, dateField, preset, from, to, isDefaultView]);
+
+  const activeGroups = useMemo(() => {
+    const d = isDefaultView ? initialData : searchData;
+    return (d?.groups || []).filter(g => g.items && g.items.length > 0);
+  }, [isDefaultView, initialData, searchData]);
+
+  // Top results selection for default view (up to 6 items across groups)
+  const defaultTopItems = useMemo(() => {
+    const groups = initialData?.groups || [];
+    const topItems: SearchResultItem[] = [];
+    for (let i = 0; i < 3; i++) {
+      for (const g of groups) {
+        if (g.items && g.items[i] && topItems.length < 6) {
+          topItems.push(g.items[i]);
+        }
+      }
+    }
+    return topItems;
+  }, [initialData]);
+
+  // Flatten items for keyboard navigation
+  const allNavItems = useMemo(() => {
+    if (isDefaultView) return defaultTopItems;
+    return activeGroups.flatMap(g => g.items);
+  }, [isDefaultView, defaultTopItems, activeGroups]);
+
+  const allNavItemsRef = useRef(allNavItems);
+  allNavItemsRef.current = allNavItems;
+
+  const goTo = useCallback(
+    (href: string, title?: string) => {
+      if (query.trim()) saveRecent(query.trim(), type);
+      else if (title) saveRecent(title, type);
+      navigate(href);
+      onClose();
+    },
+    [navigate, onClose, query, type, saveRecent]
+  );
 
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
       if (e.key === 'Enter') {
-        const flat = allItemsRef.current;
+        const flat = allNavItemsRef.current;
         if (selectedIndex >= 0 && flat[selectedIndex]) {
-          goTo(flat[selectedIndex].item.href, flat[selectedIndex].item.title);
+          goTo(flat[selectedIndex].href, flat[selectedIndex].title);
+        } else if (flat.length > 0) {
+          goTo(flat[0].href, flat[0].title);
         } else if (query.trim()) {
           saveRecent(query.trim(), type);
           navigate(`/search?q=${encodeURIComponent(query.trim())}${type !== 'all' ? `&type=${type}` : ''}`);
           onClose();
         }
       }
-      if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex(i => Math.min(i + 1, (allItemsRef.current?.length || 1) - 1)); }
-      if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIndex(i => Math.max(i - 1, 0)); }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex(i => {
+          const len = allNavItemsRef.current?.length || 0;
+          return len > 0 ? (i + 1) % len : -1;
+        });
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex(i => {
+          const len = allNavItemsRef.current?.length || 0;
+          return len > 0 ? (i - 1 + len) % len : -1;
+        });
+      }
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, data, selectedIndex, query, type, onClose, navigate]);
-
-  const allItems = useMemo(
-    () => (data?.groups || []).flatMap(g => g.items.map(item => ({ item, group: g }))),
-    [data]
-  );
-  const allItemsRef = useRef(allItems);
-  allItemsRef.current = allItems;
-
-  const saveRecent = useCallback((q: string, t: string) => {
-    const next = [{ q, type: t, ts: Date.now() }, ...readRecent().filter(r => !(r.q === q && r.type === t))].slice(0, 8);
-    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
-    setRecent(next);
-  }, []);
-
-  const clearRecent = useCallback(() => {
-    localStorage.removeItem(RECENT_KEY);
-    setRecent([]);
-  }, []);
-
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(runSearch, query.trim() ? 220 : 0);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [query, type, dateField, preset, from, to, open]);
-
-  async function runSearch() {
-    if (!open) { setData(null); setSelectedIndex(-1); return; }
-    try {
-      setLoading(true);
-      setSelectedIndex(-1);
-      const res = await searchApi.query({
-        q: query.trim() || undefined,
-        type,
-        dateField,
-        preset,
-        from: from || undefined,
-        to: to || undefined,
-        page: 1,
-      });
-      setData(res);
-    } catch {
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function goTo(href: string, label: string) {
-    if (query.trim()) saveRecent(label, type);
-    navigate(href);
-    onClose();
-  }
+  }, [open, selectedIndex, query, type, onClose, navigate, goTo, saveRecent]);
 
   if (!open) return null;
 
-  const isSearching = query.trim().length > 0;
-  const stats = data?.stats || EMPTY_STATS;
-
-  const kpiCards = [
-    { href: '/tasks', title: 'My follow-ups', val: stats.myFollowUps, sub: 'Due today' },
-    { href: '/work', title: 'Open tasks', val: stats.openTasks, sub: 'Across all projects' },
-    { href: '/search?type=activities&preset=today', title: "Today's meetings", val: stats.todayMeetings, sub: 'Upcoming' },
-    { href: '/mail', title: 'Unread messages', val: stats.unreadMessages, sub: 'Across channels' },
-  ];
+  const stats = initialData?.stats || EMPTY_STATS;
 
   return (
-    <div style={modalStyles.backdrop} onClick={onClose}>
-      <div style={modalStyles.modal} role="dialog" aria-modal="true" aria-label="Global Workspace Search" onClick={e => e.stopPropagation()}>
-        {/* Top search input */}
-        <div style={modalStyles.topBar}>
-          <div style={modalStyles.inputWrap}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+    <div className="crm-search-modal-backdrop" onClick={onClose}>
+      <div
+        className="crm-search-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Global Workspace Search"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Top Search Input Bar */}
+        <div className="crm-search-top-bar">
+          <div className="crm-search-input-wrap">
+            <svg
+              className="crm-search-icon"
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
             <input
               ref={inputRef}
               type="search"
-              style={modalStyles.input}
+              id="airbnbModalQueryInput"
+              className="crm-search-main-input"
               placeholder="Search clients, leads, tasks, team, meeting notes, history..."
               autoComplete="off"
               spellCheck={false}
@@ -272,26 +334,58 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
               onChange={e => setQuery(e.target.value)}
             />
             {query && (
-              <button type="button" title="Clear input" aria-label="Clear search" style={{ border: 'none', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }} onClick={() => { setQuery(''); setData(null); inputRef.current?.focus(); }}>&times;</button>
+              <button
+                type="button"
+                id="airbnbModalClearBtn"
+                className="crm-search-clear-btn"
+                title="Clear input"
+                aria-label="Clear search"
+                onClick={() => {
+                  setQuery('');
+                  inputRef.current?.focus();
+                }}
+              >
+                &times;
+              </button>
             )}
-            <button type="button" title="Close search" aria-label="Close search" style={{ border: 'none', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '18px', lineHeight: 1 }} onClick={onClose}>&times;</button>
+            <button
+              type="button"
+              id="airbnbModalCloseBtn"
+              className="crm-modal-close-icon-btn"
+              title="Close search"
+              aria-label="Close search"
+              onClick={onClose}
+            >
+              &times;
+            </button>
           </div>
         </div>
 
-        {/* Category tabs */}
-        <nav style={modalStyles.tabs}>
+        {/* Category Tabs Navigation */}
+        <nav className="crm-search-tabs-nav" id="airbnbModalTypePills" aria-label="Search categories">
           {CATEGORY_TABS.map(tab => (
-            <button key={tab.type} type="button" style={{ ...modalStyles.tab, color: type === tab.type ? 'var(--gold)' : 'var(--muted)', borderBottomColor: type === tab.type ? 'var(--gold)' : 'transparent' }} onClick={() => setType(tab.type)}>
+            <button
+              key={tab.type}
+              type="button"
+              className={`crm-search-tab ${type === tab.type ? 'active' : ''}`}
+              data-type={tab.type}
+              onClick={() => setType(tab.type)}
+            >
               {tab.label}
             </button>
           ))}
         </nav>
 
-        {/* Filters */}
-        <div style={modalStyles.filters}>
-          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            Date range
-            <select value={preset} onChange={e => setPreset(e.target.value)} style={filterSelectStyle}>
+        {/* Filter Control Bar (Date Range, From, To, Field, More Filters) */}
+        <div className="crm-search-filter-bar">
+          <div className="crm-filter-item">
+            <label>Date range</label>
+            <select
+              id="searchDateRangePreset"
+              className="crm-filter-select"
+              value={preset}
+              onChange={e => handlePresetChange(e.target.value)}
+            >
               <option value="">Anytime</option>
               <option value="today">Today</option>
               <option value="yesterday">Yesterday</option>
@@ -299,158 +393,446 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
               <option value="month">This month</option>
               <option value="custom">Custom range</option>
             </select>
-          </label>
-          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            From
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={filterInputStyle} />
-          </label>
-          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            To
-            <input type="date" value={to} onChange={e => setTo(e.target.value)} style={filterInputStyle} />
-          </label>
-          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            Field
-            <select value={dateField} onChange={e => setDateField(e.target.value)} style={filterSelectStyle}>
+          </div>
+
+          <div className="crm-filter-item">
+            <label>From</label>
+            <div className="crm-date-box">
+              <input
+                type="date"
+                id="airbnbDateFromInput"
+                className="crm-date-input"
+                value={from}
+                onChange={e => {
+                  setPreset('custom');
+                  setFrom(e.target.value);
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="crm-filter-item">
+            <label>To</label>
+            <div className="crm-date-box">
+              <input
+                type="date"
+                id="airbnbDateToInput"
+                className="crm-date-input"
+                value={to}
+                onChange={e => {
+                  setPreset('custom');
+                  setTo(e.target.value);
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="crm-filter-item">
+            <label>Field</label>
+            <select
+              id="airbnbDateFieldSelect"
+              className="crm-filter-select"
+              value={dateField}
+              onChange={e => setDateField(e.target.value)}
+            >
               <option value="updated">Last updated</option>
               <option value="created">Created / Logged</option>
               <option value="scheduled">Follow-up / Deadline</option>
             </select>
-          </label>
-          <button type="button" className="btn small" style={{ marginLeft: 'auto' }} onClick={() => { navigate('/search'); onClose(); }}>
-            More filters
-          </button>
+          </div>
+
+          <div className="crm-filter-item crm-filter-more-wrap">
+            <a
+              href="/search"
+              className="crm-more-filters-btn"
+              title="Open full search filters"
+              onClick={e => {
+                e.preventDefault();
+                navigate('/search');
+                onClose();
+              }}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+              </svg>
+              <span>More filters</span>
+            </a>
+          </div>
         </div>
 
-        {/* Body */}
-        <div style={modalStyles.body}>
-          {isSearching ? (
-            loading && allItems.length === 0 ? (
-              <div style={{ textAlign: 'center', color: 'var(--muted)', padding: '2rem' }}>Searching...</div>
-            ) : allItems.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {allItems.map(({ item, group }, idx) => (
-                  <a
-                    key={`${group.id}-${item.id}`}
-                    href={item.href}
-                    onClick={e => { e.preventDefault(); goTo(item.href, item.title); }}
-                    onMouseEnter={() => setSelectedIndex(idx)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                      padding: '10px 14px',
-                      border: `1px solid ${idx === selectedIndex ? 'var(--gold)' : 'var(--border)'}`,
-                      borderRadius: 10,
-                      background: idx === selectedIndex ? 'var(--hover)' : 'var(--bg)',
-                      textDecoration: 'none',
-                      color: 'inherit',
-                    }}
-                  >
-                    <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <strong style={{ fontSize: '0.88rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text)' }}>{item.title}</strong>
-                        {item.badge && <span className="stage-badge" style={{ fontSize: '0.62rem' }}>{item.badge}</span>}
-                      </span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.subtitle}</span>
-                    </span>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--muted)', flexShrink: 0 }}>{item.date || group.label} ↗</span>
-                  </a>
-                ))}
-              </div>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '2.5rem 1.5rem' }}>
-                <h3 style={{ margin: '0 0 0.4rem', fontSize: '1rem' }}>No results found</h3>
-                <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--muted)' }}>
-                  No {type === 'all' ? '' : type + ' '}records matched{query ? ` "${query}"` : ''}. Try fewer keywords.
-                </p>
-              </div>
-            )
-          ) : (
-            <div style={modalStyles.grid}>
-              {/* Left: recent + quick access */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                <section>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>Recent searches</span>
+        {/* Modal Content: Dynamic 2-Column Dashboard or Live Results */}
+        <div className="crm-search-modal-body" id="crmSearchModalBody">
+          {isDefaultView ? (
+            /* 2-Column Layout (Default State) */
+            <div className="crm-search-grid" id="crmDefaultSearchGrid">
+              {/* Left Column: Recent Searches + Quick Access */}
+              <div className="crm-grid-col-left">
+                {/* Recent Searches */}
+                <div className="crm-section-box">
+                  <div className="crm-section-header">
+                    <div className="crm-sec-title-with-icon">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="15"
+                        height="15"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 14 14" />
+                      </svg>
+                      <span>Recent searches</span>
+                    </div>
                     {recent.length > 0 && (
-                      <button type="button" className="btn small" onClick={clearRecent}>Clear all</button>
+                      <button type="button" id="crmClearRecentSearchesBtn" className="crm-link-btn" onClick={clearRecent}>
+                        Clear all
+                      </button>
                     )}
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div className="crm-recent-list" id="crmRecentSearchesList">
                     {recent.length === 0 ? (
-                      <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--muted)', padding: '4px 0' }}>No recent searches yet.</p>
+                      <div style={{ fontSize: '11.5px', color: 'var(--muted)', padding: '8px 0' }}>No recent searches</div>
                     ) : (
-                      recent.map((r, i) => (
-                        <a
-                          key={`${r.q}-${r.type}-${i}`}
-                          href={recentHref(r)}
-                          onClick={e => { e.preventDefault(); navigate(recentHref(r)); onClose(); }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 8, fontSize: '0.8rem', color: 'var(--text)', textDecoration: 'none' }}
+                      recent.slice(0, 5).map((item, idx) => (
+                        <button
+                          key={`${item.query}-${idx}`}
+                          type="button"
+                          className="crm-recent-item"
+                          onClick={() => {
+                            setQuery(item.query);
+                            setType('all');
+                          }}
                         >
-                          <span style={{ color: 'var(--muted)' }}>🕘</span>
-                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{r.q}</span>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)', flexShrink: 0 }}>{nowLabel(r.ts)}</span>
-                          <span style={{ color: 'var(--muted)', fontSize: '0.75rem', flexShrink: 0 }}>↵</span>
-                        </a>
+                          <svg
+                            className="crm-recent-icon"
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                          </svg>
+                          <span className="crm-recent-query">{item.query}</span>
+                          <span className="crm-recent-time">{timeAgo(item.timestamp)}</span>
+                          <span className="crm-recent-enter">↵</span>
+                        </button>
                       ))
                     )}
                   </div>
-                </section>
+                </div>
 
-                <section style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-                  <div style={{ marginBottom: 10 }}>
-                    <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>Quick access</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginBottom: 12 }}>
-                    {kpiCards.map(card => (
-                      <a
-                        key={card.title}
-                        href={card.href}
-                        onClick={e => { e.preventDefault(); navigate(card.href); onClose(); }}
-                        style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', background: 'var(--bg)', textDecoration: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}
+                {/* Quick Access Cards */}
+                <div className="crm-section-box crm-quick-access-sec">
+                  <div className="crm-section-header">
+                    <div className="crm-sec-title-with-icon">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="15"
+                        height="15"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
                       >
-                        <span style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 600 }}>{card.title}</span>
-                        <span style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--gold)', lineHeight: 1.1 }}>{card.val}</span>
-                        <span style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>{card.sub}</span>
-                      </a>
-                    ))}
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                      </svg>
+                      <span>Quick access</span>
+                    </div>
                   </div>
-                </section>
+                  <div className="crm-kpi-grid">
+                    <a
+                      href="/tasks"
+                      className="crm-kpi-card"
+                      onClick={e => {
+                        e.preventDefault();
+                        goTo('/tasks');
+                      }}
+                    >
+                      <div className="crm-kpi-title">My follow-ups</div>
+                      <div className="crm-kpi-val" id="statFollowUps">
+                        {stats.myFollowUps || 0}
+                      </div>
+                      <div className="crm-kpi-sub">Due today</div>
+                    </a>
+                    <a
+                      href="/work"
+                      className="crm-kpi-card"
+                      onClick={e => {
+                        e.preventDefault();
+                        goTo('/work');
+                      }}
+                    >
+                      <div className="crm-kpi-title">Open tasks</div>
+                      <div className="crm-kpi-val" id="statOpenTasks">
+                        {stats.openTasks || 0}
+                      </div>
+                      <div className="crm-kpi-sub">Across all projects</div>
+                    </a>
+                    <a
+                      href="/search?type=activities&preset=today"
+                      className="crm-kpi-card"
+                      onClick={e => {
+                        e.preventDefault();
+                        goTo('/search?type=activities&preset=today');
+                      }}
+                    >
+                      <div className="crm-kpi-title">Today's meetings</div>
+                      <div className="crm-kpi-val" id="statTodayMeetings">
+                        {stats.todayMeetings || 0}
+                      </div>
+                      <div className="crm-kpi-sub">Upcoming</div>
+                    </a>
+                    <a
+                      href="/mail"
+                      className="crm-kpi-card"
+                      onClick={e => {
+                        e.preventDefault();
+                        goTo('/mail');
+                      }}
+                    >
+                      <div className="crm-kpi-title">Unread messages</div>
+                      <div className="crm-kpi-val" id="statUnreadMessages">
+                        {stats.unreadMessages || 0}
+                      </div>
+                      <div className="crm-kpi-sub">Across channels</div>
+                    </a>
+                  </div>
+                  <a
+                    href="/"
+                    className="crm-shortcuts-footer-link"
+                    onClick={e => {
+                      e.preventDefault();
+                      goTo('/');
+                    }}
+                  >
+                    <span>View all shortcuts</span>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </a>
+                </div>
               </div>
 
-              {/* Right: top results */}
-              <section>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>Top results</span>
-                  <button type="button" className="btn small" onClick={() => { navigate('/search'); onClose(); }}>View all</button>
+              {/* Right Column: Top Results */}
+              <div className="crm-grid-col-right">
+                <div className="crm-section-box">
+                  <div className="crm-section-header">
+                    <span className="crm-sec-title-bold">Top results</span>
+                    <a
+                      href="/search"
+                      id="crmViewAllLink"
+                      className="crm-link-btn"
+                      onClick={e => {
+                        e.preventDefault();
+                        navigate('/search');
+                        onClose();
+                      }}
+                    >
+                      View all
+                    </a>
+                  </div>
+                  <div className="crm-top-results-list" id="crmTopResultsList">
+                    {defaultTopItems.length === 0 ? (
+                      <div style={{ fontSize: '12px', color: 'var(--muted)', padding: '14px 0', textAlign: 'center' }}>
+                        No recent records found
+                      </div>
+                    ) : (
+                      defaultTopItems.map((item, idx) => {
+                        const badgeType = item.badge || item.kind || 'Lead';
+                        const badgeCls = getBadgeClass(badgeType);
+                        return (
+                          <a
+                            key={`${item.id}-${idx}`}
+                            href={item.href}
+                            className={`crm-result-card ${selectedIndex === idx ? 'selected' : ''}`}
+                            onMouseEnter={() => setSelectedIndex(idx)}
+                            onClick={e => {
+                              e.preventDefault();
+                              goTo(item.href, item.title);
+                            }}
+                          >
+                            <div className="crm-card-left">
+                              <div className="crm-card-title-row">
+                                <strong className="crm-card-title">{item.title}</strong>
+                                <span className={`crm-badge-pill ${badgeCls}`}>{badgeType}</span>
+                              </div>
+                              <div className="crm-card-subtitle">{item.subtitle}</div>
+                              {item.date && <div className="crm-card-timestamp">Updated {timeAgo(item.date)}</div>}
+                            </div>
+                            <svg
+                              className="crm-card-arrow"
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <polyline points="9 18 15 12 9 6" />
+                            </svg>
+                          </a>
+                        );
+                      })
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    id="crmShowMoreResultsBtn"
+                    className="crm-show-more-btn"
+                    onClick={() => {
+                      navigate('/search');
+                      onClose();
+                    }}
+                  >
+                    <span>Show more results</span>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
                 </div>
-                {allItems.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {allItems.slice(0, 6).map(({ item, group }) => (
-                      <a
-                        key={`${group.id}-${item.id}`}
-                        href={item.href}
-                        onClick={e => { e.preventDefault(); goTo(item.href, item.title); }}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg)', textDecoration: 'none', color: 'inherit' }}
-                      >
-                        <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <strong style={{ fontSize: '0.86rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text)' }}>{item.title}</strong>
-                            {item.badge && <span className="stage-badge" style={{ fontSize: '0.62rem' }}>{item.badge}</span>}
-                          </span>
-                          <span style={{ fontSize: '0.74rem', color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.subtitle}</span>
-                        </span>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--muted)', flexShrink: 0 }}>{item.date || group.label} ↗</span>
-                      </a>
-                    ))}
+              </div>
+            </div>
+          ) : (
+            /* Live Search Results Container */
+            <div className="crm-live-results-wrap" id="crmLiveResultsWrap">
+              <div id="airbnbModalResults" className="crm-live-results-list" role="listbox" aria-live="polite">
+                {loading && activeGroups.length === 0 ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '40px',
+                      color: 'var(--muted)',
+                      gap: '10px',
+                      fontSize: '13px',
+                    }}
+                  >
+                    <span>Searching workspace...</span>
+                  </div>
+                ) : activeGroups.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--muted)' }}>
+                    <div style={{ fontSize: '28px', marginBottom: '6px' }}>🔍</div>
+                    <h4 style={{ fontSize: '14.5px', color: 'var(--text)', margin: '0 0 4px' }}>No matching results</h4>
+                    <p style={{ fontSize: '12px', margin: 0 }}>Try adjusting your search terms, category, or date range.</p>
                   </div>
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '1.5rem' }}>
-                    <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--muted)' }}>Start typing to search your workspace.</p>
-                  </div>
+                  (() => {
+                    let globalIdx = 0;
+                    return activeGroups.map(group => (
+                      <div key={group.id} className="crm-live-group">
+                        <div className="crm-live-group-header">
+                          <span>{group.label}</span>
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              background: 'var(--panel-muted)',
+                              padding: '1px 6px',
+                              borderRadius: '10px',
+                              border: '1px solid var(--border)',
+                            }}
+                          >
+                            {group.items.length}
+                          </span>
+                        </div>
+                        <div className="crm-top-results-list">
+                          {group.items.map(item => {
+                            const currentItemIdx = globalIdx++;
+                            const badgeType = item.badge || item.kind || 'Lead';
+                            const badgeCls = getBadgeClass(badgeType);
+                            return (
+                              <a
+                                key={`${group.id}-${item.id}`}
+                                href={item.href}
+                                className={`crm-result-card ${selectedIndex === currentItemIdx ? 'selected' : ''}`}
+                                onMouseEnter={() => setSelectedIndex(currentItemIdx)}
+                                onClick={e => {
+                                  e.preventDefault();
+                                  goTo(item.href, item.title);
+                                }}
+                              >
+                                <div className="crm-card-left">
+                                  <div className="crm-card-title-row">
+                                    <strong className="crm-card-title">
+                                      <HighlightedText text={item.title} query={query} />
+                                    </strong>
+                                    <span className={`crm-badge-pill ${badgeCls}`}>{badgeType}</span>
+                                  </div>
+                                  <div className="crm-card-subtitle">
+                                    <HighlightedText text={item.subtitle} query={query} />
+                                  </div>
+                                  {item.date && (
+                                    <div className="crm-card-timestamp">Updated {timeAgo(item.date)}</div>
+                                  )}
+                                </div>
+                                <svg
+                                  className="crm-card-arrow"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                              </a>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()
                 )}
-              </section>
+              </div>
             </div>
           )}
         </div>
@@ -459,14 +841,3 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
   );
 }
 
-const fieldBase = {
-  fontSize: '0.8rem',
-  color: 'var(--text)',
-  background: 'var(--bg-soft)',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
-  padding: '7px 10px',
-  outline: 'none',
-};
-const filterSelectStyle = { ...fieldBase, minWidth: 130 };
-const filterInputStyle = { ...fieldBase, minWidth: 130 };

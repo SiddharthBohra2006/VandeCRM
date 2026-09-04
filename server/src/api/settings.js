@@ -429,7 +429,7 @@ router.post('/labels', async (req, res, next) => {
     const activeWorkspace = workspace(req, res);
     if (!activeWorkspace) return;
     const organization = req.user.organization._id;
-    const { name, color } = req.body;
+    const { name, color, isHighPotential } = req.body;
 
     const trimmedName = String(name || '').trim();
     if (!trimmedName) {
@@ -441,9 +441,41 @@ router.post('/labels', async (req, res, next) => {
       clientCompany: activeWorkspace,
       name: trimmedName,
       color: color || '#64748b',
+      isHighPotential: Boolean(isHighPotential),
       isActive: true,
     });
 
+    res.json({ ok: true, data: label });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PUT /api/settings/labels/:id - Update label
+router.put('/labels/:id', async (req, res, next) => {
+  try {
+    const activeWorkspace = workspace(req, res);
+    if (!activeWorkspace) return;
+    const organization = req.user.organization._id;
+    const { name, color, isHighPotential, isActive } = req.body;
+
+    const trimmedName = String(name || '').trim();
+    if (!trimmedName) {
+      return res.status(400).json({ ok: false, error: 'Label name is required.' });
+    }
+
+    const label = await CrmLabel.findOneAndUpdate(
+      { _id: req.params.id, organization, clientCompany: activeWorkspace },
+      {
+        name: trimmedName,
+        color: color || '#64748b',
+        isHighPotential: Boolean(isHighPotential),
+        isActive: typeof isActive === 'boolean' ? isActive : true,
+      },
+      { new: true }
+    );
+
+    if (!label) return res.status(404).json({ ok: false, error: 'Label not found.' });
     res.json({ ok: true, data: label });
   } catch (error) {
     next(error);

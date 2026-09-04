@@ -54,6 +54,8 @@ export interface CustomField {
   options: string[];
   required: boolean;
   order: number;
+  entity?: string;
+  isActive?: boolean;
 }
 
 export interface PaginatedResponse<T> {

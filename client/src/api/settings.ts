@@ -63,9 +63,13 @@ export const settingsApi = {
   updateField: (id: string, data: Partial<CustomField>) =>
     api.put<{ ok: true; data: CustomField }>(`/settings/fields/${id}`, data),
   deleteField: (id: string) => api.delete<{ ok: true }>(`/settings/fields/${id}`),
+  reorderFields: (fieldIds: string[]) =>
+    api.post<{ ok: true }>('/settings/fields/reorder', { fieldIds }),
 
   createLabel: (data: Partial<Label>) =>
     api.post<{ ok: true; data: Label }>('/settings/labels', data),
+  updateLabel: (id: string, data: Partial<Label>) =>
+    api.put<{ ok: true; data: Label }>(`/settings/labels/${id}`, data),
   deleteLabel: (id: string) => api.delete<{ ok: true }>(`/settings/labels/${id}`),
 
   updateTerminology: (data: Terminology) =>
