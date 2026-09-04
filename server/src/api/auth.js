@@ -1,12 +1,43 @@
 const express = require('express');
+const crypto = require('crypto');
 const User = require('../../src/models/User');
 const ClientCompany = require('../../src/models/ClientCompany');
 const WorkType = require('../../src/models/WorkType');
 const Organization = require('../../src/models/Organization');
+const EmailAccount = require('../../src/models/EmailAccount');
 const { hashPassword, verifyPassword } = require('../../src/services/passwords');
+const { sendEmail } = require('../../src/services/emailService');
 const { generateToken, requireApiAuth } = require('./middleware/auth');
 
 const router = express.Router();
+
+function getSanitizedRecoveryKey() {
+  return String(process.env.ADMIN_RECOVERY_KEY || '').trim().replace(/^['"]|['"]$/g, '');
+}
+
+function adminRecoveryEnabled() {
+  const allow = String(process.env.ALLOW_ADMIN_RECOVERY || '').trim().replace(/^['"]|['"]$/g, '').toLowerCase();
+  return allow === 'true' && Boolean(getSanitizedRecoveryKey());
+}
+
+function recoveryKeyMatches(value) {
+  const expected = crypto.createHash('sha256').update(getSanitizedRecoveryKey()).digest();
+  const supplied = crypto.createHash('sha256').update(String(value || '').trim()).digest();
+  return crypto.timingSafeEqual(expected, supplied);
+}
+
+function resetTokenHash(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function publicSignupEnabled() {
+  return String(process.env.ALLOW_PUBLIC_SIGNUP || '').toLowerCase() === 'true';
+}
+
+async function canCreateSignupAccount() {
+  if (publicSignupEnabled()) return true;
+  return (await User.countDocuments({})) === 0;
+}
 
 // POST /api/auth/login
 router.post('/login', async (req, res, next) => {
@@ -56,6 +87,10 @@ router.post('/login', async (req, res, next) => {
 // POST /api/auth/signup
 router.post('/signup', async (req, res, next) => {
   try {
+    if (!(await canCreateSignupAccount())) {
+      return res.status(403).json({ ok: false, error: 'Public signup is disabled. Ask an admin to invite or create your account.' });
+    }
+
     const name = String(req.body.name || '').trim();
     const email = String(req.body.email || '').trim().toLowerCase();
     const password = String(req.body.password || '');
@@ -188,6 +223,104 @@ router.post('/switch-company', requireApiAuth, async (req, res, next) => {
       token,
       activeCompany: { _id: company._id, name: company.name, isMain: company.isMain },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/auth/forgot-password — request a password reset email
+router.post('/forgot-password', async (req, res, next) => {
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const user = await User.findOne({ email, isActive: { $ne: false } });
+
+    if (user) {
+      const account = await EmailAccount.findOne({ organization: user.organization, isActive: true }).sort({ updatedAt: -1 });
+      if (account) {
+        const token = crypto.randomBytes(32).toString('hex');
+        user.passwordResetTokenHash = resetTokenHash(token);
+        user.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
+        await user.save();
+
+        const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
+        const resetUrl = new URL(`/reset-password?token=${token}`, baseUrl).toString();
+        try {
+          await sendEmail(account, {
+            to: user.email,
+            subject: 'Reset your Vande Agency CRM password',
+            body: `We received a request to reset your password. Use this link within one hour:\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`,
+          });
+        } catch (emailError) {
+          console.error(`Password reset email failed for user ${user._id}:`, emailError.message);
+        }
+      }
+    }
+
+    res.json({ ok: true, message: 'If an active account matches that email, we sent a password reset link.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/auth/reset-password — complete a password reset with a valid token
+router.post('/reset-password', async (req, res, next) => {
+  try {
+    const token = String(req.body.token || '');
+    const password = String(req.body.password || '');
+    const confirmPassword = String(req.body.confirmPassword || '');
+
+    if (password.length < 8 || password !== confirmPassword) {
+      return res.status(400).json({
+        ok: false,
+        error: password !== confirmPassword ? 'Passwords do not match.' : 'Password must be at least 8 characters.',
+      });
+    }
+
+    const user = token && await User.findOne({
+      passwordResetTokenHash: resetTokenHash(token),
+      passwordResetExpiresAt: { $gt: new Date() },
+      isActive: { $ne: false },
+    });
+
+    if (!user) {
+      return res.status(400).json({ ok: false, error: 'This password reset link is invalid or has expired.' });
+    }
+
+    user.passwordHash = await hashPassword(password);
+    user.passwordResetTokenHash = '';
+    user.passwordResetExpiresAt = null;
+    await user.save();
+
+    res.json({ ok: true, message: 'Password reset. You can now sign in.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/auth/admin-recovery — emergency admin password reset via recovery key
+router.post('/admin-recovery', async (req, res, next) => {
+  try {
+    if (!adminRecoveryEnabled()) {
+      return res.status(404).json({ ok: false, error: 'Admin recovery is not enabled.' });
+    }
+
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const confirmPassword = String(req.body.confirmPassword || '');
+    const user = await User.findOne({ email, role: 'admin' });
+    const invalid = !user || !recoveryKeyMatches(req.body.recoveryKey);
+
+    if (invalid || password.length < 8 || password !== confirmPassword) {
+      return res.status(400).json({
+        ok: false,
+        error: password !== confirmPassword ? 'Passwords do not match.' : 'Recovery details are invalid.',
+      });
+    }
+
+    user.passwordHash = await hashPassword(password);
+    await user.save();
+
+    res.json({ ok: true, message: 'Admin password reset. You can now sign in.' });
   } catch (error) {
     next(error);
   }

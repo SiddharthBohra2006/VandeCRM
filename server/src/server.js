@@ -15,6 +15,7 @@ const connectDb = require('./config/db');
 const apiAuth = require('./api/auth');
 const apiDashboard = require('./api/dashboard'); // OWNER: Codex (currently boot stub)
 const apiCustomers = require('./api/customers'); // OWNER: Codex (currently boot stub)
+const apiClients = require('./api/clients'); // OWNER: Codex (won-customer sub-view)
 // Antigravity will add & register more here (see ANTIGRAVITY-TASKS.md):
 const apiCampaigns = require('./api/campaigns');
 const apiWork = require('./api/work');
@@ -27,6 +28,9 @@ const apiMail = require('./api/mail');
 const apiIntegrations = require('./api/integrations');
 const apiAudit = require('./api/audit');
 const apiSearch = require('./api/search');
+const apiPortfolio = require('./api/portfolio');
+const apiAnalytics = require('./api/analytics');
+const apiReports = require('./api/reports');
 
 // ============================================
 // REGISTER ALL MONGOOSE MODELS AT BOOT
@@ -120,7 +124,7 @@ app.use('/api/auth', apiAuth);
 app.use('/api/dashboard', apiDashboard); // OWNER: Codex (implemented)
 app.use('/api/customers', apiCustomers); // OWNER: Codex (in progress)
 // Antigravity registers their routes here (see ANTIGRAVITY-TASKS.md):
-// app.use('/api/clients',       apiClients);
+app.use('/api/clients', apiClients);
 app.use('/api/campaigns', apiCampaigns);
 app.use('/api/work', apiWork);
 app.use('/api/team', apiTeam);
@@ -132,6 +136,9 @@ app.use('/api/mail', apiMail);
 app.use('/api/integrations', apiIntegrations);
 app.use('/api/audit', apiAudit);
 app.use('/api/search', apiSearch);
+app.use('/api/portfolio', apiPortfolio);
+app.use('/api/analytics', apiAnalytics);
+app.use('/api/reports', apiReports);
 
 // ============================================
 // SERVE REACT BUILD (production)

@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { customersApi, CustomersListResponse } from '../../api/customers';
+import { customersApi, downloadCustomersCsv, CustomersListResponse, ImportPreviewRow } from '../../api/customers';
 
 export default function CustomersPage() {
-  const { crmTerms } = useAuth();
+  const { crmTerms, user, activeCompany } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<CustomersListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -13,6 +13,19 @@ export default function CustomersPage() {
   const [bulkAction, setBulkAction] = useState('');
   const [bulkValue, setBulkValue] = useState('');
   const [working, setWorking] = useState(false);
+
+  const [showCsvModal, setShowCsvModal] = useState(false);
+  const [csvFileName, setCsvFileName] = useState('');
+  const [csvText, setCsvText] = useState('');
+  const [csvStatus, setCsvStatus] = useState('Choose a CSV to preview its database impact.');
+  const [previewing, setPreviewing] = useState(false);
+  const [previewRows, setPreviewRows] = useState<ImportPreviewRow[]>([]);
+  const [previewCounts, setPreviewCounts] = useState({ totalRows: 0, createCount: 0, updateCount: 0, skipCount: 0 });
+  const [importResult, setImportResult] = useState<{ imported: number; updated: number; skipped: number } | null>(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const csvInputRef = useRef<HTMLInputElement>(null);
+
+  const isManager = user && ['admin', 'manager'].includes(user.role);
 
   useEffect(() => {
     loadData();
@@ -86,6 +99,87 @@ export default function CustomersPage() {
     }
   }
 
+  async function handleExport() {
+    try {
+      setError('');
+      await downloadCustomersCsv({
+        scope: 'leads',
+        dateFrom: searchParams.get('dateFrom') || '',
+        dateTo: searchParams.get('dateTo') || '',
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Export failed');
+    }
+  }
+
+  function handleCsvFile(file: File | undefined | null) {
+    if (!file) {
+      setCsvFileName('');
+      setCsvText('');
+      setCsvStatus('Choose a CSV to preview its database impact.');
+      return;
+    }
+    if (!/\.(csv)$/i.test(file.name)) {
+      setCsvStatus('Invalid file type. Please select a CSV file.');
+      return;
+    }
+    setCsvFileName(file.name);
+    setCsvStatus(`Reading ${Math.max(1, Math.round(file.size / 1024))} KB file...`);
+    const reader = new FileReader();
+    reader.onload = event => {
+      const content = String(event.target?.result || '');
+      setCsvText(content);
+      const lineCount = content.split(/\r?\n/).filter(l => l.trim()).length;
+      setCsvStatus(`${Math.max(0, lineCount - 1)} rows ready to preview.`);
+    };
+    reader.readAsText(file);
+  }
+
+  async function handlePreviewImport() {
+    if (!csvText.trim()) {
+      setCsvStatus('Please select or paste a CSV file before previewing.');
+      return;
+    }
+    try {
+      setPreviewing(true);
+      setError('');
+      const result = await customersApi.importPreview({ csvData: csvText, csvFileName });
+      setPreviewRows(result.preview.rows);
+      setPreviewCounts({
+        totalRows: result.preview.totalRows,
+        createCount: result.preview.createCount,
+        updateCount: result.preview.updateCount,
+        skipCount: result.preview.skipCount,
+      });
+      setShowCsvModal(false);
+      setShowPreviewModal(true);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Import preview failed');
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
+  async function handleConfirmImport() {
+    try {
+      setWorking(true);
+      setError('');
+      const result = await customersApi.import({ csvData: csvText, csvFileName });
+      setImportResult({ imported: result.imported, updated: result.updated, skipped: result.skipped });
+      setShowPreviewModal(false);
+      setPreviewRows([]);
+      setCsvText('');
+      setCsvFileName('');
+      setCsvStatus('Choose a CSV to preview its database impact.');
+      await loadData();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Import failed');
+      setShowPreviewModal(false);
+    } finally {
+      setWorking(false);
+    }
+  }
+
   if (loading && !data) return <div className="loading">Loading {crmTerms.leadPlural}...</div>;
   if (error && !data) return <div className="alert alert-error">{error}</div>;
   if (!data) return null;
@@ -95,11 +189,32 @@ export default function CustomersPage() {
   return (
     <div className="page-container">
       <div className="page-header">
-        <h1>{crmTerms.leadPlural}</h1>
-        <Link to="/customers/new" className="btn btn-primary">+ New {crmTerms.leadSingular}</Link>
+        <h1>{crmTerms.leadPlural} <span style={{ fontSize: '0.75rem', background: '#ffedd5', color: '#ea580c', padding: '2px 8px', borderRadius: 999, fontWeight: 800 }}>{leadStats.totalLeads}</span></h1>
+        <div className="header-actions">
+          {isManager && <button className="btn btn-secondary" onClick={() => setShowCsvModal(true)}>Import</button>}
+          <button className="btn btn-secondary" onClick={handleExport}>Export</button>
+          <Link to="/customers/new" className="btn btn-primary">+ New {crmTerms.leadSingular}</Link>
+        </div>
       </div>
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}
+
+      {importResult && (
+        <div className="import-result">
+          <div className="import-result-title">
+            <span className="import-result-mark">✓</span>
+            <span>
+              <strong>Import complete</strong>
+              <small>{importResult.imported + importResult.updated + importResult.skipped} CSV rows processed and saved to the lead database.</small>
+            </span>
+          </div>
+          <dl>
+            <div><dt>Created</dt><dd>{importResult.imported}</dd></div>
+            <div><dt>Updated</dt><dd>{importResult.updated}</dd></div>
+            <div><dt>Skipped</dt><dd>{importResult.skipped}</dd></div>
+          </dl>
+        </div>
+      )}
 
       {/* Stats Bar */}
       <div className="stats-bar">
@@ -231,6 +346,90 @@ export default function CustomersPage() {
               {page}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* CSV Import Modal */}
+      {showCsvModal && (
+        <div className="csv-modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowCsvModal(false); }}>
+          <div className="csv-modal">
+            <div className="csv-modal-header">
+              <h3>CSV Database Actions</h3>
+              <button className="csv-modal-close" type="button" onClick={() => setShowCsvModal(false)}>&times;</button>
+            </div>
+            <div className="csv-actions">
+              <button className="btn btn-secondary" onClick={() => void handleExport()}>Export Leads</button>
+            </div>
+            {isManager && (
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+                <h4 style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--gold)', margin: '0 0 0.5rem' }}>Import Leads from CSV</h4>
+                <label className="csv-drop-zone">
+                  <p>Drop CSV here or click to browse</p>
+                  <input ref={csvInputRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={e => handleCsvFile(e.target.files?.[0])} />
+                  <span>{csvFileName || 'No file selected'}</span>
+                </label>
+                <p className="csv-file-status">{csvStatus}</p>
+                <button className="btn btn-primary" style={{ width: '100%' }} type="button" disabled={previewing || !csvText.trim()} onClick={() => void handlePreviewImport()}>
+                  {previewing ? 'Previewing...' : 'Preview Import'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Import Preview Modal */}
+      {showPreviewModal && (
+        <div className="csv-modal-overlay">
+          <div className="csv-modal" style={{ maxWidth: 860 }}>
+            <div className="csv-modal-header">
+              <h3>Preview {crmTerms.leadSingular} Import{activeCompany ? ` into ${activeCompany.name}` : ''}</h3>
+              <button className="csv-modal-close" type="button" onClick={() => setShowPreviewModal(false)}>&times;</button>
+            </div>
+
+            <div className="csv-preview-stats">
+              <div className="csv-preview-stat"><span>Total rows</span><strong>{previewCounts.totalRows}</strong></div>
+              <div className="csv-preview-stat create"><span>Will create</span><strong>{previewCounts.createCount}</strong></div>
+              <div className="csv-preview-stat update"><span>Will update</span><strong>{previewCounts.updateCount}</strong></div>
+              <div className="csv-preview-stat skip"><span>Will skip</span><strong>{previewCounts.skipCount}</strong></div>
+            </div>
+
+            <div className="table-container" style={{ maxHeight: 380, overflow: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Row</th><th>Status</th><th>{crmTerms.leadSingular}</th><th>Contact</th><th>Messages</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewRows.slice(0, 50).map(row => (
+                    <tr key={row.rowNumber}>
+                      <td>{row.rowNumber}</td>
+                      <td><span className="stage-badge" style={{ backgroundColor: row.status === 'skip' ? 'var(--muted)' : row.status === 'update' ? 'var(--gold)' : 'var(--teal)', color: row.status !== 'update' ? '#fff' : 'var(--text)' }}>{row.status.toUpperCase()}</span></td>
+                      <td><strong>{row.name}</strong></td>
+                      <td>
+                        <span style={{ display: 'block' }}>{row.phone || 'No phone'}</span>
+                        <span style={{ display: 'block', color: 'var(--muted)', fontSize: '.75rem' }}>{row.email || 'No email'}</span>
+                      </td>
+                      <td>
+                        {row.messages.length === 0 && <span style={{ color: 'var(--muted)' }}>Ready</span>}
+                        {row.messages.map((msg, i) => <span key={i} style={{ display: 'block', color: 'var(--red)', fontWeight: 700 }}>{msg}</span>)}
+                      </td>
+                    </tr>
+                  ))}
+                  {previewRows.length === 0 && <tr><td colSpan={5} className="empty-state" style={{ textAlign: 'center', padding: '2rem' }}>No data rows were found in this CSV.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            {previewCounts.totalRows > 50 && <p style={{ color: 'var(--muted)', fontSize: '.78rem', padding: '.75rem 0 0' }}>Showing the first 50 of {previewCounts.totalRows} rows. All rows will be imported.</p>}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '.75rem', marginTop: '1.25rem' }}>
+              <button className="btn btn-secondary" onClick={() => setShowPreviewModal(false)}>Back</button>
+              <button className="btn btn-primary" disabled={working || previewCounts.totalRows === 0} onClick={() => void handleConfirmImport()}>
+                {working ? 'Importing...' : `Import ${previewCounts.totalRows} rows`}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

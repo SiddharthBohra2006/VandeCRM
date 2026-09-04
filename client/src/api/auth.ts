@@ -72,4 +72,13 @@ export const authApi = {
 
   switchCompany: (companyId: string) =>
     api.post<{ ok: true; token: string; activeCompany: Company }>('/auth/switch-company', { companyId }),
+
+  forgotPassword: (email: string) =>
+    api.post<{ ok: true; message: string }>('/auth/forgot-password', { email }),
+
+  resetPassword: (token: string, password: string, confirmPassword: string) =>
+    api.post<{ ok: true; message: string }>('/auth/reset-password', { token, password, confirmPassword }),
+
+  adminRecovery: (email: string, password: string, confirmPassword: string, recoveryKey: string) =>
+    api.post<{ ok: true; message: string }>('/auth/admin-recovery', { email, password, confirmPassword, recoveryKey }),
 };

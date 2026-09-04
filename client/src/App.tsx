@@ -4,10 +4,13 @@ import AppLayout from './layouts/AppLayout';
 import AuthLayout from './layouts/AuthLayout';
 import LoginPage from './pages/auth/LoginPage';
 import SignupPage from './pages/auth/SignupPage';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import CustomersPage from './pages/customers/CustomersPage';
 import CustomerDetailPage from './pages/customers/CustomerDetailPage';
 import CustomerFormPage from './pages/customers/CustomerFormPage';
+import ClientsPage from './pages/clients/ClientsPage';
 import CompaniesPage from './pages/companies/CompaniesPage';
 import CompanyDetailPage from './pages/companies/CompanyDetailPage';
 import CampaignsPage from './pages/campaigns/CampaignsPage';
@@ -22,6 +25,11 @@ import MailPage from './pages/mail/MailPage';
 import IntegrationsPage from './pages/integrations/IntegrationsPage';
 import AuditPage from './pages/audit/AuditPage';
 import SearchPage from './pages/search/SearchPage';
+import PortfolioPage from './pages/portfolio/PortfolioPage';
+import AnalyticsPage from './pages/analytics/AnalyticsPage';
+import ReportsIndexPage from './pages/reports/ReportsIndexPage';
+import ReportTablePage from './pages/reports/ReportTablePage';
+import ModuleReportBuilderPage from './pages/reports/ModuleReportBuilderPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -38,18 +46,21 @@ function GuestRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route element={<GuestRoute><AuthLayout /></GuestRoute>}>
             <Route path="/auth/login" element={<LoginPage />} />
             <Route path="/auth/signup" element={<SignupPage />} />
+            <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
           </Route>
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/customers/new" element={<CustomerFormPage />} />
             <Route path="/customers/:id" element={<CustomerDetailPage />} />
-            <Route path="/clients" element={<div>Clients — TODO</div>} />
+            <Route path="/clients" element={<ClientsPage />} />
             <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
             <Route path="/work" element={<WorkCenterPage />} />
@@ -64,6 +75,11 @@ export default function App() {
             <Route path="/integrations" element={<IntegrationsPage />} />
             <Route path="/audit" element={<AuditPage />} />
             <Route path="/search" element={<SearchPage />} />
+            <Route path="/portfolio" element={<PortfolioPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/reports" element={<ReportsIndexPage />} />
+            <Route path="/reports/module-builder" element={<ModuleReportBuilderPage />} />
+            <Route path="/reports/:reportKey" element={<ReportTablePage />} />
           </Route>
         </Routes>
       </BrowserRouter>

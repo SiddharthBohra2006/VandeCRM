@@ -5,12 +5,15 @@ const Customer = require('../models/Customer');
 const CrmStage = require('../models/CrmStage');
 const Activity = require('../models/Activity');
 const Campaign = require('../models/Campaign');
+const ClientCompany = require('../models/ClientCompany');
 const CustomField = require('../models/CustomField');
 const CustomRecord = require('../models/CustomRecord');
 const DashboardView = require('../models/DashboardView');
 const WorkType = require('../models/WorkType');
 const { logAudit } = require('../utils/audit');
 const { isClosed, isComplete } = require('../utils/workCompletion');
+const { getWonStageIdSet } = require('../services/crmStages');
+const { getDateRangeFilter } = require('../utils/reporting');
 
 const router = express.Router();
 router.use(requireApiAuth);

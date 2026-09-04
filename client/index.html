@@ -1,11 +1,49 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark" class="dark-theme">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Vande Agency CRM</title>
+    <script>
+      // Synchronous theme/density bootstrap — mirrors EJS partials/head.ejs.
+      // Must run before first paint so app.css `html.dark-theme`/`data-theme`
+      // selectors resolve and surfaces don't flash light/unstyled.
+      (function () {
+        try {
+          var savedDensity = localStorage.getItem('ui-density') || 'comfortable';
+          document.documentElement.setAttribute('data-density', savedDensity === 'compact' ? 'compact' : 'comfortable');
+
+          var presets = {
+            'Classic Dark': { type: 'dark', gold: '#ffcc00', teal: '#00bcd4', bg: '#090d16', surface: '#121b2d', text: '#f8fafc' },
+            'OLED Black': { type: 'dark', gold: '#ffcc00', teal: '#a855f7', bg: '#000000', surface: '#0e0e11', text: '#eeeeee' },
+            'Cozy Cream': { type: 'light', gold: '#d97706', teal: '#0f766e', bg: '#fcfaf7', surface: '#ffffff', text: '#1c1917' },
+            'Crystal Light': { type: 'light', gold: '#b58d00', teal: '#2563eb', bg: '#f1f5f9', surface: '#ffffff', text: '#0f172a' }
+          };
+          var theme = JSON.parse(localStorage.getItem('theme-preset') || 'null') || presets[localStorage.getItem('theme-name')];
+          if (!theme) theme = presets['Classic Dark'];
+          localStorage.setItem('theme-preset', JSON.stringify(theme));
+          document.documentElement.setAttribute('data-theme', theme.type);
+          document.documentElement.classList.toggle('dark-theme', theme.type === 'dark');
+          var root = document.documentElement.style;
+          root.setProperty('--gold', theme.gold);
+          root.setProperty('--teal', theme.teal);
+          root.setProperty('--bg', theme.bg);
+          root.setProperty('--panel', theme.surface);
+          root.setProperty('--text', theme.text);
+          root.setProperty('--bg-soft', 'color-mix(in srgb, ' + theme.bg + ' 92%, ' + theme.text + ')');
+          root.setProperty('--panel-muted', 'color-mix(in srgb, ' + theme.surface + ' 95%, ' + theme.text + ')');
+          root.setProperty('--input', 'color-mix(in srgb, ' + theme.surface + ' 96%, ' + theme.text + ')');
+          root.setProperty('--border', 'color-mix(in srgb, ' + theme.surface + ' 88%, ' + theme.text + ')');
+          root.setProperty('--muted', 'color-mix(in srgb, ' + theme.surface + ' 45%, ' + theme.text + ')');
+          root.setProperty('--sub', 'color-mix(in srgb, ' + theme.surface + ' 30%, ' + theme.text + ')');
+          root.setProperty('--hover', 'color-mix(in srgb, ' + theme.surface + ' 94%, ' + theme.text + ')');
+          root.setProperty('--panel-2', 'color-mix(in srgb, ' + theme.surface + ' 96%, ' + theme.text + ')');
+        } catch (_) {}
+      })();
+    </script>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png?v=2" />
   </head>
-  <body>
+  <body class="dark-theme">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

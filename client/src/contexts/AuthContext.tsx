@@ -34,6 +34,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const applyTheme = useCallback((theme?: User['organization']['theme']) => {
+    const root = document.documentElement;
+
+    // No org theme: keep whatever the index.html head bootstrap already applied
+    // from localStorage (theme-preset / ui-density). Never clobber the saved
+    // preset during logout or on the public auth pages.
+    if (!theme) {
+      root.setAttribute('data-theme', root.dataset.theme || 'dark');
+      root.classList.toggle('dark-theme', root.getAttribute('data-theme') === 'dark');
+      return;
+    }
+
     const t = {
       gold: theme?.gold || DEFAULT_THEME.gold,
       teal: theme?.teal || DEFAULT_THEME.teal,
@@ -41,7 +52,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       surface: theme?.surface || DEFAULT_THEME.surface,
       text: theme?.text || DEFAULT_THEME.text,
     };
-    const root = document.documentElement;
     const rgb = String(t.background).match(/[a-f\d]{2}/gi);
     const isLight = !!rgb && rgb.length >= 3 &&
       rgb.slice(0, 3).reduce((sum: number, v: string) => sum + parseInt(v, 16), 0) > 382;

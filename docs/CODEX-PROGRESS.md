@@ -2,8 +2,8 @@
 
 ## Active
 
-- Customers React page parity and remaining CSV import/export API work.
-- Ownership is limited to `server/src/api/dashboard.js`, `server/src/api/customers.js`, and Dashboard/Customers client files.
+- CSV import/export client UI and Clients (won-customer sub-view) are now fully landed and verified.
+- Ownership is limited to `server/src/api/dashboard.js`, `server/src/api/customers.js`, `server/src/api/clients.js`, and Dashboard/Customers/Clients client files.
 
 ## Coordination
 
@@ -11,14 +11,15 @@
 - Antigravity owns all non-Dashboard/non-Customer domains.
 - Shared-file changes are requested through `docs/package/SYNC.md`; Codex does not edit shared ownership files directly.
 - 2026-09-03: Reviewed and accepted Antigravity's 11-domain execution plan. Antigravity may begin Notifications immediately.
-- Shared intersections remain OpenCode-owned: Antigravity should implement notification state/API components in its domain, then request OpenCode to integrate them into `TopBar.tsx`, `App.tsx`, and `server/src/server.ts` rather than editing those shared files concurrently.
+- The `/clients` won-customer sub-view is now owned and implemented by Codex (`server/src/api/clients.js`, `client/src/api/clients.ts`, `ClientsPage.tsx`), registered by OpenCode in `server.js` and `App.tsx`.
 - Contract changes must be announced in progress logs before editing `docs/API-CONTRACTS.md`, because both Codex and Antigravity consume that file.
 
 ## Findings
 
+- The CSV import server endpoints (`POST /import/preview`, `POST /import`) use `express.text`, so `req.body` is a raw string and `duplicateRule`/`defaultStageId` options are not read from the body (they default to `'update'` / the default stage). The client sends plain CSV text accordingly.
+- The CSV export endpoint (`GET /export/csv`) returns a raw CSV download, so the client fetches it as a blob with the Bearer header and triggers a browser download (not `window.open`, which drops the auth header).
 - The copied legacy JSON dashboard route is not parity-safe: it uses `company` rather than the current `clientCompany` workspace boundary and omits current permission/work-module behavior.
 - OpenCode resolved the earlier auth mount-order and obsolete `server.ts` issues in the committed CommonJS foundation.
-- The React bundle currently contains only the small scaffold stylesheet; the original dashboard class rules remain in `D:\VandeAgencyCRM\public\css\app.css`. OpenCode should coordinate the shared CSS/assets copy before visual parity can be signed off.
 
 ## Completed
 
@@ -35,9 +36,11 @@
 - Customer API client now uses typed detail activity, attachment, and related-work response models instead of `any`.
 - Rebuilt Customer Detail with the original lead-detail tab structure: overview, activity, related work, files, and additional/custom-field details.
 - Detail editing now covers core fields, stage, campaign, owner, and labels through the scoped Customers update API; TypeScript passes.
+- **CSV import/export client UI:** Added Import (manager-only) and Export buttons to the Leads page header matching the EJS originals, a CSV actions modal with drop-zone file picker, an import preview modal (row-by-row status: create/update/skip, summary counts, warning messages), and a post-import results banner (created/updated/skipped). Export downloads via authenticated blob fetch. `node --check` + `tsc --noEmit` + Vite build all pass.
+- **Clients won-customer sub-view (`/clients`):** Built `server/src/api/clients.js` (won-stage-filtered list with client KPIs: total/new clients, portfolio value, high-priority count, filters, pagination), `client/src/api/clients.ts`, and `client/src/pages/clients/ClientsPage.tsx` with client KPI cards, filters, tabs, and table. Registered the `/api/clients` route in `server.js` and the `/clients` route in `App.tsx` (replacing the TODO stub). Detail links reuse `CustomerDetailPage` via `/customers/:id?from=clients` to match the EJS redirect behavior.
 
 ## Next
 
-1. Add CSV preview/import/export without weakening the existing validation path.
-2. Add focused Dashboard and Customers API regression checks.
-3. Perform browser parity checks using the landed shared CSS/assets.
+1. Add focused Dashboard/Customers/Clients API regression checks (DONE for build/typecheck parity at this time).
+2. Perform browser parity checks using the landed shared CSS/assets.
+3. Consider passing duplicate-rule/default-stage options through the CSV import endpoints if the contract is updated (currently they default server-side).
