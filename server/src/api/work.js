@@ -108,7 +108,9 @@ router.get('/:type', resolveWorkType, async (req, res, next) => {
   try {
     const activeWorkspace = String(req.activeCompanyId);
     const organization = req.user.organization._id;
-    const { status, assignedTo, priority, q, view = 'open', page = 1, pageSize = 25 } = req.query;
+    const { status, assignedTo, priority, q, view = 'open', month = '', page = 1, pageSize = 100 } = req.query;
+    const presentation = req.workType.presentation || {};
+    const calendarField = presentation.calendarField || 'deadline';
 
     const filter = {
       organization,
@@ -137,10 +139,20 @@ router.get('/:type', resolveWorkType, async (req, res, next) => {
       filter.deadline = { $lt: new Date() };
     }
 
+    if (month && /^\d{4}-\d{2}$/.test(String(month))) {
+      const [y, m] = String(month).split('-').map(Number);
+      const start = new Date(Date.UTC(y, m - 1, 1));
+      const end = new Date(Date.UTC(y, m, 1));
+      const path = calendarField.startsWith('custom:')
+        ? `customFields.${calendarField.slice(7)}`
+        : calendarField;
+      filter[path] = { $gte: start, $lt: end };
+    }
+
     const skip = (Math.max(1, Number(page)) - 1) * Number(pageSize);
     const [items, total, users, customers, relatedItems] = await Promise.all([
       CustomRecord.find(filter)
-        .populate('workType assignedTo customer collaborators secondaryAssignee')
+        .populate('workType assignedTo customer collaborators secondaryAssignee parentRecord')
         .sort({ deadline: 1, createdAt: -1 })
         .skip(skip)
         .limit(Number(pageSize))

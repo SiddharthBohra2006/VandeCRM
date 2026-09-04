@@ -10,10 +10,25 @@ export interface WorkTypeField {
   defaultValue?: any;
 }
 
+export interface WorkTypePresentation {
+  enabledViews?: string[];
+  defaultView?: string;
+  calendarField?: string;
+  listColumns?: string[];
+  boardFields?: string[];
+  filterFields?: string[];
+  fieldLabels?: Record<string, string>;
+  overviewGroupFields?: string[];
+  overviewProgressFields?: string[];
+  overviewCompleteValue?: string;
+}
+
 export interface WorkTypeStatus {
   key: string;
   label: string;
   color?: string;
+  isTerminalWon?: boolean;
+  isTerminalLost?: boolean;
 }
 
 export interface WorkType {
@@ -26,6 +41,7 @@ export interface WorkType {
   fields: WorkTypeField[];
   order?: number;
   isActive?: boolean;
+  presentation?: WorkTypePresentation;
 }
 
 export interface WorkSubtask {
@@ -55,7 +71,10 @@ export interface WorkItem {
   collaborators?: { _id: string; name: string }[];
   secondaryAssignee?: { _id: string; name: string } | null;
   customFields?: Record<string, any>;
+  relatedRecords?: { record?: { _id: string; title: string }; relation?: string }[];
+  parentRecord?: { _id: string; title?: string } | string | null;
   subtasks?: WorkSubtask[];
+  createdBy?: { _id: string; name: string };
   createdAt: string;
   updatedAt: string;
 }

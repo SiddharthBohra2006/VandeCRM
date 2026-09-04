@@ -37,6 +37,8 @@
 - `client/src/api/customers.ts`, `client/src/api/clients.ts` (domain clients)
 - `docs/CODEX-PROGRESS.md`
 
+> ⚠️ **2026-09-04 one-off:** OpenCode edited `CustomerDetailPage.tsx` (+ `client/src/styles/lead-detail.css`) to rewire the page to the `.lead-record-ui` class system (fixes the dead-styling UI gap). Ownership stays with Codex; please review the diff. See SYNC.md UI PARITY TRACKER.
+
 ### Antigravity
 - API: `server/src/api/{notifications,companies,campaigns,work,tasks,team,settings,mail,integrations,audit,search}.js`
 - Client API: `client/src/api/{notifications,companies,campaigns,work,tasks,team,settings,mail,integrations,audit,search}.ts`

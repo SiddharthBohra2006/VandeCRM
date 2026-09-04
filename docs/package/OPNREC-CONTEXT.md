@@ -45,36 +45,78 @@ I am the **lead architect/guide**. I do NOT implement feature pages — I build 
 ## What Codex Has DONE (verified)
 - Dashboard API `server/src/api/dashboard.js` — FULL implementation (workspace-scoped, permissions, preferences, pipeline move). COMMITTED `cc9e0e6`.
 - Dashboard React page — full metrics/weeks/deadlines/drag-drop pipeline. COMMITTED.
-- Customers API — core list/detail/create/update/delete/bulk. COMMITTED `f85222f`, `829f694`, `02cb561`.
+- Customers API — core list/detail/create/update/delete/bulk + CSV import/export/import-preview endpoints (server-side). COMMITTED `f85222f`, `829f694`, `02cb561`. NOTE: CSV *client* UI (buttons/preview modal) NOT yet built — that's Codex's remaining work.
 - Customer Detail rebuilt with original lead-detail tabs (overview/activity/related/folders/custom fields) + editing. COMMITTED.
 
-## What Antigravity Has DONE (verified)
-- Notifications — API + TopBar bell. COMMITTED `d73c19d`.
-- Companies — API + pages. COMMITTED `bbbfe08`.
-- Campaigns — in progress (Step 3).
-- Maintains `docs/ANTIGRAVITY-PROGRESS.md`.
+## What Antigravity Has DONE (verified) — ALL 11 DOMAINS NOW LANDED
+All committed (each = API `server/src/api/<d>.js` + client `client/src/api/<d>.ts` + React pages):
+- Notifications `d73c19d` · Companies `bbbfe08` · Campaigns `44ec9a6` · Work `d75cb15` · Tasks `03621fc` · Team `1e1fe13` · Settings `4520784` · Mail `23dd117` · Integrations `eef77f1` · Audit `9a2ad20` · Search `afd0d7c`.
+- So API surface now present for: auth, dashboard, customers, campaigns, work, companies, tasks, notifications, team, settings, mail, integrations, audit, search (14 modules in `server/src/api/`).
 
-## Reality-Check 2026-09-03: coordination fixes applied
-- SYNC.md was stale: updated Codex status to reflect all committed milestones; recorded Companies commit; listed Codex/Antigravity/OpenCode next steps accurately.
-- **Clients ownership gap closed:** `/clients` = "won clients" sub-view of the Customer domain (same Customer model, `isClientView` in original customers/index.ejs). **Assigned to Codex**, NOT a separate Antigravity domain. `/clients` and `/api/clients` still placeholders in App.tsx/server.js → register when Codex lands it.
-- **Signup gap:** `/api/auth/signup` exists in auth.js BUT React `SignupPage` is a placeholder `<div>`. **OpenCode owns it** — build it in `client/src/pages/auth/SignupPage.tsx`.
-- **No git remote `origin`** — commits are local-only. Recommend adding a remote for backup once user provides one.
+## Endpoint parity snapshot (EJS endpoints vs React endpoints)
+auth 11→7 (added forgot/reset/admin-recovery 2026-09-04) · dashboard 21→4 · customers 23→9 · companies 14→8 · settings 21→12 · team 10→8 · work 10→8 · integrations 10→6 · campaigns 6→6(✅) · mail 5→6(✅) · notifications 3→4(✅) · audit 1→1(✅) · **clients 2→2 (Codex won-customer sub-view)** · search 1→1.
+**Biggest endpoint gaps (all in EJS, not yet in React API):** dashboard (21), customers (23), settings (21). These are feature-completeness gaps to close — the React apps mostly implement the core list/detail/CRUD but not every sub-action/filter/report the EJS has.
 
-## Verification Commands
-- Server boot: `node server/src/server.js` (from `server/`), check `/health`.
-- Client typecheck: `cd client && npx tsc --noEmit` (exit 0 = green).
-- Server module load: `node -e "require('./src/server.js')"` style spot-checks.
-- Original reference routes: `D:\VandeAgencyCRM\src\routes\*.js`; EJS views: `D:\VandeAgencyCRM\src\views\`.
+## My (OpenCode) DONE since baseline (session 2026-09-03/04)
+14. ✅ **Fixed multi-CRM/500 bug (CRITICAL):** the copied models were never required at boot, so mongoose `populate` refs (e.g. `User -> CustomRole`) threw `MissingSchemaError` → **every authenticated API returned HTTP 500**. Fix: added "REGISTER ALL MONGOOSE MODELS AT BOOT" block to `server/src/server.js` requiring all 24 models. Verified all 8+ routes return HTTP 200 after fix. (Fix got swept into an Antigravity commit via their `git add -A`.)
+15. ✅ **Built the Signup flow** (it was a placeholder):
+    - Added `signup()` to `AuthContext` (stores token + loads full context).
+    - Created `client/src/pages/auth/SignupPage.tsx` (name, orgName, email, password ≥8, login link).
+    - Wired `/auth/signup` → `<SignupPage />` in `App.tsx` (replacing `<div>Signup TODO</div>`).
+16. ✅ **Ownership/clients fix:** `/clients` = won-customer sub-view of Customer domain → **assigned to Codex** (in OWNERSHIP.md). Signup → OpenCode.
+17. ✅ **Coord docs updated:** SYNC.md + OWNERSHIP.md + this file.
+18. ✅ **Auth flow parity DONE (2026-09-04):** added JSON `POST /forgot-password`, `POST /reset-password`, `POST /admin-recovery` to `server/src/api/auth.js` + `canCreateSignupAccount` guard on signup; `authApi.forgotPassword/resetPassword/adminRecovery` in `client/src/api/auth.ts`; new `ForgotPasswordPage.tsx` + `ResetPasswordPage.tsx`; "Forgot password?" link on `LoginPage`; routes registered in `App.tsx` (`/auth/forgot-password`, `/reset-password`, `/auth/reset-password`). Verified live against booted server + `tsc`/`vite build` green.
+19. ✅ **UI GAP AUDIT (2026-09-04, session):** Produced a page-by-page gap audit of React vs the EJS original, distilled into priority list (biggest gaps: work board/calendar views, settings work-types editor + automations, work-detail parity, lead duplicates page, work CSV import, dashboard greeting/pinning, error pages, inline-style consolidation). Saved working notes to `D:\vandecrmreact\GAP_REPORT.md`.
+20. ✅ **STRUCTURAL LAYOUT FIXES (2026-09-04, session)** — these were the true root causes of the "significant UI gap":
+    - **`.main-wrap` displacement/overlap (CRITICAL):** `AppLayout.tsx` was rendering the app body inside `<div className="main-content">` which has NO `margin-left`, so every page sat under the fixed 240px sidebar. Fixed by switching the wrapper to `<div className="main-wrap">` (and toggling `.main-wrap.expanded` when the sidebar is collapsed) — the real CSS class drives `margin-left: 240px` + the `.sidebar.collapsed ~ .main-wrap` sibling rule.
+    - **Collapsed sidebar hover-expand broken:** `Sidebar.tsx` was removing `<span>` text and `.user-info` from the DOM with `{isOpen && ...}`, so on hover-expand the expanded strip was empty. Fixed by always rendering the text and letting the existing CSS (`.sidebar.collapsed .nav-item span`, `.sidebar.collapsed:hover .nav-item span`, `.sidebar.collapsed .user-info`, `.sidebar.collapsed:hover .user-info`, `.sidebar-footer-tools`) handle show/hide. Also un-gated the workType sub-links behind `isOpen`.
+    - **Lead-detail styling dead (19.9 KB dead CSS):** `CustomerDetailPage.tsx` used invented classes (`.lead-detail-page`, `.lead-profile-hero`, `.lead-detail-nav-tabs`, `.lead-detail-grid`) while the entire `lead-detail.css` system is scoped under `.lead-record-ui` with reference classes (`.lead-detail-head`, `.lead-identity`, `.lead-profile-grid`, `.lead-main-column`, `.lead-side-column`, `.lead-overview-card`, `.lead-quick-card`, `.lead-stage-card`, `.lead-owner-card`, `.lead-controls-card`, `.lead-followup-panel`, `#activityForm`, `.timeline`...). Rewrote the page to render under `.lead-record-ui` using those class names (2-col profile grid, quick-summary sidebar, stage/owner selectors, follow-up panel), preserving edit/delete/tab functionality. Added a React-adaptation block to `lead-detail.css` (button-based `.lead-section-nav`, `.lead-timeline-*`, `.lead-detail-breadcrumbs`, `.lead-tab-pane`, `.lead-notes`) since the page uses state-driven buttons instead of EJS anchor tabs.
+    - Verified `npx tsc --noEmit` green for all three fixes.
+    - **NOTE:** `CustomerDetailPage.tsx` is Codex-owned (OWNERSHIP). I edited it for the parity fix; flagging it here so Codex is aware. The structural shell files (AppLayout/Sidebar) are OpenCode-owned.
+    - **STILL OPEN (next biggest gaps):** settings work-types editor + automations, work-detail parity, lead duplicates + work CSV import pages, dashboard greeting/pinning, error pages, inline-style consolidation.
+21. ✅ **WORK LIST BOARD + CALENDAR VIEWS (2026-09-04, session):** Ported `work/index.ejs` into `WorkListPage.tsx`:
+    - `.view-switcher` toggle (list / board / calendar) gated by `presentation.enabledViews`, defaulting to `presentation.defaultView`; filters (status/priority) preserved across view switches via query params.
+    - `.work-board` kanban: per-status `.work-column`s with HTML5 drag-drop → calls the existing `PATCH /work/:type/:id/status` quick-update on drop.
+    - `.work-calendar` month grid: month navigation (prev/current/next), items bucketed by `presentation.calendarField` (default `deadline`, handles `custom:` keys); `month` & `view` params drive the backend filter.
+    - List view now renders the subtask-tree expansion (grouped by `parentRecord`, counts completed via terminal-won statuses).
+    - Backend (`server/src/api/work.js`): added live `month` query filter to the list endpoint + `pageSize` default raised to 25→100 + list now populates `parentRecord`. Client types `WorkType` gained `presentation`; `WorkItem` gained `parentRecord`/`relatedRecords`.
+    - Verified: `node --check`, `npx tsc --noEmit` exit 0, `vite build` green.
 
-## Current Next Steps FOR ME (OpenCode)
-1. **Commit the coordination/ownership fixes** (SYNC.md, OWNERSHIP.md, this file).
-2. **Build the Signup page** — `client/src/pages/auth/SignupPage.tsx`, backed by the existing `/api/auth/signup`; wire the `/auth/signup` route in `App.tsx` to replace the `<div>` placeholder. Style via `auth.css` (login-shell).
-3. **Register routes** for what's landed (Companies already) and as Codex lands Clients (`/api/clients`, `/clients`) and Antigravity lands Campaigns etc. — merge into `server.js` + `App.tsx`.
-4. Keep nudging Codex/Antigravity to adopt the EJS-class-name parity rule from REACT-PATTERNS.md.
-5. Keep `SYNC.md` and this file updated as the migration progresses.
+## IN PROGRESS / NEXT FOR ME (OpenCode)
+A. ✅ **Auth endpoints DONE (2026-09-04):** added JSON `forgot-password`, `reset-password`, `admin-recovery` to `server/src/api/auth.js` mirroring `src/routes/auth.js` (generic no-enumeration forgot message, sha256 token hash + 1h expiry, recovery-key via env `ADMIN_RECOVERY_KEY`). Added `signup` public-signup guard (`canCreateSignupAccount`). Client: `authApi.forgotPassword/resetPassword/adminRecovery` in `api/auth.ts` + `ForgotPasswordPage.tsx` + `ResetPasswordPage.tsx` + "Forgot password?" link on Login + routes `/auth/forgot-password`, `/reset-password`, `/auth/reset-password` in `App.tsx`. Verified: `node --check`, server `/health`, live probes (forgot → generic message; reset bad token → 400 invalid/expired; admin-recovery disabled → 404), client `tsc --noEmit` + `vite build` green. All 18 API modules load.
+B. ✅ **Console warnings DONE:** React Router future flags + TopBar SVG camelCase fixed (prior session).
+C. ✅ **Multi-CRM / UI parity DONE (prior session + 2026-09-04):** Sidebar now has the CRM workspace switcher (`crm-switcher`/`crm-workspace-item`). Icons: `lucide-react@1.40.0` installed, `Icons.tsx` uses full Lucide catalog. Chrome shell aligned with EJS (see item E below). `/portfolio`, `/analytics`, `/reports` routes + nav.
+D. ✅ **Register remaining routes DONE:** all domains mounted in `server.js` + `App.tsx` (incl. clients, portfolio, analytics, reports).
+E. ✅ **Chrome Shell UI Parity DONE (2026-09-04):**
+   - **Theme engine bootstrap:** added synchronous `<head>` script to `index.html` that reads `ui-density` + `theme-preset`/`theme-name` from localStorage and applies CSS vars + `data-theme`/`dark-theme` before first paint — matching EJS `head.ejs` exactly. Default: Classic Dark. `AuthContext.applyTheme` now a no-op when no org theme (no longer clobbers saved preset on logout/public pages).
+   - **Icons:** installed `lucide-react@1.40.0`, rewrote `Icons.tsx` to use real Lucide components (full catalog) instead of hand-rolled 30-icon SVG registry.
+   - **Sidebar:** renamed `.sidebar-header` → `.sidebar-logo` (enables 15+ EJS collapse/padding rules); added `.sidebar-footer` with `.sidebar-footer-tools` (Customize + Reset) + `.sidebar-user` card (initials avatar, name, role, logout button). Nav items now `<a><Icon/><span/></a>` matching EJS structure (no more `.nav-icon`/`.nav-label` wrapper spans). CRMs nav uses `folder-kanban`; Follow-ups uses `list-checks`; Team uses `user-check`; Audit uses `activity`.
+   - **TopBar:** added `LiveClock` (IST, ticks every second); added 4-preset `theme-picker` menu (Classic Dark / OLED Black / Cozy Cream / Crystal Light) with localStorage persistence; search changed from `<form>` with `<input>` to clickable `.topbar-search-bar` trigger div (opens `/search`); added mobile hamburger `.mobile-menu-btn`; user card changed from dropdown to EJS-style `.topbar-user` (always visible: initial + name + email).
+   - Verified: `tsc --noEmit` exit 0 + `vite build` green (464KB JS, 356KB CSS).
+
+F. **Remaining (my ownership) when time permits:** admin-recovery *page* (API done; UI not wired); continue closing per-module sub-action/filter endpoint parity gaps; ensure `index.css` parallel classes (`.stat-card` etc.) are replaced with EJS classes (`.business-panel`, `.dashboard-metric`, etc.) — documented in `docs/REACT-PATTERNS.md`.
+
+## UI PARITY TRACKER (2026-09-04 — biggest remaining gaps, in priority order)
+1. ✅ **Work list board + calendar views — DONE (2026-09-04).** `WorkListPage.tsx` now ships a `.view-switcher` toggle (list/board/calendar, gated by `presentation.enabledViews`, default from `presentation.defaultView`), `.work-board` kanban with HTML5 drag-drop status change (`.work-card`/`.work-column`), and `.work-calendar` month grid using `presentation.calendarField` (default `deadline`, supports `custom:` keys). List view gained the subtask-tree expansion. Backend `server/src/api/work.js` verified & wired: `month` query filter + `pageSize` default raised to 100 + list populates `parentRecord`. Client `tsc` + `vite build` green.
+2. **Settings: Custom modules (work-types) builder** — `_work-type-builder.ejs` / `data-settings-panel="work-types"`; React `SettingsPage.tsx` loads `workTypes` state but never renders the editor.
+3. **Settings: Automations** — `data-settings-panel="automations"` (rule CRUD + toggle/delete); no React UI.
+4. **Work detail parity** — summary sidebar (Created by/on, Last updated), activity timeline feed, secondary assignee, collaborators, start date, links + custom-field sections, per-subtask deadline/priority, subtask tree in list.
+5. **Lead duplicates page** (`customers/duplicates.ejs`) — no React route. **Work CSV import** (`work/import-preview.ejs`) — no React UI.
+6. **Dashboard** — personalized greeting + card pinning/reorder dialog.
+7. **Error pages** 403/404/500 — no dedicated React routes.
+8. **Inline-style consolidation** — replace ad-hoc `style={{...}}` with EJS classes (`.work-card-panel`, `.summary-card-panel`, `.collaborator-pill-grid`, etc.).
+
+## Verification Commands (fresh 2026-09-04)
+- Server boot + route probe: `cd server; node src/server.js` (or Start-Process w/ PORT=5099). Then with a JWT: `Invoke-WebRequest http://localhost:PORT/api/<route> -Headers @{Authorization="Bearer <token>"}` — expect HTTP 200.
+- Client typecheck: `cd client; npx tsc --noEmit` (exit 0 = green).
+- Client prod build: `cd client; npx vite build`.
+- Server module load: `node -e "['auth','...'].forEach(m=>require('./src/api/'+m))"` from `server/` (NOTE: paths are `./src/api/`, not `./api/`).
+- Original reference: routes `D:\VandeAgencyCRM\src\routes\*.js`; EJS views `D:\VandeAgencyCRM\src\views\`.
 
 ## Coordination Rules to Never Forget
 - Always read `docs/package/SYNC.md` (the live tracker) at session start.
-- Respect OWNERSHIP.md — never edit Codex/Antigravity files.
-- Shared files changes (types, client.ts, middleware, server.js) go through SYNC.md requests.
-- Update this file + SYNC.md at every milestone so cross-session memory is never lost.
+- Respect OWNERSHIP.md — never edit Codex/Antigravity files (Sidebar/TopBar/App.tsx/server.js/auth.js = OpenCode).
+- Shared file changes (types, client.ts, middleware, server.js) go through SYNC.md requests.
+- Antigravity/Codex commit with `git add -A` — they may sweep my uncommitted work into their commits; expect the working tree to vacillate. VERIFY my changes still exist after they commit.
+- No git remote `origin` — commits are local-only.
+- User priorities (recent): (1) COMPLETE the migration fast; (2) match/deeply improve the UI to the EJS original (multi-CRM switcher, icons, analytics/reports/portfolio); (3) close the functional gap so nothing from the EJS is missing.

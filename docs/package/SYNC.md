@@ -44,13 +44,24 @@
 ## Job Queue (what happens next)
 
 1. **Codex:** CSV import/export → regression checks → browser parity testing → Clients (won-customer sub-view) integration.
-2. **Antigravity:** Campaigns → Work → Tasks → Team → Settings → Mail → Integrations → Audit → Search. **(GO continues — approved on baseline confirm.)**
-3. **OpenCode:** build the Signup page (API already exists) → merge/register every new domain into `server.js` + client `<Route>`s in `App.tsx` → keep `SYNC.md` + `OPNREC-CONTEXT.md` current.
+2. **Antigravity:** Campaigns → Work → Tasks → Team → Settings → Mail → Integrations → Audit → Search. **(GO continued — approved on baseline confirm. ALL 11 complete.)**
+3. **OpenCode:** ~~build the Signup page~~ DONE → ~~merge/register every new domain into `server.js` + client `<Route>`s in `App.tsx`~~ DONE → ✅ **Auth parity DONE (2026-09-04):** added `forgot-password`, `reset-password`, `admin-recovery` JSON endpoints + signup public-signup guard; `ForgotPasswordPage`/`ResetPasswordPage` + links + routes. Verified live. Next: optionally wire the admin-recovery page UI; continue closing per-module sub-action/filter endpoint parity gaps.
+
+## Blocker / Note
+- The EJS email reset link is built with `APP_BASE_URL` + root `/reset-password?token=...`, so the React client registers BOTH `/reset-password` (root — where the email points) and `/auth/reset-password` for safety.
 
 ## Blockers / Open Items
 
 - None blocking at this time. Codex's earlier blockers all resolved by OpenCode foundation (write access is a workspace permission controlled by the user, not in-code).
 - **Route registration:** when Antigravity adds a module, OpenCode (or Antigravity per pattern) must register it in `server/src/server.js` and add the client route in `App.tsx`.
+
+## UI PARITY TRACKER (2026-09-04) — shared, all developers
+A gap audit of React vs the EJS original found the "significant UI gap" is largely caused by structural bugs + missing features. Status:
+- ✅ **DONE (OpenCode, structural):** `.main-wrap` 240px displacement (AppLayout now uses the real `.main-wrap`/`.main-wrap.expanded` class instead of invented `.main-content`); collapsed sidebar hover-expand (side text now always in DOM, hidden via CSS); lead-detail page rewired to the `.lead-record-ui` class system (was using invented classes that left `lead-detail.css` dead). `tsc` green.
+- ✅ **DONE (OpenCode, 2026-09-04):** Work list now has the full `.view-switcher` toggle — **board** kanban (`work/index.ejs` port, HTML5 drag-drop status change) + **calendar** month grid (buckets by `presentation.calendarField`, default `deadline`), gated by `presentation.enabledViews`/`defaultView`; list view gained the subtask-tree expansion. Backend `/api/work/:type` list endpoint now honors `month` filter + `pageSize` 100 + populates `parentRecord`. `tsc` + `vite build` green.
+- ⚠️ **NOTE:** OpenCode edited `CustomerDetailPage.tsx` (Codex-owned) for the lead-detail parity fix — see OWNERSHIP flag. Codex should review.
+- 🔶 **OPEN (next for OpenCode):** settings work-types editor, settings automations, work-detail parity, lead-duplicates page, work CSV import, dashboard greeting/pinning, 403/404/500 error pages, inline-style → class consolidation.
+- 📄 Working notes: `D:\vandecrmreact\GAP_REPORT.md` (page-by-page gap detail).
 
 ## Junction Points (shared files — see OWNERSHIP.md)
 
@@ -64,3 +75,4 @@
 ## Change Log
 - **Baseline:** OpenCode set up git, copied backend, fixed server entry (`.js`), fixed priority type junction, created DashboardPage placeholder, added `requireApiPermission`, verified green boot + typecheck.
 - **Styling Foundation:** OpenCode imported the original design system into the React client (styles + theme application) and added the EJS-class-name parity rule to REACT-PATTERNS.md.
+- **UI Parity structural fixes (2026-09-04):** OpenCode fixed (a) `.main-wrap` 240px displacement/overlap (AppLayout now uses the real `.main-wrap` class), (b) collapsed-sidebar hover-expand (text always in DOM, shown/hidden via CSS), (c) lead-detail page rewired to the `.lead-record-ui` class system so `lead-detail.css` actually styles it. Also ran a full gap audit (GAP_REPORT.md) and shipped the work list **board + calendar** views (view toggle, drag-drop kanban, month-grid calendar, subtask-tree in list) with backend `month` filter + `pageSize` 100 + `parentRecord` populate.

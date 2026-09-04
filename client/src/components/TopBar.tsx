@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { User, Company } from '../api/auth';
 import { notificationsApi, NotificationItem } from '../api/notifications';
+import SearchModal from './SearchModal';
 
 interface TopBarProps {
   user: User;
@@ -11,15 +11,62 @@ interface TopBarProps {
   onSwitchCompany: (companyId: string) => Promise<void>;
 }
 
+const THEME_PRESETS = [
+  { name: 'Classic Dark', type: 'dark', gold: '#ffcc00', teal: '#00bcd4', bg: '#090d16', surface: '#121b2d', text: '#f8fafc' },
+  { name: 'OLED Black', type: 'dark', gold: '#ffcc00', teal: '#a855f7', bg: '#000000', surface: '#0e0e11', text: '#eeeeee' },
+  { name: 'Cozy Cream', type: 'light', gold: '#d97706', teal: '#0f766e', bg: '#fcfaf7', surface: '#ffffff', text: '#1c1917' },
+  { name: 'Crystal Light', type: 'light', gold: '#b58d00', teal: '#2563eb', bg: '#f1f5f9', surface: '#ffffff', text: '#0f172a' },
+];
+
+function applyThemePreset(preset: typeof THEME_PRESETS[number]) {
+  const root = document.documentElement;
+  root.setAttribute('data-theme', preset.type);
+  root.classList.toggle('dark-theme', preset.type === 'dark');
+  const s = root.style;
+  s.setProperty('--gold', preset.gold);
+  s.setProperty('--teal', preset.teal);
+  s.setProperty('--bg', preset.bg);
+  s.setProperty('--panel', preset.surface);
+  s.setProperty('--panel-2', preset.surface);
+  s.setProperty('--text', preset.text);
+  s.setProperty('--bg-soft', `color-mix(in srgb, ${preset.bg} 92%, ${preset.text})`);
+  s.setProperty('--panel-muted', `color-mix(in srgb, ${preset.surface} 95%, ${preset.text})`);
+  s.setProperty('--input', `color-mix(in srgb, ${preset.surface} 96%, ${preset.text})`);
+  s.setProperty('--border', `color-mix(in srgb, ${preset.surface} 88%, ${preset.text})`);
+  s.setProperty('--muted', `color-mix(in srgb, ${preset.surface} 45%, ${preset.text})`);
+  s.setProperty('--sub', `color-mix(in srgb, ${preset.surface} 30%, ${preset.text})`);
+  s.setProperty('--hover', `color-mix(in srgb, ${preset.surface} 94%, ${preset.text})`);
+  localStorage.setItem('theme-name', preset.name);
+  localStorage.setItem('theme-preset', JSON.stringify(preset));
+}
+
+function LiveClock() {
+  const [time, setTime] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  // IST = UTC + 5:30
+  const ist = new Date(time.getTime() + (5.5 * 60 * 60 * 1000) - (time.getTimezoneOffset() * 60 * 1000));
+  return (
+    <span className="live-clock topbar-live-clock">
+      {ist.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+    </span>
+  );
+}
+
 export default function TopBar({ user, activeCompany, companies, onSwitchCompany }: TopBarProps) {
   const { logout } = useAuth();
-  const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState('');
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showThemePicker, setShowThemePicker] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [activeTheme, setActiveTheme] = useState(() => {
+    return localStorage.getItem('theme-name') || 'Classic Dark';
+  });
 
   const loadNotifications = useCallback(async () => {
     try {
@@ -36,6 +83,33 @@ export default function TopBar({ user, activeCompany, companies, onSwitchCompany
     const interval = setInterval(loadNotifications, 30000);
     return () => clearInterval(interval);
   }, [loadNotifications]);
+
+  // Close all dropdowns when clicking outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.theme-picker') && !target.closest('.notifications-bell-container') && !target.closest('.dropdown')) {
+        setShowThemePicker(false);
+        setShowNotifications(false);
+        setShowCompanyDropdown(false);
+        setShowUserMenu(false);
+      }
+    }
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
+
+  // Open global search on Cmd/Ctrl+K
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowSearch(true);
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   async function handleDismiss(id: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -58,40 +132,103 @@ export default function TopBar({ user, activeCompany, companies, onSwitchCompany
     }
   }
 
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-    }
-  }
-
   return (
+    <>
     <header className="topbar">
-      <div className="topbar-left">
-        <form className="topbar-search" onSubmit={handleSearch}>
-          <input
-            type="text"
-            placeholder="Search leads, clients, work..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-          />
-        </form>
+      {/* Mobile hamburger — toggles sidebar via CSS media queries (matches EJS) */}
+      <button
+        className="mobile-menu-btn"
+        type="button"
+        aria-label="Toggle Mobile Menu"
+        onClick={() => document.querySelector('.sidebar')?.classList.toggle('mobile-open')}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
+
+      {/* Live IST clock — matches EJS #liveClock */}
+      <div className="topbar-title-section topbar-clock-section">
+        <LiveClock />
       </div>
 
-      <div className="topbar-actions topbar-right">
+      {/* Search bar — opens the global search spotlight modal (Cmd/Ctrl+K) */}
+      <div
+        className="topbar-search-bar"
+        role="button"
+        tabIndex={0}
+        aria-label="Search your workspace"
+        title="Search workspace (Ctrl+K)"
+        onClick={() => setShowSearch(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter') setShowSearch(true); }}
+      >
+        <svg className="topbar-search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <span className="topbar-search-placeholder">Search clients, leads, tasks, team, meeting notes, history...</span>
+      </div>
+
+      <div className="topbar-actions">
+        {/* Theme picker — matches EJS theme picker with 4 presets */}
+        <div className="theme-picker">
+          <button
+            type="button"
+            className="theme-toggle-btn"
+            aria-label="Toggle Theme"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowThemePicker(!showThemePicker);
+              setShowNotifications(false);
+              setShowCompanyDropdown(false);
+              setShowUserMenu(false);
+            }}
+          >
+            <svg className="theme-palette-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 3a9 9 0 0 0 0 18h1.5a2 2 0 0 0 0-4H12a2 2 0 0 1 0-4h5a4 4 0 0 0 4-4c0-3.3-4-6-9-6Z" />
+              <circle cx="7.5" cy="10.5" r=".75" fill="currentColor" stroke="none" />
+              <circle cx="10" cy="7" r=".75" fill="currentColor" stroke="none" />
+              <circle cx="14" cy="7" r=".75" fill="currentColor" stroke="none" />
+            </svg>
+            <span className="theme-toggle-label">Theme</span>
+          </button>
+          {showThemePicker && (
+            <div className="theme-picker-menu">
+              {THEME_PRESETS.map(preset => (
+                <button
+                  key={preset.name}
+                  type="button"
+                  title={preset.name}
+                  className={activeTheme === preset.name ? 'active' : ''}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    applyThemePreset(preset);
+                    setActiveTheme(preset.name);
+                    setShowThemePicker(false);
+                  }}
+                >
+                  <span style={{ '--theme-bg': preset.bg, '--theme-accent': preset.teal, width: 22, height: 22, display: 'block', border: '1px solid var(--border)', borderRadius: 6, background: `linear-gradient(135deg, ${preset.bg} 55%, ${preset.teal} 56%)` } as React.CSSProperties} />
+                  <span>{preset.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Notifications Bell */}
         <div className="notifications-bell-container">
           <button
             type="button"
             className={`bell-btn ${unreadCount > 0 ? 'has-unread' : ''}`}
             aria-label="Notifications"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               setShowNotifications(!showNotifications);
               setShowCompanyDropdown(false);
               setShowUserMenu(false);
+              setShowThemePicker(false);
             }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
@@ -117,7 +254,7 @@ export default function TopBar({ user, activeCompany, companies, onSwitchCompany
                       <div className="notification-item-content">
                         <strong>{n.title}</strong>
                         <p>{n.message}</p>
-                        <small>{new Date(n.createdAt).toLocaleDateString()}</small>
+                        <small>{new Date(n.createdAt).toLocaleString('en-IN')}</small>
                       </div>
                       <div className="notification-item-actions">
                         {n.link && (
@@ -146,63 +283,17 @@ export default function TopBar({ user, activeCompany, companies, onSwitchCompany
           )}
         </div>
 
-        {/* Company Switcher */}
-        {companies.length > 1 && (
-          <div className="dropdown">
-            <button
-              type="button"
-              className="dropdown-trigger"
-              onClick={() => {
-                setShowCompanyDropdown(!showCompanyDropdown);
-                setShowNotifications(false);
-                setShowUserMenu(false);
-              }}
-            >
-              {activeCompany?.name || 'Select workspace'}
-            </button>
-            {showCompanyDropdown && (
-              <div className="dropdown-menu">
-                {companies.map(company => (
-                  <button
-                    type="button"
-                    key={company._id}
-                    className={`dropdown-item ${company._id === activeCompany?._id ? 'active' : ''}`}
-                    onClick={async () => {
-                      await onSwitchCompany(company._id);
-                      setShowCompanyDropdown(false);
-                    }}
-                  >
-                    {company.name}
-                  </button>
-                ))}
-              </div>
-            )}
+        {/* User card — matches EJS .topbar-user layout (always visible, not a dropdown) */}
+        <div className="topbar-user" title={user.email}>
+          <span>{user.name ? user.name.charAt(0).toUpperCase() : 'U'}</span>
+          <div>
+            <strong>{user.name || 'User'}</strong>
+            <small>{user.email}</small>
           </div>
-        )}
-
-        {/* User Menu */}
-        <div className="dropdown">
-          <button
-            type="button"
-            className="dropdown-trigger user-menu-trigger"
-            onClick={() => {
-              setShowUserMenu(!showUserMenu);
-              setShowNotifications(false);
-              setShowCompanyDropdown(false);
-            }}
-          >
-            <span className="user-avatar">{user.name.charAt(0).toUpperCase()}</span>
-            <span className="user-name">{user.name}</span>
-          </button>
-          {showUserMenu && (
-            <div className="dropdown-menu">
-              <div className="dropdown-item disabled">{user.email}</div>
-              <div className="dropdown-item disabled">Role: {user.role}</div>
-              <button type="button" className="dropdown-item" onClick={logout}>Sign out</button>
-            </div>
-          )}
         </div>
       </div>
     </header>
+    <SearchModal open={showSearch} onClose={() => setShowSearch(false)} />
+    </>
   );
 }

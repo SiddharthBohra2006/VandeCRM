@@ -20,17 +20,19 @@ export default function AppLayout() {
   }
 
   return (
-    <div className={`app-layout ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
+    <div className="app-layout">
       <Sidebar
         user={user}
         activeCompany={activeCompany}
+        companies={companies}
         workTypes={workTypes}
         crmTerms={crmTerms}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onSwitchCompany={switchCompany}
         currentPath={location.pathname}
       />
-      <div className="main-content">
+      <div className={`main-wrap ${sidebarOpen ? '' : 'expanded'}`}>
         <TopBar
           user={user}
           activeCompany={activeCompany}
