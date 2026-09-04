@@ -25,8 +25,27 @@ export interface SettingsResponse {
   fields: CustomField[];
   workTypes: WorkType[];
   automations: any[];
+  users: { _id: string; name: string; role: string }[];
   organization: any;
   terminology: Terminology;
+}
+
+export interface AutomationRule {
+  _id: string;
+  entityType: 'lead' | 'module';
+  workType?: { _id: string; name: string } | string | null;
+  name: string;
+  trigger: string;
+  stage?: { _id: string; name: string } | string | null;
+  status?: string;
+  conditionField?: string;
+  conditionValue?: string;
+  action: string;
+  targetId?: string | null;
+  actionField?: string;
+  actionValue?: string;
+  runCount?: number;
+  isActive?: boolean;
 }
 
 export const settingsApi = {
@@ -53,4 +72,18 @@ export const settingsApi = {
     api.put<{ ok: true; data: Terminology }>('/settings/terminology', data),
   updateTheme: (data: Partial<ThemeColors>) =>
     api.put<{ ok: true; data: ThemeColors }>('/settings/theme', data),
+
+  createWorkType: (data: Partial<WorkType> | Record<string, any>) =>
+    api.post<{ ok: true; data: WorkType }>('/settings/work-types', data),
+  updateWorkType: (id: string, data: Partial<WorkType> | Record<string, any>) =>
+    api.post<{ ok: true; data: WorkType }>(`/settings/work-types/${id}`, data),
+  deleteWorkType: (id: string) =>
+    api.delete<{ ok: true }>(`/settings/work-types/${id}`),
+
+  createAutomation: (data: Record<string, any>) =>
+    api.post<{ ok: true; data: AutomationRule }>('/settings/automations', data),
+  toggleAutomation: (id: string) =>
+    api.post<{ ok: true; data: AutomationRule }>(`/settings/automations/${id}/toggle`),
+  deleteAutomation: (id: string) =>
+    api.post<{ ok: true }>(`/settings/automations/${id}/delete`),
 };

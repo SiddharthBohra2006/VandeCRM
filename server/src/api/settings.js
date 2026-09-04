@@ -8,6 +8,9 @@ const Organization = require('../models/Organization');
 const ClientCompany = require('../models/ClientCompany');
 const AutomationRule = require('../models/AutomationRule');
 const Customer = require('../models/Customer');
+const CustomRecord = require('../models/CustomRecord');
+const CustomRole = require('../models/CustomRole');
+const User = require('../models/User');
 const { slugify } = require('../utils/slug');
 const { logAudit } = require('../utils/audit');
 
@@ -27,7 +30,7 @@ router.get('/', async (req, res, next) => {
     if (!activeWorkspace) return;
     const organization = req.user.organization._id;
 
-    const [stages, labels, fields, workTypes, automations, orgDoc, companyDoc] = await Promise.all([
+    const [stages, labels, fields, workTypes, automations, orgDoc, companyDoc, users] = await Promise.all([
       CrmStage.find({ organization, clientCompany: activeWorkspace, isActive: true }).sort({ order: 1, createdAt: 1 }).lean(),
       CrmLabel.find({ organization, clientCompany: activeWorkspace, isActive: true }).sort({ name: 1 }).lean(),
       CustomField.find({ organization, clientCompany: activeWorkspace, entity: 'customer', isActive: true }).sort({ order: 1, createdAt: 1 }).lean(),
@@ -35,6 +38,7 @@ router.get('/', async (req, res, next) => {
       AutomationRule.find({ organization, clientCompany: activeWorkspace }).sort({ createdAt: -1 }).lean(),
       Organization.findById(organization).lean(),
       ClientCompany.findById(activeWorkspace).lean(),
+      User.find({ organization, isActive: true }).select('name role').sort({ name: 1 }).lean(),
     ]);
 
     res.json({
@@ -44,6 +48,7 @@ router.get('/', async (req, res, next) => {
       fields,
       workTypes,
       automations,
+      users,
       organization: orgDoc,
       terminology: companyDoc?.terminology || {
         leadSingular: 'Lead',
@@ -372,6 +377,192 @@ router.put('/theme', async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+const workFieldTypes = new Set(['text', 'textarea', 'number', 'currency', 'percentage', 'date', 'datetime', 'email', 'phone', 'select', 'checkbox', 'url', 'user-picker', 'company-picker', 'customer-picker', 'module-picker']);
+
+function workTypeParts(body) {
+  const name = String(body.name || '').trim();
+  const key = slugify(body.key || name);
+  if (!name || !key) throw new Error('Work type name and key are required.');
+  const statuses = JSON.parse(typeof body.statuses === 'string' ? body.statuses : JSON.stringify(body.statuses || '[]'));
+  const fields = JSON.parse(typeof body.fields === 'string' ? body.fields : JSON.stringify(body.fields || '[]'));
+  const presentation = JSON.parse(typeof body.presentation === 'string' ? body.presentation : JSON.stringify(body.presentation || {}));
+  if (!Array.isArray(statuses) || !statuses.length || statuses.some(status => !status.key || !status.label)) throw new Error('Statuses must be a non-empty JSON array with key and label.');
+  if (!Array.isArray(fields) || fields.some(field => !field.key || !field.label)) throw new Error('Fields must be a JSON array with key and label.');
+  if (new Set(statuses.map(status => status.key)).size !== statuses.length || new Set(fields.map(field => field.key)).size !== fields.length) throw new Error('Status and field keys must be unique.');
+  if ([...statuses, ...fields].some(item => !/^[a-zA-Z0-9_-]+$/.test(item.key))) throw new Error('Status and field keys may only contain letters, numbers, dashes, and underscores.');
+  if (fields.some(field => !workFieldTypes.has(field.type))) throw new Error('A field has an unsupported data type.');
+  if (fields.some(field => field.type === 'select' && (!Array.isArray(field.options) || !field.options.length))) throw new Error('Every dropdown field needs at least one option.');
+  if (fields.some(field => field.min != null && field.max != null && Number(field.min) > Number(field.max))) throw new Error('A field minimum cannot be greater than its maximum.');
+  const views = ['overview', 'list', 'board', 'calendar'];
+  const enabledViews = [...new Set(Array.isArray(presentation.enabledViews) ? presentation.enabledViews : views)].filter(view => views.includes(view));
+  if (!enabledViews.length) throw new Error('Enable at least one module view.');
+  const allowedFields = new Set(['title', 'assignedTo', 'collaborators', 'secondaryAssignee', 'relatedRecords', 'status', 'priority', 'deadline', 'startDate', 'deliveredAt', 'notes', ...fields.map(field => `custom:${field.key}`)]);
+  const cleanFields = (value, fallback) => [...new Set(Array.isArray(value) ? value : fallback)].filter(field => allowedFields.has(field));
+  const dateFields = new Set(['deadline', 'startDate', 'deliveredAt', ...fields.filter(field => ['date', 'datetime'].includes(field.type)).map(field => `custom:${field.key}`)]);
+  const defaultView = enabledViews.includes(presentation.defaultView) ? presentation.defaultView : enabledViews[0];
+  const calendarField = dateFields.has(presentation.calendarField) ? presentation.calendarField : 'deadline';
+  const fieldLabels = Object.fromEntries(Object.entries(presentation.fieldLabels || {})
+    .filter(([field, label]) => allowedFields.has(field) && String(label).trim())
+    .map(([field, label]) => [field, String(label).trim().slice(0, 80)]));
+  return {
+    name, key, statuses, fields, icon: String(body.icon || 'clipboard-list'), color: body.color || '#64748b', order: Number(body.order) || 0, isActive: body.isActive === 'on' || body.isActive === true,
+    presentation: {
+      enabledViews, defaultView, calendarField,
+      listColumns: cleanFields(presentation.listColumns, ['title', 'assignedTo', 'status', 'deadline']),
+      boardFields: cleanFields(presentation.boardFields, ['assignedTo', 'priority', 'deadline']),
+      filterFields: cleanFields(presentation.filterFields, ['status', 'assignedTo', 'priority']),
+      overviewGroupFields: cleanFields(presentation.overviewGroupFields, []),
+      overviewProgressFields: cleanFields(presentation.overviewProgressFields, []).filter(field => fields.find(item => `custom:${item.key}` === field)?.type === 'select'),
+      overviewCompleteValue: String(presentation.overviewCompleteValue || 'Done').trim().slice(0, 80) || 'Done',
+      fieldLabels
+    }
+  };
+}
+
+async function validateWorkTypeChange(organization, clientCompany, workTypeId, current, next) {
+  const itemFilter = { organization, workspace: clientCompany, module: workTypeId };
+  const nextStatuses = new Set(next.statuses.map(status => status.key));
+  const removedStatuses = current.statuses.filter(status => !nextStatuses.has(status.key)).map(status => status.key);
+  if (removedStatuses.length && await CustomRecord.exists({ ...itemFilter, status: { $in: removedStatuses } })) {
+    throw new Error('Move records out of removed statuses before saving this module.');
+  }
+  if (removedStatuses.length && await AutomationRule.exists({ workType: workTypeId, $or: [{ status: { $in: removedStatuses } }, { action: 'set_status', actionValue: { $in: removedStatuses } }] })) {
+    throw new Error('Update or delete automations that use removed statuses before saving this module.');
+  }
+
+  const nextFields = new Map(next.fields.map(field => [field.key, field]));
+  for (const field of current.fields) {
+    const replacement = nextFields.get(field.key);
+    if (!replacement) {
+      if (await AutomationRule.exists({ workType: workTypeId, $or: [{ conditionField: `custom:${field.key}` }, { action: 'set_field', actionField: field.key }] })) {
+        throw new Error(`Field "${field.label}" is used by an automation. Update or delete that rule first.`);
+      }
+      await CustomRecord.updateMany(itemFilter, { $unset: { [`customFields.${field.key}`]: 1 } });
+    }
+  }
+}
+
+// ==================== AUTOMATIONS ====================
+
+router.post('/automations', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Access denied' });
+    const organization = req.user.organization._id, clientCompany = workspace(req, res);
+    if (!clientCompany) return;
+    const entityType = req.body.entityType === 'module' ? 'module' : 'lead';
+    if (entityType === 'module') {
+      const workType = await WorkType.findOne({ _id: req.body.workType, organization, clientCompany, isActive: true });
+      const trigger = ['record_created', 'status_changed', 'owner_changed'].includes(req.body.trigger) ? req.body.trigger : '';
+      const action = ['assign_user', 'set_priority', 'set_status', 'set_field'].includes(req.body.action) ? req.body.action : '';
+      const conditionField = String(req.body.conditionField || '');
+      const customCondition = conditionField.startsWith('custom:') ? workType?.fields.find(field => field.key === conditionField.slice(7)) : null;
+      const validCondition = !conditionField || ['title', 'status', 'priority', 'assignedTo'].includes(conditionField) || customCondition;
+      const status = String(req.body.status || '');
+      const actionField = action === 'set_field' ? String(req.body.actionField || '') : '';
+      const field = workType?.fields.find(item => item.key === actionField);
+      const actionValue = action === 'set_priority' ? req.body.priority : action === 'set_status' ? req.body.targetStatus : action === 'set_field' ? String(req.body.fieldValue ?? '') : '';
+      const targetId = action === 'assign_user' ? req.body.targetUserId : null;
+      const validStatus = value => !value || workType?.statuses.some(item => item.key === value);
+      const validFieldValue = !field || (field.type !== 'select' || field.options.includes(actionValue)) && (!['number', 'currency', 'percentage'].includes(field.type) || actionValue !== '' && Number.isFinite(Number(actionValue))) && (field.type !== 'checkbox' || ['true', 'false'].includes(actionValue));
+      if (!workType || !trigger || !action || !validCondition || !validStatus(status) || (action === 'assign_user' && !targetId) || (action === 'set_priority' && !['low', 'medium', 'high'].includes(actionValue)) || (action === 'set_status' && (!actionValue || !validStatus(actionValue))) || (action === 'set_field' && (!field || !validFieldValue))) return res.status(400).json({ ok: false, error: 'Choose valid module automation options.' });
+      if (targetId && !await User.exists({ _id: targetId, organization, isActive: true })) return res.status(400).json({ ok: false, error: 'Invalid team member.' });
+      const rule = await AutomationRule.create({ organization, clientCompany, entityType, workType: workType._id, name: String(req.body.name || '').trim() || 'Automation rule', trigger, status, conditionField, conditionValue: String(req.body.conditionValue || '').trim(), action, targetId, actionField, actionValue });
+      return res.json({ ok: true, data: rule });
+    }
+    const trigger = ['lead_created', 'stage_changed', 'owner_changed'].includes(req.body.trigger) ? req.body.trigger : '';
+    const action = ['assign_user', 'add_label', 'remove_label', 'set_priority', 'create_record'].includes(req.body.action) ? req.body.action : '';
+    const targetId = action === 'assign_user' ? req.body.targetUserId : ['add_label', 'remove_label'].includes(action) ? req.body.targetLabelId : action === 'create_record' ? req.body.targetWorkTypeId : null;
+    const actionValue = action === 'set_priority' ? req.body.priority : '';
+    const conditionField = ['source', 'priority'].includes(req.body.conditionField) ? req.body.conditionField : '';
+    const conditionValue = conditionField ? String(req.body.conditionValue || '').trim() : '';
+    if (!trigger || !action || ((['assign_user', 'add_label', 'remove_label', 'create_record'].includes(action) && !targetId) || (action === 'set_priority' && !['low', 'medium', 'high'].includes(actionValue)))) return res.status(400).json({ ok: false, error: 'Choose a valid trigger and action.' });
+    if (req.body.stage && !await CrmStage.exists({ _id: req.body.stage, organization, clientCompany })) return res.status(400).json({ ok: false, error: 'Invalid stage.' });
+    if (targetId) {
+      const targetModel = action === 'assign_user' ? User : action === 'create_record' ? WorkType : CrmLabel;
+      if (!await targetModel.exists({ _id: targetId, organization, ...(action === 'assign_user' ? {} : { clientCompany }) })) return res.status(400).json({ ok: false, error: 'Invalid action target.' });
+    }
+    const rule = await AutomationRule.create({ organization, clientCompany, entityType, name: String(req.body.name || '').trim() || 'Automation rule', trigger, stage: req.body.stage || null, conditionField, conditionValue, action, targetId, actionValue });
+    res.json({ ok: true, data: rule });
+  } catch (error) { next(error); }
+});
+
+router.post('/automations/:id/toggle', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Access denied' });
+    const clientCompany = workspace(req, res);
+    if (!clientCompany) return;
+    const rule = await AutomationRule.findOne({ _id: req.params.id, organization: req.user.organization._id, clientCompany });
+    if (!rule) return res.status(404).json({ ok: false, error: 'Automation rule not found' });
+    rule.isActive = !rule.isActive;
+    await rule.save();
+    res.json({ ok: true, data: rule });
+  } catch (error) { next(error); }
+});
+
+router.post('/automations/:id/delete', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Access denied' });
+    const clientCompany = workspace(req, res);
+    if (!clientCompany) return;
+    await AutomationRule.deleteOne({ _id: req.params.id, organization: req.user.organization._id, clientCompany });
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
+// ==================== WORK TYPES (CUSTOM MODULES) ====================
+
+router.post('/work-types', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Access denied' });
+    const organization = req.user.organization._id, clientCompany = workspace(req, res);
+    if (!clientCompany) return;
+    const data = workTypeParts(req.body);
+    const duplicate = await WorkType.findOne({ organization, clientCompany, key: data.key });
+    if (duplicate) return res.status(400).json({ ok: false, error: `A work type with key "${data.key}" already exists.` });
+    const workType = await WorkType.create({ organization, clientCompany, ...data, isActive: true });
+    await logAudit(req, { action: 'create', entityType: 'work_type', entityId: workType._id, entityName: workType.name, message: `Work type "${workType.name}" created.` });
+    res.json({ ok: true, data: workType });
+  } catch (error) {
+    if (error instanceof SyntaxError || /must be|required|unique|unsupported|dropdown|minimum|may only|module view/.test(error.message)) return res.status(400).json({ ok: false, error: error.message });
+    next(error);
+  }
+});
+
+router.post('/work-types/:id', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Access denied' });
+    const organization = req.user.organization._id, clientCompany = workspace(req, res);
+    if (!clientCompany) return;
+    const current = await WorkType.findOne({ _id: req.params.id, organization, clientCompany });
+    if (!current) return res.status(404).json({ ok: false, error: 'Work type not found' });
+    const data = workTypeParts(req.body);
+    data.key = current.key;
+    await validateWorkTypeChange(organization, clientCompany, current._id, current, data);
+    await WorkType.updateOne({ _id: current._id }, data);
+    await logAudit(req, { action: 'update', entityType: 'work_type', entityId: current._id, entityName: data.name, message: `Work type "${data.name}" updated.` });
+    res.json({ ok: true, data });
+  } catch (error) {
+    if (error instanceof SyntaxError || /must be|required|unique|unsupported|dropdown|minimum|may only|module view|Move records|contains data|automations|used by an automation/.test(error.message)) return res.status(400).json({ ok: false, error: error.message });
+    next(error);
+  }
+});
+
+router.delete('/work-types/:id', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ ok: false, error: 'Access denied' });
+    const organization = req.user.organization._id, clientCompany = workspace(req, res);
+    if (!clientCompany) return;
+    const filter = { _id: req.params.id, organization, clientCompany };
+    const workType = await WorkType.findOne(filter);
+    if (!workType) return res.status(404).json({ ok: false, error: 'Work type not found' });
+    await CustomRecord.deleteMany({ organization, workspace: clientCompany, module: workType._id });
+    await CustomRole.updateMany({ organization }, { $pull: { workTypePermissions: { workTypeId: workType._id } } });
+    await AutomationRule.deleteMany({ organization, clientCompany, workType: workType._id });
+    await WorkType.deleteOne(filter);
+    res.json({ ok: true });
+  } catch (error) { next(error); }
 });
 
 module.exports = router;

@@ -2,13 +2,15 @@
 
 **Purpose:** Define exactly who owns what so developers never collide. Read this in addition to SYNC.md. If a file is not listed as yours, you do NOT edit it unless the change is requested and logged through SYNC.md.
 
-## The Three Developers
+> **2026-09-04 — DEVELOPER RETIREMENT:** **Codex has left the project** (liaison capacity reached; will not return). Codex's owned domains — Dashboard, Customers/Leads, Clients (won-customer sub-view), and their detail views — are **taken over by OpenCode** (the lead architect). Ownership lines below remain as historical reference, but OpenCode is now responsible for completing, maintaining, and committing those files. See `OPNREC-CONTEXT.md` and `SYNC.md` for the remaining parity work.
 
-| Developer | Role |
-|---|---|
-| **OpenCode** | Lead architect — shared infra, auth, routing, types, coordination docs |
-| **Codex** | Dashboard + Customers/Leads + Clients (won-customer sub-view) |
-| **Antigravity** | All other 11 functional domains |
+## The Developers
+
+| Developer | Role | Status |
+|---|---|---|
+| **OpenCode** | Lead architect — shared infra, auth, routing, types, coordination docs. **Also owns former-Codex Dashboard/Customers/Leads/Clients.** | Active |
+| ~~Codex~~ | ~~Dashboard + Customers/Leads + Clients (won-customer sub-view)~~ | **Departed (no longer returning)** — assumed by OpenCode |
+| **Antigravity** | All other 11 functional domains | Active |
 
 ## Ownership Tables
 
@@ -27,15 +29,15 @@
 - `docs/package/SYNC.md`, `docs/package/OWNERSHIP.md`, `docs/package/OPNREC-CONTEXT.md`
 - Backend shared folders copied from original (they are shared read-only reference): `server/src/{models,services,utils,config,middleware,routes}`
 
-### Codex
+### ~~Codex~~ → Now OpenCode (dev departed)
+> Assumed by OpenCode on 2026-09-04 after Codex left. These files remain OpenCode's responsibility until the project is finished.
 - `server/src/api/dashboard.js`
 - `server/src/api/customers.js`
-- `server/src/api/clients.js` **(Clients = won-customer sub-view of the Customer domain, same Customer model; owned by Codex with Customers)**
+- `server/src/api/clients.js` **(Clients = won-customer sub-view of the Customer domain, same Customer model; owned with Customers)**
 - `client/src/pages/dashboard/DashboardPage.tsx`
 - `client/src/pages/customers/CustomersPage.tsx`, `CustomerDetailPage.tsx`, `CustomerFormPage.tsx`
 - `client/src/pages/clients/ClientsPage.tsx` (won-customer view)
 - `client/src/api/customers.ts`, `client/src/api/clients.ts` (domain clients)
-- `docs/CODEX-PROGRESS.md`
 
 > ⚠️ **2026-09-04 one-off:** OpenCode edited `CustomerDetailPage.tsx` (+ `client/src/styles/lead-detail.css`) to rewire the page to the `.lead-record-ui` class system (fixes the dead-styling UI gap). Ownership stays with Codex; please review the diff. See SYNC.md UI PARITY TRACKER.
 

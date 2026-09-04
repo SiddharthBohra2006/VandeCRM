@@ -111,8 +111,9 @@ router.get('/', async (req, res, next) => {
     const weeklyWorkProgress = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((label, index) => {
       const date = new Date(weekStart); date.setDate(date.getDate() + index);
       const tomorrow = new Date(date); tomorrow.setDate(tomorrow.getDate() + 1);
-      const items = workItems.filter(item => { const completedAt = item.deliveredAt || item.updatedAt; return isComplete(item) && completedAt >= date && completedAt < tomorrow; });
-      return { label, date, count: items.length, isToday: date.toDateString() === now.toDateString() };
+      const items = workItems.filter(item => { const completedAt = item.deliveredAt || item.updatedAt; return isComplete(item) && completedAt >= date && completedAt < tomorrow; })
+        .sort((a, b) => new Date(b.deliveredAt || b.updatedAt) - new Date(a.deliveredAt || a.updatedAt));
+      return { label, date, count: items.length, isToday: date.toDateString() === now.toDateString(), items: items.slice(0, 6).map(item => ({ _id: item._id, title: item.title, module: item.workType?.name || 'Work', type: item.workType?.key || 'task', completedAt: item.deliveredAt || item.updatedAt, status: item.status })) };
     });
     const attentionCustomers = [...followupsDue, ...staleCustomers].filter((item, index, list) => list.findIndex(other => String(other._id) === String(item._id)) === index).slice(0, 6);
     res.json({

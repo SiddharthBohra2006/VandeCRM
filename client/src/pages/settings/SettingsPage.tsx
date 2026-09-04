@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { settingsApi, SettingsResponse, Terminology, ThemeColors } from '../../api/settings';
+import { settingsApi, SettingsResponse, Terminology, ThemeColors, AutomationRule } from '../../api/settings';
+import { WorkType } from '../../api/work';
 import { Stage, Label, CustomField } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import WorkTypeBuilder from './WorkTypeBuilder';
+import AutomationsTab from './AutomationsTab';
+import Icon from '../../components/Icons';
 
 export default function SettingsPage() {
   const { user, activeCompany } = useAuth();
@@ -13,7 +17,11 @@ export default function SettingsPage() {
   const [stages, setStages] = useState<Stage[]>([]);
   const [labels, setLabels] = useState<Label[]>([]);
   const [fields, setFields] = useState<CustomField[]>([]);
-  const [workTypes, setWorkTypes] = useState<any[]>([]);
+  const [workTypes, setWorkTypes] = useState<WorkType[]>([]);
+  const [automations, setAutomations] = useState<AutomationRule[]>([]);
+  const [users, setUsers] = useState<{ _id: string; name: string; role: string }[]>([]);
+  const [builderTarget, setBuilderTarget] = useState<WorkType | null>(null);
+  const [builderOpen, setBuilderOpen] = useState(false);
   const [terminology, setTerminology] = useState<Terminology>({
     leadSingular: 'Lead',
     leadPlural: 'Leads',
@@ -69,6 +77,8 @@ export default function SettingsPage() {
       setLabels(res.labels || []);
       setFields(res.fields || []);
       setWorkTypes(res.workTypes || []);
+      setAutomations(res.automations || []);
+      setUsers(res.users || []);
       if (res.terminology) {
         setTerminology(res.terminology);
         setTermForm(res.terminology);
@@ -243,6 +253,8 @@ export default function SettingsPage() {
           { id: 'stages', label: `${terminology.pipelineName} Stages` },
           { id: 'fields', label: `${terminology.leadSingular} Form Fields` },
           { id: 'labels', label: `${terminology.leadSingular} Tags` },
+          { id: 'work-types', label: 'Custom Modules' },
+          { id: 'automations', label: 'Automations' },
           { id: 'terminology', label: 'CRM Names' },
           { id: 'appearance', label: 'Look & Feel' },
         ].map(cat => (
@@ -607,6 +619,100 @@ export default function SettingsPage() {
             ))}
           </div>
         </article>
+      )}
+      {/* CUSTOM WORK TYPES (MODULES) TAB */}
+      {activeCategory === 'work-types' && (
+        <section>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Custom Sidebar Modules</h2>
+              <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '0.85rem' }}>
+                Create and customize deliverable workflows, status pipelines, and custom fields.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => { setBuilderTarget(null); setBuilderOpen(true); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Icon name="plus" size={16} />
+              <span>Add Module</span>
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+            {workTypes.map(wt => (
+              <div
+                key={wt._id}
+                className="module-card"
+                style={{
+                  border: '1px solid var(--border)',
+                  borderRadius: '12px',
+                  background: 'var(--panel)',
+                  padding: '1.25rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.85rem',
+                  '--module-color': wt.color || 'var(--gold)',
+                } as any}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 8, background: 'var(--panel-muted, rgba(255,255,255,0.05))', color: wt.color || 'var(--gold)' }}>
+                      <Icon name={wt.icon || 'clipboard-list'} size={20} />
+                    </span>
+                    <div>
+                      <strong style={{ fontSize: '1rem', display: 'block' }}>{wt.name}</strong>
+                      <code style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>/work/{wt.key}</code>
+                    </div>
+                  </div>
+                  <span className={`stage-badge ${wt.isActive !== false ? 'done' : 'pending'}`} style={{ fontSize: '0.7rem' }}>
+                    {wt.isActive !== false ? 'Active' : 'Disabled'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', fontSize: '0.78rem', color: 'var(--muted)' }}>
+                  <span>{wt.statuses?.length || 0} statuses</span>
+                  <span>•</span>
+                  <span>{wt.fields?.length || 0} fields</span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
+                  <button
+                    type="button"
+                    className="btn small outline"
+                    style={{ flex: 1 }}
+                    onClick={() => { setBuilderTarget(wt); setBuilderOpen(true); }}
+                  >
+                    Edit Module
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {builderOpen && (
+            <WorkTypeBuilder
+              workType={builderTarget}
+              onClose={() => { setBuilderOpen(false); setBuilderTarget(null); }}
+              onChanged={loadSettings}
+            />
+          )}
+        </section>
+      )}
+
+      {/* AUTOMATIONS TAB */}
+      {activeCategory === 'automations' && (
+        <AutomationsTab
+          stages={stages}
+          labels={labels}
+          workTypes={workTypes}
+          users={users}
+          automations={automations}
+          leadSingular={terminology.leadSingular}
+          onChanged={loadSettings}
+        />
       )}
     </div>
   );

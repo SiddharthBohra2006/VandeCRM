@@ -15,11 +15,11 @@ VandeCRM — migrating `D:\VandeAgencyCRM` (Express + EJS) → React SPA (`D:\va
 ## The 3 Developers & My Role
 I am the **lead architect/guide**. I do NOT implement feature pages — I build shared infrastructure + auth + routing, then guide via docs/prompts so I don't burn tokens and Codex/Antigravity stay self-sufficient.
 
-| Developer | Owns |
-|---|---|
-| **OpenCode (me)** | Auth, JWT middleware, server entry/boot, shared `api/client.ts` + `types`, backend copy, route registration, coordination docs |
-| **Codex** | Dashboard + Customers |
-| **Antigravity** | The other 11 domains |
+| Developer | Owns | Status |
+|---|---|---|
+| **OpenCode (me)** | Auth, JWT middleware, server entry/boot, shared `api/client.ts` + `types`, backend copy, route registration, coordination docs | Active |
+| ~~Codex~~ | ~~Dashboard + Customers~~ | **Departed 2026-09-04** — OpenCode now owns Dashboard/Customers/Clients |
+| **Antigravity** | The other 11 domains | Active |
 
 ## What I Have DONE (in this effort)
 1. ✅ Init git repo `D:\vandecrmreact` (was NOT a repo).
@@ -88,6 +88,10 @@ auth 11→7 (added forgot/reset/admin-recovery 2026-09-04) · dashboard 21→4 �
     - **Clients table:** portfolio KPI cards, won-deal value tags, active-project counts, account-manager avatar column.
     - **Lead detail:** 1-click contact strip, Quick Activity Composer (Call/WhatsApp/Message/Note w/ instant timeline refresh), follow-up quick-postpone (+1d/+3d/+1w), persistent right-sidebar controls.
     - **Client detail:** client summary KPI grid, linked work items w/ progress bars + module badges, documents/folders + preview popup.
+24. ✅ **DASHBOARD PARTIAL PARITY (2026-09-04, session):** Added `getCardTheme`/`ICON_PALETTE` + tinted `.dashboard-metric-icon` metric cards (CSS var `--metric-accent`), richer pipeline `.deal-card` (deal-name, label pills, deal-meta, deal-owner avatar, deal-value footer), weekly chart with `<details>` `.bar-col` + `.weekly-day-popover` tooltips displaying per-day `items`. Backend `dashboard.js` now returns per-day `items` in `weeklyWorkProgress`. Only dashboard gap left: card-pinning modal.
+25. ✅ **SETTINGS CLOSED (2026-09-04, session):** Custom-modules (work-types) builder + Automations fully landed (backend `settings.js` new routes + `WorkTypeBuilder.tsx` + `AutomationsTab.tsx` + SettingsPage integration). Verified `npm run build` green, server restarted (port 5000). See tracker items #6/#7.
+26. ✅ **CODEX DEPARTURE / TAKEOVER (2026-09-04):** Codex reached its assistance limit and **will not return**. OpenCode formally assumed the former-Codex domains (Dashboard, Customers/Leads, Clients + detail views) per OWNERSHIP.md. Remaining Codex-owned parity gaps = tracker items #1(partial)→#5. Next focus: Leads table parity, then Lead detail, then Client detail, then Dashboard pinning modal.
+27. 🔧 **ANTIGRAVITY UNCOMMITTED WORK PRESENT IN WORKING TREE (verify/commit):** WorkDetailPage 100% parity, WorkListPage board/calendar + CSV import dialog, error pages (404/403), App.tsx routes, MailPage/CompanyDetailPage touches, `server/src/api/work.js` import endpoint. Their PROGRESS doc reports ALL 11 domains + advanced features complete (tsc + build verified green in the working tree as of 2026-09-04).
 
 ## IN PROGRESS / NEXT FOR ME (OpenCode)
 A. ✅ **Auth endpoints DONE (2026-09-04):** added JSON `forgot-password`, `reset-password`, `admin-recovery` to `server/src/api/auth.js` mirroring `src/routes/auth.js` (generic no-enumeration forgot message, sha256 token hash + 1h expiry, recovery-key via env `ADMIN_RECOVERY_KEY`). Added `signup` public-signup guard (`canCreateSignupAccount`). Client: `authApi.forgotPassword/resetPassword/adminRecovery` in `api/auth.ts` + `ForgotPasswordPage.tsx` + `ResetPasswordPage.tsx` + "Forgot password?" link on Login + routes `/auth/forgot-password`, `/reset-password`, `/auth/reset-password` in `App.tsx`. Verified: `node --check`, server `/health`, live probes (forgot → generic message; reset bad token → 400 invalid/expired; admin-recovery disabled → 404), client `tsc --noEmit` + `vite build` green. All 18 API modules load.
@@ -104,17 +108,18 @@ E. ✅ **Chrome Shell UI Parity DONE (2026-09-04):**
 F. **Remaining (my ownership) when time permits:** admin-recovery *page* (API done; UI not wired); continue closing per-module sub-action/filter endpoint parity gaps; ensure `index.css` parallel classes (`.stat-card` etc.) are replaced with EJS classes (`.business-panel`, `.dashboard-metric`, etc.) — documented in `docs/REACT-PATTERNS.md`.
 
 ## UI PARITY TRACKER (2026-09-04 — biggest remaining gaps, in priority order)
-✅ **Closed this session:** work list board+calendar (#1 from this list), Spotlight Search Modal.
-1. **Dashboard parity** — tinted KPI icon containers (`getCardTheme`/`.dashboard-metric-icon`), 2-col card-pinning modal (`#dashboardCustomizeDialog`), weekly chart today-highlight + tooltips, rich pipeline kanban cards (brand tag, priority badge, WhatsApp/Call buttons, follow-up badge, assignee avatar).
+✅ **Closed this session:** work list board+calendar (#board/calendar), Spotlight Search Modal, **Settings custom-modules builder + Automations (items #6 & #7 — see WorkTypeBuilder.tsx / AutomationsTab.tsx)**.
+> **NOTE:** Codex departed 2026-09-04. Items #1–#5 (Dashboard/Leads/Clients + detail views) were Codex-owned but are **now OpenCode's responsibility** (see OWNERSHIP.md).
+1. **Dashboard parity** (PARTIAL ✅: metric-icon card theming `getCardTheme`/`.dashboard-metric-icon`, weekly chart today-highlight + tooltips, rich pipeline kanban cards) — REMAINING: 2-col card-pinning modal (`#dashboardCustomizeDialog`).
 2. **Leads table parity** — horizontal stage-filter pills w/ counts, 32px avatar circles (`getAvatarColor`), WhatsApp/Call quick-actions, Hot Lead/High Potential badges, sticky header + frozen first column.
 3. **Clients table parity** — portfolio KPI cards, won-deal value tags, active-project counts, account-manager avatar column.
 4. **Lead detail parity** — 1-click contact strip (`.lead-profile-contact-buttons`), Quick Activity Composer (Call/WhatsApp/Message/Note w/ instant timeline refresh), follow-up quick-postpone (+1d/+3d/+1w), persistent right-sidebar controls (`.sidebar-box-section`).
 5. **Client detail parity** — client summary KPI grid (`.client-summary-grid`), linked work items tab w/ progress bars + module badges, documents/folders + preview popup.
-6. **Settings: Custom modules (work-types) builder** — `_work-type-builder.ejs` / `data-settings-panel="work-types"`; React `SettingsPage.tsx` loads `workTypes` state but never renders the editor.
-7. **Settings: Automations** — `data-settings-panel="automations"` (rule CRUD + toggle/delete); no React UI.
-8. **Work detail parity** — summary sidebar (Created by/on, Last updated), activity timeline feed, secondary assignee, collaborators, start date, links + custom-field sections, per-subtask deadline/priority, subtask tree in list.
-9. **Lead duplicates page** (`customers/duplicates.ejs`) — no React route. **Work CSV import** (`work/import-preview.ejs`) — no React UI.
-10. **Error pages** 403/404/500 — no dedicated React routes.
+6. ✅ **Settings: Custom modules (work-types) builder** — DONE (`WorkTypeBuilder.tsx`, `POST /settings/work-types`, `POST /settings/work-types/:id`, `DELETE /settings/work-types/:id`, `workTypeParts` serialization).
+7. ✅ **Settings: Automations** — DONE (`AutomationsTab.tsx`, `POST /settings/automations`, `POST /settings/automations/:id/toggle`, `POST /settings/automations/:id/delete`).
+8. **Work detail parity** — summary sidebar (Created by/on, Last updated), activity timeline feed, secondary assignee, collaborators, start date, links + custom-field sections, per-subtask deadline/priority, subtask tree in list. (🔧 Antigravity ported to ~100% in working tree — verify/commit.)
+9. **Lead duplicates page** (`customers/duplicates.ejs`) — no React route.
+10. **Error pages** 403/404/500 — ✅ built by Antigravity (`NotFoundPage`/`ForbiddenPage`, `*` + `/403` routes) — verify/commit.
 11. **Inline-style consolidation** — replace ad-hoc `style={{...}}` with EJS classes (`.work-card-panel`, `.summary-card-panel`, `.collaborator-pill-grid`, etc.).
 
 ## Verification Commands (fresh 2026-09-04)

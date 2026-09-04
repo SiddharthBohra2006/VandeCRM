@@ -2,6 +2,7 @@ import { CSSProperties, DragEvent, useCallback, useEffect, useState } from 'reac
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import Icon from '../../components/Icons';
 import { Customer, Stage } from '../../types';
 
 interface DashboardStats {
@@ -41,10 +42,32 @@ interface WorkItem {
   workType?: { key: string; name: string };
 }
 
+interface WeeklyDayItem {
+  _id: string;
+  title: string;
+  module: string;
+  type: string;
+  completedAt: string;
+  status: string;
+}
+
 interface WeeklyProgress {
   label: string;
   count: number;
   isToday: boolean;
+  date: string;
+  items: WeeklyDayItem[];
+}
+
+interface DashboardMetricCard {
+  href: string;
+  icon: string;
+  value: string;
+  label: string;
+  key: string;
+  defaultVisible: boolean;
+  category: string;
+  breakdown?: string;
 }
 
 interface DashboardResponse {
@@ -57,11 +80,31 @@ interface DashboardResponse {
   recentCustomers: Customer[];
   attentionCustomers: Customer[];
   campaigns: { _id: string; name: string }[];
+  dashboardViews: { _id: string; name: string }[];
   totalValue: number;
+  totalCustomers: number;
 }
 
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 const date = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+const ICON_PALETTE: Record<string, string> = {
+  users: '#5287ff', 'user-plus': '#5287ff', 'building-2': '#f28a24',
+  clock: '#16b8a6', 'triangle-alert': '#f45b55', megaphone: '#a259ff',
+  check: '#a259ff', video: '#6574ff', palette: '#5287ff', globe: '#679cff',
+  'file-text': '#f28a24', calendar: '#16b8a6', 'clipboard-list': '#a259ff',
+  target: '#f59e0b', filter: '#16b8a6', sparkles: '#a259ff',
+};
+
+function getCardTheme(icon: string) {
+  const color = ICON_PALETTE[icon] || '#7886a5';
+  return { color, bg: `color-mix(in srgb, ${color} 10%, var(--panel))` };
+}
+
+function initials(name?: string | null) {
+  if (!name) return '—';
+  return name.split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase();
+}
 
 export default function DashboardPage() {
   const { crmTerms } = useAuth();
@@ -105,15 +148,28 @@ export default function DashboardPage() {
   if (error && !dashboard) return <div className="alert alert-error" role="alert">{error}</div>;
   if (!dashboard) return <div className="empty-state">Dashboard data is unavailable.</div>;
 
-  const metrics = [
-    [dashboard.stats.totalLeads, `Active ${crmTerms.leadPlural}`],
-    [dashboard.stats.totalClients, crmTerms.recordPlural],
-    [dashboard.stats.newThisWeek, `New ${crmTerms.leadPlural} this week`],
-    [dashboard.stats.followupsDue, 'Follow-ups due'],
-    [dashboard.stats.openWork, 'Open work'],
-    [dashboard.stats.overdue, 'Overdue work'],
-    [money.format(dashboard.totalValue), 'Pipeline value'],
-    [`${dashboard.stats.deliveredPercent}%`, 'Work delivered']
+  const moduleCard = (m: WorkTypeSummary): DashboardMetricCard => ({
+    href: `/work/${m.key}`,
+    icon: m.icon || 'clipboard-list',
+    value: String(m.open || 0),
+    label: m.name,
+    key: `work-${m.key}`,
+    defaultVisible: true,
+    category: 'Work',
+    breakdown: `${m.total || 0} total · ${m.completed || 0} delivered`
+  });
+
+  const cards: DashboardMetricCard[] = [
+    { href: '/customers', icon: 'users', value: String(dashboard.stats.totalLeads), label: `Active ${crmTerms.leadPlural}`, key: 'total-leads', defaultVisible: true, category: 'Leads', breakdown: `${dashboard.totalCustomers || 0} total records` },
+    { href: '/clients', icon: 'building-2', value: String(dashboard.stats.totalClients), label: crmTerms.recordPlural, key: 'total-clients', defaultVisible: true, category: 'Leads', breakdown: 'Won pipeline' },
+    { href: '/customers', icon: 'user-plus', value: String(dashboard.stats.newThisWeek), label: `New ${crmTerms.leadPlural} this week`, key: 'new-this-week', defaultVisible: true, category: 'Leads', breakdown: 'Past 7 days' },
+    { href: '/customers', icon: 'clock', value: String(dashboard.stats.followupsDue), label: 'Follow-ups due', key: 'followups-due', defaultVisible: true, category: 'Leads', breakdown: 'Overdue now' },
+    { href: '/customers', icon: 'triangle-alert', value: String(dashboard.stats.staleCustomers), label: 'Stale leads', key: 'stale-leads', defaultVisible: true, category: 'Leads', breakdown: 'No contact 14d+' },
+    { href: '/work', icon: 'clipboard-list', value: String(dashboard.stats.openWork), label: 'Open work', key: 'open-work', defaultVisible: true, category: 'Work', breakdown: 'In progress' },
+    { href: '/work', icon: 'check', value: `${dashboard.stats.deliveredPercent}%`, label: 'Work delivered', key: 'delivered', defaultVisible: true, category: 'Work', breakdown: `${dashboard.stats.completedWork} delivered` },
+    { href: '/work', icon: 'triangle-alert', value: String(dashboard.stats.overdue), label: 'Overdue work', key: 'overdue', defaultVisible: true, category: 'Work', breakdown: 'Past deadline' },
+    { href: '/customers', icon: 'target', value: money.format(dashboard.totalValue), label: 'Pipeline value', key: 'pipeline-value', defaultVisible: true, category: 'Pipeline', breakdown: 'Active deals' },
+    ...dashboard.moduleStats.map(moduleCard)
   ];
   const weeklyMax = Math.max(1, ...dashboard.weeklyWorkProgress.map(day => day.count));
 
@@ -131,11 +187,24 @@ export default function DashboardPage() {
       {error && <div className="alert alert-error" role="alert">{error}</div>}
 
       <section className="dashboard-metrics dashboard-reference-grid" aria-label="Dashboard metrics">
-        {metrics.map(([value, label]) => (
-          <article className="dashboard-metric" key={label}>
-            <span className="dashboard-metric-copy"><strong>{value}</strong><small>{label}</small></span>
-          </article>
-        ))}
+        {cards.map(card => {
+          const theme = getCardTheme(card.icon);
+          return (
+            <Link
+              className="dashboard-metric"
+              key={card.key}
+              to={card.href}
+              style={{ '--metric-accent': theme.color, '--row-accent': theme.color } as CSSProperties}
+            >
+              <span className="dashboard-metric-icon"><Icon name={card.icon} size={20} /></span>
+              <span className="dashboard-metric-copy">
+                <strong>{card.value}</strong>
+                <small>{card.label}</small>
+              </span>
+              {card.breakdown && <span className="metric-breakdown">{card.breakdown}</span>}
+            </Link>
+          );
+        })}
       </section>
 
       <section className="dashboard-summary-grid">
@@ -144,10 +213,26 @@ export default function DashboardPage() {
           <div className="dashboard-progress"><span style={{ width: `${dashboard.stats.deliveredPercent}%` }} /></div>
           <div className="weekly-bar-chart" aria-label="Work completed this week">
             {dashboard.weeklyWorkProgress.map(day => (
-              <div className={`bar-col${day.isToday ? ' is-today' : ''}`} key={day.label}>
-                <span style={{ height: `${day.count ? Math.max(16, day.count / weeklyMax * 100) : 0}%` }} />
-                <strong>{day.count}</strong><small>{day.label}</small>
-              </div>
+              <details className={`bar-col${day.isToday ? ' is-today' : ''}`} key={day.label}>
+                <summary>
+                  <span className="bar-fill" style={{ height: `${day.count ? Math.max(16, day.count / weeklyMax * 100) : 0}%` }} />
+                  <strong className="bar-count">{day.count}</strong>
+                  <small className="bar-label">{day.label}</small>
+                </summary>
+                <div className="weekly-day-popover">
+                  <header>
+                    <span>{day.label}</span>
+                    <span>{day.count} delivered</span>
+                  </header>
+                  {day.items.length === 0 && <p>No work completed on {day.label}.</p>}
+                  {day.items.map(item => (
+                    <Link to={`/work/${item.type || 'task'}/${item._id}`} key={item._id}>
+                      <span><strong>{item.title}</strong><small>{item.module}</small></span>
+                      <time>{item.completedAt ? date.format(new Date(item.completedAt)) : ''}</time>
+                    </Link>
+                  ))}
+                </div>
+              </details>
             ))}
           </div>
         </article>
@@ -204,19 +289,38 @@ export default function DashboardPage() {
               <header><h2>{card.stage.name}</h2><span>{card.count}</span><strong>{money.format(card.value)}</strong></header>
               <div className="stage-list">
                 {card.customers.length === 0 && <div className="stage-empty"><strong>No {crmTerms.leadPlural.toLowerCase()}</strong></div>}
-                {card.customers.map(customer => (
-                  <Link
-                    className="deal-card"
-                    draggable
-                    key={customer._id}
-                    to={`/customers/${customer._id}`}
-                    onDragStart={event => event.dataTransfer.setData('text/customer-id', customer._id)}
-                  >
-                    <strong>{customer.name}</strong>
-                    <span>{customer.company || customer.email || customer.phone || 'No contact details'}</span>
-                    <small>{money.format(customer.value || 0)}</small>
-                  </Link>
-                ))}
+                {card.customers.map(customer => {
+                  const owner = customer.assignedTo?.name;
+                  const source = customer.campaign?.name || customer.source || customer.utmSource || null;
+                  const meta = [customer.clientCompany?.name, source].filter(Boolean).join(' · ');
+                  return (
+                    <Link
+                      className="deal-card"
+                      draggable
+                      key={customer._id}
+                      to={`/customers/${customer._id}`}
+                      onDragStart={event => event.dataTransfer.setData('text/customer-id', customer._id)}
+                    >
+                      <strong className="deal-name">{customer.name}</strong>
+                      {customer.labels.length > 0 && (
+                        <div className="label-row">
+                          {customer.labels.map(label => (
+                            <span className="pill" key={label._id} style={{ '--pill': label.color } as CSSProperties}>{label.name}</span>
+                          ))}
+                        </div>
+                      )}
+                      {meta && <span className="deal-meta">{meta}</span>}
+                      <div className="deal-card-footer">
+                        <span className="deal-owner">
+                          <span className="deal-owner-avatar">{initials(owner)}</span>
+                          <span>{owner || 'Unassigned'}</span>
+                          <time>{customer.updatedAt ? date.format(new Date(customer.updatedAt)) : ''}</time>
+                        </span>
+                        <strong className="deal-value">{money.format(customer.value || 0)}</strong>
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
             </article>
           ))}

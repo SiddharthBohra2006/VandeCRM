@@ -4,7 +4,8 @@ import {
   Building2, UsersRound, Mail, Plug, Settings, ScrollText, LayoutGrid,
   BarChart3, FileText, ChevronsUpDown, Check, Plus, ListTodo, Clapperboard,
   Palette, Globe, PenLine, Image as ImageIcon, SquareCheckBig, Search,
-  Sparkles, ListChecks, Calendar,
+  Sparkles, ListChecks, Calendar, UserPlus, Clock, TriangleAlert, Target,
+  Filter, Video,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -42,6 +43,12 @@ const lucideMap: Record<string, LucideIcon> = {
   search: Search,
   sparkles: Sparkles,
   calendar: Calendar,
+  'user-plus': UserPlus,
+  clock: Clock,
+  'triangle-alert': TriangleAlert,
+  video: Video,
+  target: Target,
+  filter: Filter,
 };
 
 // Map Emoji/key-based work-module icons (EJS uses these in a moduleIcons table)
