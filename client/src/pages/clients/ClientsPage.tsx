@@ -1,8 +1,27 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { clientsApi, ClientsListResponse } from '../../api/clients';
 import { downloadCustomersCsv } from '../../api/customers';
+import CustomizeColumnsModal, { ColumnDefinition } from '../../components/CustomizeColumnsModal';
+
+const CLIENT_COLUMNS: ColumnDefinition[] = [
+  { key: 'name', label: 'Client', icon: 'user', defaultVisible: true },
+  { key: 'phone', label: 'Phone', icon: 'phone', defaultVisible: true },
+  { key: 'email', label: 'Email', icon: 'mail', defaultVisible: true },
+  { key: 'company', label: 'Company / Business', icon: 'building-2', defaultVisible: true },
+  { key: 'source', label: 'Source', icon: 'compass', defaultVisible: true },
+  { key: 'stage', label: 'Client status', icon: 'git-commit-horizontal', defaultVisible: true },
+  { key: 'priority', label: 'Priority', icon: 'flag', defaultVisible: true },
+  { key: 'value', label: 'Value', icon: 'indian-rupee', defaultVisible: true },
+  { key: 'followup', label: 'Next follow-up', icon: 'calendar', defaultVisible: true },
+  { key: 'lastActivity', label: 'Last activity', icon: 'clock', defaultVisible: true },
+  { key: 'labels', label: 'Labels', icon: 'tags', defaultVisible: true },
+  { key: 'utmSource', label: 'UTM Source', icon: 'target', defaultVisible: false },
+  { key: 'utmMedium', label: 'UTM Medium', icon: 'share-2', defaultVisible: false },
+  { key: 'utmCampaign', label: 'UTM Campaign', icon: 'megaphone', defaultVisible: false },
+  { key: 'actions', label: 'Actions', icon: 'more-horizontal', defaultVisible: true },
+];
 
 const AVATAR_PALETTES = [
   { bg: '#eff6ff', color: '#2563eb' },
@@ -44,21 +63,55 @@ export default function ClientsPage() {
   const [error, setError] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Column visibility modal
+  // Column visibility & order
   const [showColumnsModal, setShowColumnsModal] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
-    name: true,
-    phone: true,
-    email: true,
-    company: true,
-    source: true,
-    stage: true,
-    priority: true,
-    value: true,
-    followup: true,
-    lastActivity: true,
-    labels: true,
-    actions: true,
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('crm_client_cols_order');
+      return stored ? JSON.parse(stored) : CLIENT_COLUMNS.map(c => c.key);
+    } catch {
+      return CLIENT_COLUMNS.map(c => c.key);
+    }
+  });
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem('crm_client_cols_visible');
+      return stored ? JSON.parse(stored) : {
+        name: true,
+        phone: true,
+        email: true,
+        company: true,
+        source: true,
+        stage: true,
+        priority: true,
+        value: true,
+        followup: true,
+        lastActivity: true,
+        labels: true,
+        utmSource: false,
+        utmMedium: false,
+        utmCampaign: false,
+        actions: true,
+      };
+    } catch {
+      return {
+        name: true,
+        phone: true,
+        email: true,
+        company: true,
+        source: true,
+        stage: true,
+        priority: true,
+        value: true,
+        followup: true,
+        lastActivity: true,
+        labels: true,
+        utmSource: false,
+        utmMedium: false,
+        utmCampaign: false,
+        actions: true,
+      };
+    }
   });
 
   const isManager = user && ['admin', 'manager'].includes(user.role);
@@ -665,43 +718,20 @@ export default function ClientsPage() {
       )}
 
       {/* Columns Customization Modal */}
-      {showColumnsModal && (
-        <div className="csv-modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowColumnsModal(false); }}>
-          <div className="csv-modal" style={{ maxWidth: 440 }}>
-            <div className="csv-modal-header">
-              <h3>Customize Table Columns</h3>
-              <button className="csv-modal-close" type="button" onClick={() => setShowColumnsModal(false)}>&times;</button>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', padding: '1rem 0' }}>
-              {[
-                ['name', 'Client Name'],
-                ['phone', 'Phone'],
-                ['email', 'Email'],
-                ['company', 'Company / Business'],
-                ['source', 'Source'],
-                ['stage', 'Client Status'],
-                ['priority', 'Priority'],
-                ['value', 'Value'],
-                ['followup', 'Next Follow-up'],
-                ['lastActivity', 'Last Activity'],
-                ['labels', 'Labels'],
-              ].map(([colKey, colLabel]) => (
-                <label key={colKey} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.78rem', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(visibleColumns[colKey])}
-                    onChange={e => setVisibleColumns(prev => ({ ...prev, [colKey]: e.target.checked }))}
-                  />
-                  {colLabel}
-                </label>
-              ))}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', borderTop: '1px solid var(--border)', paddingTop: '0.75rem' }}>
-              <button className="btn btn-secondary" onClick={() => setShowColumnsModal(false)}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CustomizeColumnsModal
+        isOpen={showColumnsModal}
+        onClose={() => setShowColumnsModal(false)}
+        columns={CLIENT_COLUMNS}
+        columnOrder={columnOrder}
+        visibleColumns={visibleColumns}
+        onSave={(newOrder, newVisible) => {
+          setColumnOrder(newOrder);
+          setVisibleColumns(newVisible);
+          localStorage.setItem('crm_client_cols_order', JSON.stringify(newOrder));
+          localStorage.setItem('crm_client_cols_visible', JSON.stringify(newVisible));
+        }}
+        entityName={crmTerms.recordPlural.toLowerCase()}
+      />
     </div>
   );
 }

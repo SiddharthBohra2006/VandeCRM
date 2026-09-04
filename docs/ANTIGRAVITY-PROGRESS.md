@@ -164,8 +164,18 @@
   - Main dashboard `.dashboard-metrics` drag-and-drop metric card reordering with real-time UI reordering and persistence to `POST /api/dashboard/preferences/dashboard` and `localStorage`.
   - Header matched to EJS: `Good morning, {userName} 👋` greeting + workspace subtitle + date pill + `[ Pin dashboard cards ]` button.
   - Active Pipeline Kanban column drag-and-drop (`POST /api/dashboard/pipeline/move`).
-  - Verified `npm run build` (exit 0) and committed (`09f9b09`).
+- **Table Column Customization Parity Complete (Leads & Clients):**
+  - Built reusable `client/src/components/CustomizeColumnsModal.tsx` matching exact EJS `#colsModalOverlay` / `.cols-modal-box` 2-column luxury modal:
+    - **Left Column ("Available columns {count}"):** Real-time search filter and full list of available standard + custom columns with icons and orange iOS switch toggles (`.cols-switch`).
+    - **Right Column:**
+      - Tip banner (`💡 Tip: Drag the columns below to reorder them...`).
+      - Selected columns counter + `[ ↺ Reset to default ]` button.
+      - Draggable selected columns chips with drag handles `⠿`, icons, labels, and visibility badges `👁`.
+      - Real-time **Live Table Preview** (`.cols-preview-table-card`) rendering sample lead rows (`Rohan Das`, `Ananya Iyer`) updating instantly as columns are toggled or reordered.
+    - **Footer:** `[ ↺ Reset ]` (left) + `[ Cancel ]` & `[ Save Layout ]` (right).
+  - Integrated into both `CustomersPage.tsx` and `ClientsPage.tsx` with localStorage persistence.
 - **ALL 11 FUNCTIONAL DOMAINS + VISUAL PARITY 100% COMPLETE & VERIFIED (tsc exit 0, vite build exit 0, node syntax exit 0).**
+
 
 
 
