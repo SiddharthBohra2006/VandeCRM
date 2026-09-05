@@ -556,24 +556,25 @@ Same shape as GET /api/customers but filtered to won stages only.
 
 ---
 
-## Tasks (Follow-ups)
+## Follow-ups
 
-### GET /api/tasks
+### GET /api/follow-ups
 **Query:** `?filter=due|today|upcoming|all`
 **Response:**
 ```json
 {
   "ok": true,
-  "tasks": [ { ...customer with nextFollowUpAt populated... } ],
-  "completedTasks": [...],
-  "stats": { "dueToday": 3, "overdue": 2, "upcoming": 5 }
+  "followUps": [ { ...customer with nextFollowUpAt populated... } ],
+  "completedFollowUps": [...],
+  "stats": { "due": 3, "today": 2, "upcoming": 5, "all": 10 },
+  "view": "due"
 }
 ```
 
-### POST /api/tasks/:id/complete
+### POST /api/follow-ups/:id/complete
 **Response:** `{ ok: true }`
 
-### POST /api/tasks/:id/reschedule
+### POST /api/follow-ups/:id/reschedule
 **Request:** `{ nextFollowUpAt: "2026-09-10T10:00:00Z", comment: "optional" }`
 **Response:** `{ ok: true }`
 

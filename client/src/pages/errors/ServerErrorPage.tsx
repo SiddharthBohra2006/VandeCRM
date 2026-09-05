@@ -1,5 +1,4 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import Icon from '../../components/Icons';
 
 export default function ServerErrorPage({ message }: { message?: string }) {
@@ -14,10 +13,10 @@ export default function ServerErrorPage({ message }: { message?: string }) {
           {message || 'Something went wrong while processing your request. Please try again.'}
         </p>
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <Link to="/" className="btn primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+          <a href="/" className="btn primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
             <Icon name="layout-dashboard" size={16} />
             <span>Back to pipeline</span>
-          </Link>
+          </a>
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { customersApi } from '../../api/customers';
 import { useAuth } from '../../contexts/AuthContext';
 import Icon from '../../components/Icons';
@@ -8,6 +8,9 @@ import { SCHEMA_OPTIONS, importFileToCsv, parseCsvRow, suggestTarget } from '../
 export default function CustomerImportPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const isClientScope = searchParams.get('scope') === 'client' || location.pathname.startsWith('/clients') || (location.state as any)?.scope === 'clients';
+  const scope = isClientScope ? 'clients' : undefined;
   const stateDraft = (location.state || {}) as any;
   const { crmTerms, user } = useAuth();
   const [csvData, setCsvData] = useState(stateDraft.csvData || '');
@@ -29,7 +32,7 @@ export default function CustomerImportPage() {
   const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState('');
   const [fileStatus, setFileStatus] = useState(stateDraft.csvData ? 'File loaded from draft.' : '');
-  const [stages, setStages] = useState<{ _id: string; name: string; isDefault?: boolean }[]>([]);
+  const [stages, setStages] = useState<{ _id: string; name: string; isDefault?: boolean; isWon?: boolean; isActive?: boolean }[]>([]);
   const [users, setUsers] = useState<{ _id: string; name: string; role?: string }[]>([]);
   const [companies, setCompanies] = useState<{ _id: string; name: string }[]>([]);
   const [presetName, setPresetName] = useState('');
@@ -39,7 +42,13 @@ export default function CustomerImportPage() {
 
   useEffect(() => {
     customersApi.list({ pageSize: '1' }).then(res => {
-      if (res.stages) setStages(res.stages);
+      if (res.stages) {
+        setStages(res.stages);
+        if (isClientScope && !defaultStageId) {
+          const won = res.stages.find((s: any) => s.isWon && s.isActive) || res.stages.find((s: any) => s.isWon);
+          if (won) setDefaultStageId(won._id);
+        }
+      }
       if (res.users) setUsers(res.users);
       if (res.companies) setCompanies(res.companies);
     }).catch(() => {});
@@ -78,7 +87,8 @@ export default function CustomerImportPage() {
         defaultAssignedToId,
         defaultClientCompanyId,
         defaultNextFollowUpAt,
-        defaultFollowUpComment
+        defaultFollowUpComment,
+        scope
       });
       navigate('/customers/import/preview', {
         state: {
@@ -86,6 +96,7 @@ export default function CustomerImportPage() {
           csvData, csvFileName, duplicateRule, mappings,
           defaultStageId, defaultAssignedToId, defaultClientCompanyId,
           defaultNextFollowUpAt, defaultFollowUpComment,
+          scope,
         }
       });
     } catch (err: any) {
@@ -121,7 +132,7 @@ export default function CustomerImportPage() {
           <p className="page-subtitle">Map columns, configure rules, and preview your import.</p>
         </div>
         <div className="actions">
-          <Link className="btn secondary outline" to="/customers">Cancel</Link>
+          <Link className="btn secondary outline" to={isClientScope ? '/clients' : '/customers'}>Cancel</Link>
         </div>
       </section>
 

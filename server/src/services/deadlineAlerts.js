@@ -1,6 +1,19 @@
 const WorkType = require('../models/WorkType');
 const CustomRecord = require('../models/CustomRecord');
 const Notification = require('../models/Notification');
+const User = require('../models/User');
+const EmailAccount = require('../models/EmailAccount');
+const { sendEmail, isValidEmail } = require('./emailService');
+
+async function sendReminderEmail({ account, to, title, message, link, workTypeName }) {
+  const base = String(process.env.APP_BASE_URL || '').replace(/\/+$/, '');
+  const absoluteLink = base ? `${base}${link}` : link;
+  await sendEmail(account, {
+    to,
+    subject: title,
+    body: `${message}\n\nModule: ${workTypeName}\nView in CRM: ${absoluteLink}`
+  });
+}
 
 async function checkDeadlinesAndNotify() {
   try {
@@ -13,6 +26,11 @@ async function checkDeadlinesAndNotify() {
 
     const endOfTomorrow = new Date(endOfToday);
     endOfTomorrow.setDate(endOfTomorrow.getDate() + 1);
+
+    // Active SMTP accounts per organization (email delivery for reminders).
+    const accounts = await EmailAccount.find({ isActive: true });
+    const accountByOrg = new Map();
+    for (const account of accounts) accountByOrg.set(String(account.organization), account);
 
     // Load active WorkTypes
     const workTypes = await WorkType.find({ isActive: true }).lean();
@@ -29,10 +47,26 @@ async function checkDeadlinesAndNotify() {
         organization: workType.organization,
         workspace: workType.clientCompany,
         module: workType._id,
-        assignedTo: { $ne: null },
         status: { $in: openStatuses },
         deadline: { $ne: null, $lt: endOfTomorrow }
       });
+
+      if (!records.length) continue;
+
+      // Resolve all recipients of this work type once (users + emails).
+      const recipientIds = new Set();
+      for (const record of records) {
+        for (const id of [record.assignedTo, record.secondaryAssignee, ...(record.collaborators || [])]) {
+          if (id) recipientIds.add(String(id));
+        }
+      }
+      const usersById = new Map();
+      if (recipientIds.size) {
+        const users = await User.find({ _id: { $in: Array.from(recipientIds) }, isActive: true }).select('_id name email');
+        for (const user of users) usersById.set(String(user._id), user);
+      }
+      const emailEnabled = String(process.env.REMINDER_EMAIL_ENABLED || 'true').toLowerCase() !== 'false';
+      const emailAccount = emailEnabled ? (accountByOrg.get(String(workType.organization)) || null) : null;
 
       for (const record of records) {
         const deadline = new Date(record.deadline);
@@ -50,18 +84,14 @@ async function checkDeadlinesAndNotify() {
         const link = `/work/${workType.key}/${record._id}`;
         
         // ponytail: deduplication is best-effort in a single process, not atomic. Upgrade path: unique index or atomic upsert on notification.
-        // Deduplicate by record + assigned user + local calendar day (createdAt >= startOfToday)
-        const exists = await Notification.exists({
-          organization: workType.organization,
-          user: record.assignedTo,
-          link,
-          createdAt: { $gte: startOfToday }
-        });
-
-        if (!exists) {
-          let title = '';
-          let message = '';
-          const formattedDate = deadline.toLocaleDateString('en-IN');
+        // Deduplicate by record + participant + local calendar day.
+        const recipients = [...new Set([record.assignedTo, record.secondaryAssignee, ...(record.collaborators || [])].filter(Boolean).map(String))];
+        for (const recipient of recipients) {
+          const exists = await Notification.exists({ organization: workType.organization, user: recipient, link, createdAt: { $gte: startOfToday } });
+          if (!exists) {
+            let title = '';
+            let message = '';
+            const formattedDate = deadline.toLocaleDateString('en-IN');
           
           if (alertType === 'overdue') {
             title = `${workType.name} Overdue`;
@@ -74,13 +104,20 @@ async function checkDeadlinesAndNotify() {
             message = `"${record.title}" is due tomorrow.`;
           }
 
-          await Notification.create({
-            organization: workType.organization,
-            user: record.assignedTo,
-            title,
-            message,
-            link
-          });
+            const toUser = usersById.get(recipient);
+            const channels = ['inapp'];
+            const to = toUser && isValidEmail(toUser.email) ? toUser.email : null;
+            if (emailAccount && to) channels.push('email');
+
+            await Notification.create({ organization: workType.organization, user: recipient, title, message, link, channels });
+
+            // Fire-and-forget email delivery; failures must never break the
+            // scheduler or the in-app notification already created.
+            if (channels.includes('email')) {
+              sendReminderEmail({ account: emailAccount, to, title, message, link, workTypeName: workType.name })
+                .catch(error => console.error('Reminder email dispatch failed:', error.message));
+            }
+          }
         }
       }
     }
@@ -99,7 +136,7 @@ function startDeadlineScheduler() {
     console.error('Initial deadline sync check failed:', error);
   });
 
-  const intervalMs = 6 * 60 * 60 * 1000; // 6 hours
+  const intervalMs = 60 * 60 * 1000;
   const timer = setInterval(() => {
     checkDeadlinesAndNotify().catch(error => {
       console.error('Scheduled deadline sync check failed:', error);

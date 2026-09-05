@@ -5,6 +5,7 @@ import { Company } from '../../api/companies';
 import { Customer } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import DatePicker from '../../components/DatePicker';
 
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -212,23 +213,23 @@ export default function CampaignDetailPage() {
 
       {/* Date Filter Bar */}
       <div className="filter-bar" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <input
-          type="date"
+        <DatePicker
+          placeholder="From date"
           value={dateFrom}
-          onChange={e => {
+          onChange={val => {
             const updated = new URLSearchParams(searchParams);
-            if (e.target.value) updated.set('dateFrom', e.target.value);
+            if (val) updated.set('dateFrom', val);
             else updated.delete('dateFrom');
             setSearchParams(updated);
           }}
           style={{ maxWidth: '160px' }}
         />
-        <input
-          type="date"
+        <DatePicker
+          placeholder="To date"
           value={dateTo}
-          onChange={e => {
+          onChange={val => {
             const updated = new URLSearchParams(searchParams);
-            if (e.target.value) updated.set('dateTo', e.target.value);
+            if (val) updated.set('dateTo', val);
             else updated.delete('dateTo');
             setSearchParams(updated);
           }}

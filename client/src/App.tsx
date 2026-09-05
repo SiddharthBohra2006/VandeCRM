@@ -23,7 +23,8 @@ import CampaignDetailPage from './pages/campaigns/CampaignDetailPage';
 import WorkCenterPage from './pages/work/WorkCenterPage';
 import WorkListPage from './pages/work/WorkListPage';
 import WorkDetailPage from './pages/work/WorkDetailPage';
-import TasksPage from './pages/tasks/TasksPage';
+import WorkThreadsPage from './pages/work/WorkThreadsPage';
+import FollowUpsPage from './pages/follow-ups/FollowUpsPage';
 import TeamPage from './pages/team/TeamPage';
 import SettingsPage from './pages/settings/SettingsPage';
 import SetupPage from './pages/settings/SetupPage';
@@ -123,6 +124,13 @@ function HomeRedirect() {
   return <DashboardPage />;
 }
 
+function ManagerRoute({ children }: { children: JSX.Element }) {
+  const { user } = useAuth();
+  if (!user) return null;
+  if (!['admin', 'manager'].includes(user.role)) return <Navigate to="/403" replace />;
+  return children;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -154,6 +162,7 @@ export default function App() {
             <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
             <Route path="/work" element={<WorkCenterPage />} />
+            <Route path="/work/threads" element={<WorkThreadsPage />} />
             <Route path="/work/:type" element={<WorkListPage />} />
             <Route path="/work/:type/import/preview" element={<WorkImportPreviewPage />} />
             <Route path="/work/:type/:id" element={<WorkDetailPage />} />
@@ -162,9 +171,9 @@ export default function App() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/companies" element={<CompaniesPage />} />
             <Route path="/companies/:id" element={<CompanyDetailPage />} />
-            <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/follow-ups" element={<FollowUpsPage />} />
             <Route path="/mail" element={<MailPage />} />
-            <Route path="/integrations" element={<IntegrationsPage />} />
+            <Route path="/integrations" element={<ManagerRoute><IntegrationsPage /></ManagerRoute>} />
             <Route path="/audit" element={<AuditPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/portfolio" element={<PortfolioPage />} />

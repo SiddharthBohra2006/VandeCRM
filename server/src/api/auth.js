@@ -59,6 +59,7 @@ router.post('/login', authRateLimit, async (req, res, next) => {
     }
 
     user.lastLoginAt = new Date();
+    user.loginCount = (user.loginCount || 0) + 1;
     await user.save();
 
     // Find active company
@@ -120,6 +121,7 @@ router.post('/signup', authRateLimit, async (req, res, next) => {
       passwordHash: await hashPassword(password),
       role: 'admin',
       lastLoginAt: new Date(),
+      loginCount: 1,
     });
 
     const company = await ClientCompany.create({
@@ -241,10 +243,12 @@ router.post('/forgot-password', authRateLimit, async (req, res, next) => {
 
         const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
         const resetUrl = new URL(`/reset-password?token=${token}`, baseUrl).toString();
+        const orgDoc = await Organization.findById(user.organization).select('name').lean().catch(() => null);
+        const subject = `Reset your ${orgDoc?.name || 'CRM'} password`;
         try {
           await sendEmail(account, {
             to: user.email,
-            subject: 'Reset your Vande Agency CRM password',
+            subject,
             body: `We received a request to reset your password. Use this link within one hour:\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`,
           });
         } catch (emailError) {

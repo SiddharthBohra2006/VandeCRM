@@ -2,6 +2,7 @@ import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { reportsApi, ReportsIndexResponse } from '../../api/reports';
 import { useAuth } from '../../contexts/AuthContext';
+import DatePicker from '../../components/DatePicker';
 
 const NAMED_REPORTS = [
   ['agent-performance', 'Agent Performance'],
@@ -152,8 +153,24 @@ export default function ReportsIndexPage() {
             </div>
           </fieldset>
           <div className="report-builder-dates">
-            <label className="date-field"><span>Start date</span><input type="date" aria-label="Start date" value={dateFrom} onChange={(e: ChangeEvent<HTMLInputElement>) => setDateFrom(e.target.value)} /></label>
-            <label className="date-field"><span>End date</span><input type="date" aria-label="End date" value={dateTo} onChange={(e: ChangeEvent<HTMLInputElement>) => setDateTo(e.target.value)} /></label>
+            <label className="date-field">
+              <span>Start date</span>
+              <DatePicker
+                aria-label="Start date"
+                placeholder="Start date"
+                value={dateFrom}
+                onChange={val => setDateFrom(val)}
+              />
+            </label>
+            <label className="date-field">
+              <span>End date</span>
+              <DatePicker
+                aria-label="End date"
+                placeholder="End date"
+                value={dateTo}
+                onChange={val => setDateTo(val)}
+              />
+            </label>
           </div>
         </form>
       </details>

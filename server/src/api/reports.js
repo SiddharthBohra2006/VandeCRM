@@ -14,6 +14,10 @@ const { reportOptions, normalizeConfig, buildModuleReport } = require('../utils/
 const { toCsv } = require('../utils/csv');
 const { createSimpleReportPdf } = require('../utils/pdf');
 const { requireApiAuth } = require('./middleware/auth');
+const getRateLimiter = require('./middleware/rateLimiter');
+
+const reportBuildLimiter = getRateLimiter(60, 60 * 1000);
+const reportExportLimiter = getRateLimiter(30, 60 * 1000);
 
 const router = express.Router();
 router.use(requireApiAuth);
@@ -66,6 +70,28 @@ function scopedLeadFilter(req, extra = {}) {
   const filter = { organization: req.user.organization._id, clientCompany: req.activeCompanyId, ...extra };
   if (isRestrictedUser(req.user)) filter.assignedTo = req.user._id;
   return filter;
+}
+
+async function moduleReportContext(req) {
+  const organization = req.user.organization._id;
+  const workTypes = (await WorkType.find({ organization, clientCompany: req.activeCompanyId, isActive: true }).sort({ order: 1, name: 1 }))
+    .filter(workType => hasWorkPermission(req.user, workType, 'view'));
+  const saved = req.query.saved ? await SavedReport.findOne({ _id: req.query.saved, organization, clientCompany: req.activeCompanyId, user: req.user._id }) : null;
+  const query = saved ? { ...saved.config, saved: String(saved._id) } : req.query;
+  const workType = workTypes.find(item => [String(item._id), item.key].includes(String(query.module))) || workTypes[0];
+  if (!workType) return { workTypes, workType: null, saved, query, users: [], savedReports: [], config: null, report: { columns: ['Group', 'Record count'], rows: [], totalRecords: 0 } };
+  const config = normalizeConfig(query, workType);
+  if (config.owner && !/^[a-f0-9]{24}$/i.test(config.owner)) config.owner = '';
+  const filter = { organization, workspace: req.activeCompanyId, module: workType._id, ...getDateRangeFilter(config.dateFrom, config.dateTo) };
+  if (config.status) filter.status = config.status;
+  if (config.owner) filter.assignedTo = config.owner;
+  if (isRestrictedUser(req.user)) filter.$or = [{ assignedTo: req.user._id }, { collaborators: req.user._id }, { secondaryAssignee: req.user._id }];
+  const [items, users, savedReports] = await Promise.all([
+    CustomRecord.find(filter).populate('assignedTo').sort({ createdAt: -1 }),
+    User.find({ organization, isActive: true }).sort({ name: 1 }),
+    SavedReport.find({ organization, clientCompany: req.activeCompanyId, user: req.user._id }).sort({ name: 1 })
+  ]);
+  return { workTypes, workType, saved, query, users, savedReports, config, options: reportOptions(workType), report: buildModuleReport(items, workType, config) };
 }
 
 async function getAgentPerformanceReport(req, filters) {
@@ -282,16 +308,18 @@ const reportBuilders = {
 };
 
 // GET /api/reports/module-builder
-router.get('/module-builder', async (req, res, next) => {
+router.get('/module-builder', reportBuildLimiter, async (req, res, next) => {
   try {
+    if (!workspaceRequired(req, res)) return;
     const context = await moduleReportContext(req);
     res.json({ ok: true, ...context });
   } catch (error) { next(error); }
 });
 
 // GET /api/reports/module-builder/export.csv
-router.get('/module-builder/export.csv', async (req, res, next) => {
+router.get('/module-builder/export.csv', reportExportLimiter, async (req, res, next) => {
   try {
+    if (!workspaceRequired(req, res)) return;
     const { report, workType } = await moduleReportContext(req);
     if (!workType) return res.status(404).json({ ok: false, error: 'Module not found' });
     res.json({ ok: true, filename: `${workType.key}-grouped-report.csv`, csv: toCsv(report.columns, report.rows) });
@@ -299,8 +327,9 @@ router.get('/module-builder/export.csv', async (req, res, next) => {
 });
 
 // GET /api/reports/module-builder/export-raw.csv
-router.get('/module-builder/export-raw.csv', async (req, res, next) => {
+router.get('/module-builder/export-raw.csv', reportExportLimiter, async (req, res, next) => {
   try {
+    if (!workspaceRequired(req, res)) return;
     const { report, workType } = await moduleReportContext(req);
     if (!workType) return res.status(404).json({ ok: false, error: 'Module not found' });
     const columns = ['Title', 'Status', 'Priority', 'Owner', 'Due date', ...workType.fields.map(field => field.label), 'Created'];
@@ -314,7 +343,7 @@ router.get('/module-builder/export-raw.csv', async (req, res, next) => {
 });
 
 // POST /api/reports/module-builder/save
-router.post('/module-builder/save', async (req, res, next) => {
+router.post('/module-builder/save', reportBuildLimiter, async (req, res, next) => {
   try {
     const activeWorkspace = workspaceRequired(req, res);
     if (!activeWorkspace) return;
@@ -353,7 +382,7 @@ router.get('/:reportKey', async (req, res, next) => {
 });
 
 // GET /api/reports/:reportKey/export.csv — returns CSV string in envelope
-router.get('/:reportKey/export.csv', async (req, res, next) => {
+router.get('/:reportKey/export.csv', reportExportLimiter, async (req, res, next) => {
   try {
     const builder = reportBuilders[req.params.reportKey];
     if (!builder) return res.status(404).json({ ok: false, error: 'Report not found' });
@@ -363,7 +392,7 @@ router.get('/:reportKey/export.csv', async (req, res, next) => {
 });
 
 // GET /api/reports/:reportKey/export.pdf — returns base64 PDF in envelope
-router.get('/:reportKey/export.pdf', async (req, res, next) => {
+router.get('/:reportKey/export.pdf', reportExportLimiter, async (req, res, next) => {
   try {
     const builder = reportBuilders[req.params.reportKey];
     if (!builder) return res.status(404).json({ ok: false, error: 'Report not found' });

@@ -6,10 +6,11 @@ const activitySchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   type: {
     type: String,
-    enum: ['note', 'call', 'email', 'whatsapp', 'meeting', 'stage_changed', 'label_changed', 'task'],
+    enum: ['note', 'call', 'email', 'whatsapp', 'meeting', 'meeting_client', 'meeting_internal', 'stage_changed', 'label_changed', 'task'],
     default: 'note'
   },
   note: { type: String, required: true, trim: true },
+  callRecordingUrl: { type: String, trim: true, default: '' },
   nextFollowUpAt: { type: Date, default: null },
   followUpAction: { type: String, enum: ['scheduled', 'completed'], default: null },
   comment: { type: String, trim: true, maxlength: 1000, default: '' }

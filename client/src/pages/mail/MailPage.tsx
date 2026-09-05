@@ -70,6 +70,20 @@ export default function MailPage() {
     loadMailData();
   }, []);
 
+  useEffect(() => {
+    const customerParam = searchParams.get('customer');
+    if (!customerParam || customers.length === 0) return;
+    const target = customers.find(c => c._id === customerParam);
+    if (target) {
+      setSelectedCustomer(target);
+      setComposeCustomerId(target._id);
+      setShowCompose(true);
+    }
+    const updated = new URLSearchParams(searchParams);
+    updated.delete('customer');
+    setSearchParams(updated, { replace: true });
+  }, [searchParams, customers, setSearchParams]);
+
   async function loadMailData() {
     try {
       setLoading(true);
@@ -483,7 +497,7 @@ export default function MailPage() {
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
                     Sender Name
                     <input
-                      placeholder="e.g. Vande Digital"
+                      placeholder="e.g. Your Agency"
                       value={smtpForm.fromName}
                       onChange={e => setSmtpForm({ ...smtpForm, fromName: e.target.value })}
                     />

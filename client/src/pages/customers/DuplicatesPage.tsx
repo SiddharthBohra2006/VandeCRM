@@ -102,7 +102,7 @@ export default function DuplicatesPage() {
           <p className="eyebrow">Data Quality</p>
           <h1 style={{ margin: '0 0 0.2rem', fontSize: '1.45rem', fontWeight: 800 }}>Duplicate Leads</h1>
           <p className="page-subtitle" style={{ margin: 0, color: 'var(--muted)', fontSize: '0.85rem' }}>
-            Review leads that share the same email or phone number, then merge duplicates into the strongest profile.
+            Review leads that share the same email, phone number, or name, then merge duplicates into the strongest profile.
           </p>
         </div>
         <div className="actions">

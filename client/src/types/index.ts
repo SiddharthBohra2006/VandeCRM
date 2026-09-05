@@ -36,6 +36,8 @@ export interface Stage {
   isLost: boolean;
   isDefault: boolean;
   isActive: boolean;
+  leadCount?: number;
+  dealCount?: number;
 }
 
 export interface Label {

@@ -611,7 +611,7 @@ export default function TeamPage() {
                   <th style={{ padding: '0.75rem 1rem', fontSize: '0.78rem', color: 'var(--muted)' }}>Role</th>
                   <th style={{ padding: '0.75rem 1rem', fontSize: '0.78rem', color: 'var(--muted)' }}>Custom Role</th>
                   <th style={{ padding: '0.75rem 1rem', fontSize: '0.78rem', color: 'var(--muted)' }}>Status</th>
-                  <th style={{ padding: '0.75rem 1rem', fontSize: '0.78rem', color: 'var(--muted)' }}>Last Login</th>
+                  <th style={{ padding: '0.75rem 1rem', fontSize: '0.78rem', color: 'var(--muted)' }}>Activity & Logins</th>
                   <th style={{ padding: '0.75rem 1rem', fontSize: '0.78rem', color: 'var(--muted)' }}></th>
                 </tr>
               </thead>
@@ -674,8 +674,11 @@ export default function TeamPage() {
                           {member.isActive !== false ? 'ACTIVE' : 'INACTIVE'}
                         </span>
                       </td>
-                      <td style={{ padding: '0.75rem 1rem', fontSize: '0.8rem', color: 'var(--muted)' }}>
-                        {member.lastLoginAt ? new Date(member.lastLoginAt).toLocaleDateString() : 'Never'}
+                      <td style={{ padding: '0.75rem 1rem', fontSize: '0.8rem' }}>
+                        <div>{member.lastLoginAt ? new Date(member.lastLoginAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Never logged in'}</div>
+                        <small style={{ color: 'var(--muted)', fontSize: '0.72rem' }}>
+                          {member.loginCount ? `${member.loginCount} login${member.loginCount === 1 ? '' : 's'}` : '0 logins'}
+                        </small>
                       </td>
                       <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>

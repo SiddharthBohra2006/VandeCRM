@@ -1,9 +1,15 @@
+const ASCII_MAP = {
+  '₹': 'Rs.', '₩': 'Won ', '€': 'EUR ', '£': 'GBP ', '$': '$',
+  '–': '-', '—': '-', '’': "'", '‘': "'", '“': '"', '”': '"', '…': '...',
+  '•': '-', '\u00A0': ' ', '\t': '   ', '\u2212': '-'
+};
+
 function escapePdfText(value) {
   return String(value || '')
     .replace(/\\/g, '\\\\')
     .replace(/\(/g, '\\(')
     .replace(/\)/g, '\\)')
-    .replace(/[^\x20-\x7E]/g, '?');
+    .replace(/[^\x20-\x7E]/g, ch => ASCII_MAP[ch] ?? '?');
 }
 
 function createSimpleReportPdf(title, subtitle, columns, rows) {
@@ -33,7 +39,11 @@ function createSimpleReportPdf(title, subtitle, columns, rows) {
 
   addHeader();
 
-  rows.slice(0, 300).forEach(row => {
+  const totalRows = rows.length;
+  const visibleRows = rows.slice(0, 300);
+  const truncated = totalRows > visibleRows.length;
+
+  visibleRows.forEach(row => {
     if (y < margin + lineHeight) {
       pushPage();
       y = pageHeight - margin;
@@ -41,11 +51,20 @@ function createSimpleReportPdf(title, subtitle, columns, rows) {
     }
 
     columns.forEach((column, index) => {
-      const text = String(row[column] === undefined || row[column] === null ? '' : row[column]).slice(0, 32);
+      const raw = String(row[column] === undefined || row[column] === null ? '' : row[column]);
+      const text = raw.length > 32 ? `${raw.slice(0, 29)}...` : raw;
       pageLines.push({ text, x: margin + index * colWidth, y, size: 7 });
     });
     y -= lineHeight;
   });
+
+  if (truncated) {
+    if (y < margin + lineHeight) {
+      pushPage();
+      y = pageHeight - margin;
+    }
+    pageLines.push({ text: `Showing first ${visibleRows.length} of ${totalRows} rows. Export CSV for the complete data set.`, x: margin, y, size: 7 });
+  }
 
   if (!rows.length) {
     pageLines.push({ text: 'No rows found for this report.', x: margin, y, size: 9 });

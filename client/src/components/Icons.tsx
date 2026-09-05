@@ -9,7 +9,8 @@ import {
   ShieldCheck, RefreshCw, ArrowRightLeft, Phone, CircleCheck, PencilLine, Move,
   PanelLeftClose, PanelLeftOpen, SlidersHorizontal, LogOut, UserCheck, FolderKanban,
   ArrowRight, CalendarClock, ShieldAlert, Trash2, Link as LinkIcon, Upload, Lightbulb, Eye,
-  CircleHelp,
+  CircleHelp, IndianRupee, History, Circle, Columns3, Send, Forward, Paperclip,
+  MessageCircle, Tags, Tag, Building, ChevronDown, ExternalLink,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -19,6 +20,13 @@ import type { LucideIcon } from 'lucide-react';
 const lucideMap: Record<string, LucideIcon> = {
   'layout-dashboard': LayoutDashboard,
   users: Users,
+  'message-circle': MessageCircle,
+  whatsapp: MessageCircle,
+  tags: Tags,
+  tag: Tag,
+  building: Building,
+  'chevron-down': ChevronDown,
+  'external-link': ExternalLink,
   briefcase: Briefcase,
   megaphone: Megaphone,
   'clipboard-list': ClipboardList,
@@ -52,10 +60,15 @@ const lucideMap: Record<string, LucideIcon> = {
   'clock-3': Clock,
   'calendar-clock': CalendarClock,
   'triangle-alert': TriangleAlert,
+  'alert-triangle': TriangleAlert,
   'shield-alert': ShieldAlert,
   video: Video,
   target: Target,
   filter: Filter,
+  'indian-rupee': IndianRupee,
+  rupee: IndianRupee,
+  payment: IndianRupee,
+  payments: IndianRupee,
   x: X,
   'rotate-ccw': RotateCcw,
   'arrow-up-right': ArrowUpRight,
@@ -86,6 +99,12 @@ const lucideMap: Record<string, LucideIcon> = {
   'log-out': LogOut,
   'user-check': UserCheck,
   'folder-kanban': FolderKanban,
+  history: History,
+  circle: Circle,
+  'columns-3': Columns3,
+  send: Send,
+  forward: Forward,
+  paperclip: Paperclip,
 };
 
 

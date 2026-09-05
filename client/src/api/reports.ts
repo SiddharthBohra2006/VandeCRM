@@ -99,8 +99,14 @@ export const reportsApi = {
     }
   },
 
-  moduleBuilder: (params: Record<string, string> = {}) => {
-    const query = new URLSearchParams(params).toString();
+  moduleBuilder: (params: Record<string, string | string[]> = {}) => {
+    const usp = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+      if (Array.isArray(value)) value.forEach(item => item !== undefined && item !== null && usp.append(key, String(item)));
+      else usp.set(key, String(value));
+    });
+    const query = usp.toString();
     return api.get<ModuleReportBuilderResponse>(`/reports/module-builder${query ? `?${query}` : ''}`);
   },
 

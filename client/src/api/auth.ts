@@ -8,6 +8,15 @@ export interface OrganizationTheme {
   text: string;
 }
 
+export interface OrganizationInfo {
+  _id: string;
+  name: string;
+  theme?: OrganizationTheme;
+  analyticsHeading?: string;
+  currency?: string;
+  locale?: string;
+}
+
 export interface User {
   _id: string;
   name: string;
@@ -21,12 +30,14 @@ export interface User {
     leadFieldPermissions?: { configured: boolean; visible: string[]; editable: string[] };
     workTypePermissions?: Array<{ workTypeId: string; actions: string[]; editableFieldKeys: string[] }>;
   } | null;
-  organization: { _id: string; name: string; theme?: OrganizationTheme };
+  organization: OrganizationInfo;
   hiddenModules?: string[];
   dashboardHiddenSections: string[];
   dashboardHiddenCards: string[];
   dashboardCardOrder: string[];
   sidebarHiddenItems: string[];
+  lastLoginAt?: string | null;
+  loginCount?: number;
 }
 
 export interface Company {

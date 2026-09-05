@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { tasksApi, TaskStats, TaskActivity } from '../../api/tasks';
+import { followUpsApi, FollowUpStats, FollowUpActivity } from '../../api/follow-ups';
 import { Customer } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -36,13 +36,13 @@ function toDatetimeLocal(value?: string | null): string {
   return date.toISOString().slice(0, 16);
 }
 
-export default function TasksPage() {
+export default function FollowUpsPage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [tasks, setTasks] = useState<Customer[]>([]);
-  const [completedTasks, setCompletedTasks] = useState<TaskActivity[]>([]);
-  const [stats, setStats] = useState<TaskStats>({ due: 0, today: 0, upcoming: 0, all: 0 });
+  const [followUps, setFollowUps] = useState<Customer[]>([]);
+  const [completedFollowUps, setCompletedFollowUps] = useState<FollowUpActivity[]>([]);
+  const [stats, setStats] = useState<FollowUpStats>({ due: 0, today: 0, upcoming: 0, all: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -61,14 +61,14 @@ export default function TasksPage() {
     try {
       setLoading(true);
       setError('');
-      const res = await tasksApi.list({ view: currentView });
-      setTasks(res.tasks || []);
-      setCompletedTasks(res.completedTasks || []);
+      const res = await followUpsApi.list({ view: currentView });
+      setFollowUps(res.followUps || []);
+      setCompletedFollowUps(res.completedFollowUps || []);
       setStats(res.stats || { due: 0, today: 0, upcoming: 0, all: 0 });
 
       // Initialize reschedule state for rows
       const initResched: Record<string, { nextFollowUpAt: string; comment: string }> = {};
-      res.tasks.forEach(t => {
+      res.followUps.forEach(t => {
         initResched[t._id] = {
           nextFollowUpAt: toDatetimeLocal(t.nextFollowUpAt),
           comment: '',
@@ -76,7 +76,7 @@ export default function TasksPage() {
       });
       setRescheduleData(initResched);
     } catch (err: any) {
-      setError(err.message || 'Failed to load follow-up tasks');
+      setError(err.message || 'Failed to load follow-ups');
     } finally {
       setLoading(false);
     }
@@ -91,7 +91,7 @@ export default function TasksPage() {
   async function handleComplete(taskId: string) {
     try {
       const comment = completeNotes[taskId] || '';
-      await tasksApi.complete(taskId, comment);
+      await followUpsApi.complete(taskId, comment);
       setSuccess('Follow-up completed.');
       await loadTasks();
     } catch (err: any) {
@@ -106,7 +106,7 @@ export default function TasksPage() {
         setError('Please choose a valid follow-up date and time.');
         return;
       }
-      await tasksApi.reschedule(taskId, row.nextFollowUpAt, row.comment);
+      await followUpsApi.reschedule(taskId, row.nextFollowUpAt, row.comment);
       setSuccess('Follow-up rescheduled.');
       await loadTasks();
     } catch (err: any) {
@@ -114,8 +114,8 @@ export default function TasksPage() {
     }
   }
 
-  if (loading && tasks.length === 0) {
-    return <div className="loading" style={{ padding: '2rem', textAlign: 'center' }}>Loading follow-up tasks...</div>;
+  if (loading && followUps.length === 0) {
+    return <div className="loading" style={{ padding: '2rem', textAlign: 'center' }}>Loading follow-ups...</div>;
   }
 
   return (
@@ -126,7 +126,7 @@ export default function TasksPage() {
       {/* Breadcrumb / Head */}
       <section className="page-head" style={{ marginBottom: '1.5rem' }}>
         <div>
-          <p className="eyebrow">Work Queue</p>
+          <p className="eyebrow">Follow-up Queue</p>
           <h1 style={{ margin: '0.2rem 0' }}>Lead follow-ups</h1>
           <p className="page-subtitle">The shared follow-up queue for this business. Every entry is connected to one lead and its timeline.</p>
         </div>
@@ -192,14 +192,14 @@ export default function TasksPage() {
             </tr>
           </thead>
           <tbody>
-            {tasks.length === 0 ? (
+            {followUps.length === 0 ? (
               <tr>
                 <td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--muted)' }}>
                   No follow-ups in this view.
                 </td>
               </tr>
             ) : (
-              tasks.map(task => {
+              followUps.map(task => {
                 const avatarColor = getAvatarColor(task.name);
                 const cleanPhone = normalizePhone(task.phone);
                 const isOverdue = task.nextFollowUpAt && new Date(task.nextFollowUpAt) < new Date();
@@ -344,14 +344,14 @@ export default function TasksPage() {
             <p className="eyebrow">History</p>
             <h2 style={{ margin: 0, fontSize: '1.1rem' }}>Recently completed</h2>
           </div>
-          <span className="pill">{completedTasks.length}</span>
+          <span className="pill">{completedFollowUps.length}</span>
         </header>
 
-        {completedTasks.length === 0 ? (
+        {completedFollowUps.length === 0 ? (
           <p className="empty" style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>No completed follow-ups yet.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {completedTasks.map(task => (
+            {completedFollowUps.map(task => (
               <div
                 key={task._id}
                 style={{

@@ -53,7 +53,7 @@ export default function SignupPage() {
             value={form.orgName}
             onChange={handleChange}
             required
-            placeholder="e.g. Vande Agency"
+            placeholder="e.g. Your Agency"
             autoComplete="organization"
           />
         </div>

@@ -47,6 +47,7 @@ export interface TeamMember {
   isActive: boolean;
   hiddenModules?: string[];
   lastLoginAt?: string | null;
+  loginCount?: number;
   createdAt: string;
   updatedAt: string;
 }

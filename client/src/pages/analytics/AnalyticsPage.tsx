@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { analyticsApi, AnalyticsResponse } from '../../api/analytics';
 import { useAuth } from '../../contexts/AuthContext';
+import CustomSelect from '../../components/CustomSelect';
+import DatePicker from '../../components/DatePicker';
 
 const CIRCUMFERENCE = 2 * Math.PI * 40;
 
@@ -30,7 +32,7 @@ function resetIcon() {
 }
 
 export default function AnalyticsPage() {
-  const { crmTerms } = useAuth();
+  const { crmTerms, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [data, setData] = useState<AnalyticsResponse | null>(null);
@@ -99,26 +101,46 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="analytics-page" style={{ background: '#F8F9FB', minHeight: '100%' }}>
+    <div className="analytics-page" style={{ background: 'var(--bg-soft)', minHeight: '100%' }}>
       <div className="page-content-inner">
         <section className="analytics-page-head">
           <div>
-            <h1>Vande Digital Insights</h1>
+            <h1>{[user?.organization?.name, user?.organization?.analyticsHeading || 'Digital Insights'].filter(Boolean).join(' ')}</h1>
             <p>Monitor your marketing performance and pipeline health.</p>
           </div>
         </section>
 
         <div className="analytics-toolbar">
-          <select style={selectCtrl} value={filters.clientCompany} onChange={e => handleFilter('clientCompany', e.target.value)}>
-            <option value="">All Client Companies</option>
-            {(data?.companies || []).map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-          </select>
-          <select style={selectCtrl} value={filters.campaign} onChange={e => handleFilter('campaign', e.target.value)}>
-            <option value="">All Campaigns</option>
-            {(data?.campaigns || []).map(c => <option key={c._id} value={c._id}>{c.name} ({c.platform})</option>)}
-          </select>
-          <input type="date" style={{ ...selectCtrl, width: 160 }} aria-label="Start date" value={filters.dateFrom} onChange={e => handleFilter('dateFrom', e.target.value)} />
-          <input type="date" style={{ ...selectCtrl, width: 160 }} aria-label="End date" value={filters.dateTo} onChange={e => handleFilter('dateTo', e.target.value)} />
+          <CustomSelect
+            value={filters.clientCompany}
+            onChange={val => handleFilter('clientCompany', val)}
+            placeholder="All Client Companies"
+            options={[
+              { value: '', label: 'All Client Companies' },
+              ...(data?.companies || []).map(c => ({ value: c._id, label: c.name }))
+            ]}
+          />
+          <CustomSelect
+            value={filters.campaign}
+            onChange={val => handleFilter('campaign', val)}
+            placeholder="All Campaigns"
+            options={[
+              { value: '', label: 'All Campaigns' },
+              ...(data?.campaigns || []).map(c => ({ value: c._id, label: `${c.name} (${c.platform})` }))
+            ]}
+          />
+          <DatePicker
+            aria-label="Start date"
+            placeholder="Start date"
+            value={filters.dateFrom}
+            onChange={val => handleFilter('dateFrom', val)}
+          />
+          <DatePicker
+            aria-label="End date"
+            placeholder="End date"
+            value={filters.dateTo}
+            onChange={val => handleFilter('dateTo', val)}
+          />
           <button type="button" className="btn" style={{ height: 40, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => navigate('/analytics')}>
             {resetIcon()}
             Reset

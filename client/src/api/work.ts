@@ -58,6 +58,18 @@ export interface WorkSubtask {
   createdAt?: string;
 }
 
+export interface WorkflowEvent {
+  _id?: string;
+  event: 'created' | 'assigned' | 'forwarded' | 'status' | 'rejected' | 'completed';
+  actor?: { _id: string; name: string };
+  fromUser?: { _id: string; name: string } | null;
+  toUser?: { _id: string; name: string } | null;
+  fromStatus?: string;
+  toStatus?: string;
+  note?: string;
+  at: string;
+}
+
 export interface WorkItem {
   _id: string;
   title: string;
@@ -79,6 +91,7 @@ export interface WorkItem {
   parentRecord?: { _id: string; title?: string } | string | null;
   subtasks?: WorkSubtask[];
   createdBy?: { _id: string; name: string };
+  workflowHistory?: WorkflowEvent[];
   createdAt: string;
   updatedAt: string;
 }
@@ -87,6 +100,7 @@ export interface WorkCenterResponse {
   ok: true;
   workTypes: WorkType[];
   items: WorkItem[];
+  users: { _id: string; name: string; email?: string }[];
   counts: {
     open: number;
     completed: number;
@@ -132,6 +146,10 @@ export const workApi = {
   update: (type: string, id: string, data: any) => api.put<{ ok: true; data: WorkItem }>(`/work/${type}/${id}`, data),
   updateStatus: (type: string, id: string, status: string) =>
     api.post<{ ok: true }>(`/work/${type}/${id}/status`, { status }),
+  delegate: (type: string, id: string, data: { toUser: string; status?: string; note?: string }) =>
+    api.post<{ ok: true; data: WorkItem }>(`/work/${type}/${id}/delegate`, data),
+  bulkCreate: (type: string, data: { titles: string; assignedTo?: string; deadline?: string; priority?: string }) =>
+    api.post<{ ok: true; created: number }>(`/work/${type}/bulk`, data),
   delete: (type: string, id: string) => api.delete<{ ok: true }>(`/work/${type}/${id}`),
   createSubtask: (type: string, id: string, data: Omit<Partial<WorkSubtask>, 'assignedTo'> & { assignedTo?: string | null }) =>
     api.post<{ ok: true; data: WorkSubtask }>(`/work/${type}/${id}/subtasks`, data),

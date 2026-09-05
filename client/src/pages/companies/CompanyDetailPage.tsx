@@ -604,7 +604,7 @@ export default function CompanyDetailPage() {
                   Lead Name *
                   <input
                     required
-                    placeholder="e.g. Siddhartha Vande"
+                    placeholder="e.g. Ramesh Kumar"
                     value={leadForm.name}
                     onChange={e => setLeadForm({ ...leadForm, name: e.target.value })}
                   />

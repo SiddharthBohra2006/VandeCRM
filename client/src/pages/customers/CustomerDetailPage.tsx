@@ -1,12 +1,16 @@
 import { CSSProperties, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { CustomerDetailResponse, customersApi } from '../../api/customers';
+import { workApi } from '../../api/work';
 import { downloadAuthenticatedFile } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { CustomerInput } from '../../types';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import CustomSelect from '../../components/CustomSelect';
+import DatePicker from '../../components/DatePicker';
+import Icon from '../../components/Icons';
 
-type Tab = 'overview' | 'activity' | 'work' | 'files' | 'details';
+type Tab = 'overview' | 'work' | 'activity' | 'files' | 'details';
 
 const avatarPalettes = [
   { bg: '#eff6ff', color: '#2563eb' },
@@ -24,22 +28,46 @@ function getAvatarColor(str: string) {
   return avatarPalettes[Math.abs(hash) % avatarPalettes.length];
 }
 
-const TAB_LABELS: Record<Tab, string> = {
-  overview: 'Overview',
-  activity: 'Activity',
-  work: 'Work',
-  files: 'Files',
-  details: 'Details',
+const ACTIVITY_TYPE_LABELS: Record<string, string> = {
+  note: 'Note',
+  call: 'Call',
+  email: 'Email',
+  whatsapp: 'WhatsApp',
+  meeting: 'Meeting',
+  meeting_client: 'Client Meeting',
+  meeting_internal: 'Team Meeting',
+  task: 'Task',
+  stage_changed: 'Stage Changed',
+  label_changed: 'Label Changed',
 };
+
+const MEETING_TYPES = ['meeting', 'meeting_client', 'meeting_internal'];
+
+function formatWorkValue(value: any, field: any) {
+  if (value == null || value === '') return '';
+  if (field?.type === 'checkbox') return value ? 'Yes' : 'No';
+  if (['date', 'datetime'].includes(field?.type)) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString('en-IN', field?.type === 'datetime' ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'medium' });
+  }
+  if (['currency', 'number', 'percentage'].includes(field?.type)) {
+    return field?.type === 'currency' ? `₹${Number(value || 0).toLocaleString('en-IN')}` : String(value);
+  }
+  return String(value);
+}
 
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { crmTerms, user } = useAuth();
   const [detail, setDetail] = useState<CustomerDetailResponse | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<CustomerInput>>({});
+  const [selectedStageId, setSelectedStageId] = useState('');
+  const [selectedOwnerId, setSelectedOwnerId] = useState('');
+  const [selectedWorkType, setSelectedWorkType] = useState('task');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -50,18 +78,23 @@ export default function CustomerDetailPage() {
   // Activity Composer State
   const [activityType, setActivityType] = useState('note');
   const [activityNote, setActivityNote] = useState('');
+  const [activityRecordingUrl, setActivityRecordingUrl] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
   const [followUpTime, setFollowUpTime] = useState('10:00');
   const [timelineSearch, setTimelineSearch] = useState('');
   const [timelineFilter, setTimelineFilter] = useState('all');
   const [submittingActivity, setSubmittingActivity] = useState(false);
 
+  // Work search & filter
+  const [workSearch, setWorkSearch] = useState('');
+  const [workFilter, setWorkFilter] = useState('all');
+
   // Attachment State
   const [uploadCategory, setUploadCategory] = useState('proposal');
   const [uploadNotes, setUploadNotes] = useState('');
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [workTypeOptions, setWorkTypeOptions] = useState<{ key: string; name: string }[]>([]);
 
   async function load(customerId: string) {
     try {
@@ -69,12 +102,30 @@ export default function CustomerDetailPage() {
       setError('');
       const result = await customersApi.get(customerId);
       setDetail(result);
+      setSelectedStageId(result.data.stage?._id || '');
+      setSelectedOwnerId(result.data.assignedTo?._id || '');
+      try {
+        const center = await workApi.getCenter();
+        const options = (center.workTypes || []).map(wt => ({ key: wt.key, name: wt.name }));
+        setWorkTypeOptions(options);
+        if (options.length && !options.some(opt => opt.key === selectedWorkType)) {
+          setSelectedWorkType(options[0].key);
+        }
+      } catch { /* fall back to default modules */ }
       setForm({
-        name: result.data.name, company: result.data.company, email: result.data.email,
-        phone: result.data.phone, source: result.data.source, value: result.data.value,
-        priority: result.data.priority, stage: result.data.stage?._id, labels: result.data.labels.map(label => label._id),
-        assignedTo: result.data.assignedTo?._id || '', campaign: result.data.campaign?._id || '',
-        notes: result.data.notes, customData: result.data.customData,
+        name: result.data.name,
+        company: result.data.company,
+        email: result.data.email,
+        phone: result.data.phone,
+        source: result.data.source,
+        value: result.data.value,
+        priority: result.data.priority,
+        stage: result.data.stage?._id,
+        labels: result.data.labels.map(label => label._id),
+        assignedTo: result.data.assignedTo?._id || '',
+        campaign: result.data.campaign?._id || '',
+        notes: result.data.notes,
+        customData: result.data.customData,
       });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : `Failed to load ${crmTerms.leadSingular.toLowerCase()}`);
@@ -83,7 +134,9 @@ export default function CustomerDetailPage() {
     }
   }
 
-  useEffect(() => { if (id) void load(id); }, [id]);
+  useEffect(() => {
+    if (id) void load(id);
+  }, [id]);
 
   async function save() {
     if (!id || !form.name?.trim()) return setError('Name is required.');
@@ -92,12 +145,36 @@ export default function CustomerDetailPage() {
       setError('');
       await customersApi.update(id, form);
       setEditing(false);
-      setSuccess('Lead updated successfully.');
+      setSuccess('Record updated successfully.');
       await load(id);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Update failed');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleUpdateStage() {
+    if (!id || !selectedStageId) return;
+    try {
+      setError('');
+      await customersApi.updateStage(id, selectedStageId);
+      setSuccess('Stage updated successfully.');
+      await load(id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to update stage');
+    }
+  }
+
+  async function handleUpdateOwner() {
+    if (!id) return;
+    try {
+      setError('');
+      await customersApi.transferLead(id, selectedOwnerId || null);
+      setSuccess('Owner updated successfully.');
+      await load(id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to update owner');
     }
   }
 
@@ -111,13 +188,15 @@ export default function CustomerDetailPage() {
     setConfirmAction(null);
     try {
       await customersApi.delete(id);
-      navigate('/customers');
+      const isClient = searchParams.get('from') === 'clients' || Boolean(detail?.data.stage?.isWon);
+      navigate(isClient ? '/clients' : '/customers');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Delete failed');
     }
   }
 
-  async function handleLogActivity() {
+  async function handleLogActivity(e?: React.FormEvent) {
+    if (e) e.preventDefault();
     if (!id || !activityNote.trim()) {
       setError('Please enter a note for this activity.');
       return;
@@ -133,8 +212,10 @@ export default function CustomerDetailPage() {
         type: activityType,
         note: activityNote.trim(),
         nextFollowUpAt,
+        callRecordingUrl: activityRecordingUrl.trim(),
       });
       setActivityNote('');
+      setActivityRecordingUrl('');
       setFollowUpDate('');
       setSuccess('Activity logged successfully.');
       await load(id);
@@ -166,8 +247,7 @@ export default function CustomerDetailPage() {
 
   async function handleUploadAttachment(e: React.FormEvent) {
     e.preventDefault();
-    const files = uploadFiles.length > 0 ? uploadFiles : (uploadFile ? [uploadFile] : []);
-    if (!id || files.length === 0) {
+    if (!id || uploadFiles.length === 0) {
       setError('Please select a file to upload.');
       return;
     }
@@ -176,7 +256,7 @@ export default function CustomerDetailPage() {
       setError('');
       let uploadedCount = 0;
       let skipped = 0;
-      for (const file of files) {
+      for (const file of uploadFiles) {
         if (file.size > 3 * 1024 * 1024) {
           skipped += 1;
           continue;
@@ -195,15 +275,13 @@ export default function CustomerDetailPage() {
         });
         uploadedCount += 1;
       }
-      setUploadFile(null);
       setUploadFiles([]);
       setUploadNotes('');
       if (uploadedCount > 0) {
-        setSuccess(skipped > 0 ? `${uploadedCount} file${uploadedCount === 1 ? '' : 's'} uploaded. ${skipped} skipped (3 MB limit).` : `${uploadedCount} file${uploadedCount === 1 ? '' : 's'} uploaded successfully.`);
+        setSuccess(skipped > 0 ? `${uploadedCount} file(s) uploaded. ${skipped} skipped (3 MB limit).` : `${uploadedCount} file(s) uploaded successfully.`);
         await load(id);
       } else {
-        const err = new Error(skipped > 0 ? 'None uploaded. Files must be 3 MB or smaller.' : 'Upload failed.');
-        setError(err.message);
+        setError(skipped > 0 ? 'None uploaded. Files must be 3 MB or smaller.' : 'Upload failed.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
@@ -231,34 +309,47 @@ export default function CustomerDetailPage() {
     }
   }
 
-  if (loading && !detail) return <div className="loading">Loading…</div>;
-  if (error && !detail) return <div className="alert alert-error" role="alert">{error}</div>;
-  if (!detail) return <div className="empty-state">{crmTerms.leadSingular} not found.</div>;
+  if (loading && !detail) return <div className="loading" style={{ padding: '2rem', textAlign: 'center' }}>Loading…</div>;
+  if (error && !detail) return <div className="notice danger" style={{ margin: '1.5rem' }}>{error}</div>;
+  if (!detail) return <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>Record not found.</div>;
 
   const { data: customer, activities, attachments, relatedWork, stages, labels, users, campaigns, fields } = detail;
-  const initials = customer.name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'L';
+  const initials = customer.name.trim().charAt(0).toUpperCase() || 'C';
   const avatarPalette = getAvatarColor(customer.name);
-  const stageColor = customer.stage?.color || '#3b82f6';
-  const cleanPhone = (customer.phone || '').replace(/\D/g, '');
+  const stageColor = customer.stage?.color || '#b58d00';
+  const isClientProfile = searchParams.get('from') === 'clients' || location.pathname.startsWith('/clients') || Boolean(customer.stage?.isWon);
+  const relationshipName = isClientProfile ? crmTerms.recordSingular : crmTerms.leadSingular;
+  const relationshipPlural = isClientProfile ? crmTerms.recordPlural : crmTerms.leadPlural;
+  const listPath = isClientProfile ? '/clients' : '/customers';
 
-  const isClientProfile = searchParams.get('from') === 'clients' || Boolean(customer.stage?.isWon);
-  const completedWork = relatedWork.filter(w => /completed|done|won/i.test(w.status)).length;
+  const workTypeChoices = workTypeOptions.length
+    ? workTypeOptions
+    : [
+        { key: 'task', name: 'Task' },
+        { key: 'video', name: 'Video' },
+        { key: 'design', name: 'Design' },
+        { key: 'website', name: 'Website' },
+        { key: 'content', name: 'Content' },
+      ];
+
+  const completedWork = relatedWork.filter(w => /completed|done|won|delivered/i.test(w.status)).length;
   const activeWork = relatedWork.length - completedWork;
-  const meetingsCount = activities.filter(a => a.type === 'meeting').length;
-
-  let stageBg = '#eff6ff';
-  let stageText = '#2563eb';
-  if (/proposal/i.test(customer.stage?.name || '')) { stageBg = '#fff7ed'; stageText = '#ea580c'; }
-  else if (/qualified/i.test(customer.stage?.name || '')) { stageBg = '#ecfdf5'; stageText = '#059669'; }
-  else if (/contacted/i.test(customer.stage?.name || '')) { stageBg = '#faf5ff'; stageText = '#7c3aed'; }
-  else if (/follow/i.test(customer.stage?.name || '')) { stageBg = '#ecfeff'; stageText = '#0891b2'; }
-  else if (customer.stage?.isWon) { stageBg = '#ecfdf5'; stageText = '#059669'; }
-
+  const meetingsCount = activities.filter(a => MEETING_TYPES.includes(a.type)).length;
   const isManager = user && ['admin', 'manager'].includes(user.role);
 
   // Filter activities
   const filteredActivities = activities.filter(a => {
-    if (timelineFilter !== 'all' && a.type !== timelineFilter) return false;
+    if (timelineFilter !== 'all') {
+      if (timelineFilter === 'marker-note' && a.type !== 'note') return false;
+      if (timelineFilter === 'marker-call' && a.type !== 'call') return false;
+      if (timelineFilter === 'marker-email' && a.type !== 'email') return false;
+      if (timelineFilter === 'marker-whatsapp' && a.type !== 'whatsapp') return false;
+      if (timelineFilter === 'marker-meeting' && !MEETING_TYPES.includes(a.type)) return false;
+      if (timelineFilter === 'marker-task' && a.type !== 'task') return false;
+      if (timelineFilter === 'marker-stage' && a.type !== 'stage_changed') return false;
+      if (timelineFilter === 'marker-label' && a.type !== 'label_changed') return false;
+      if (timelineFilter === 'marker-work' && (a as any).timelineType !== 'work') return false;
+    }
     if (timelineSearch.trim()) {
       const q = timelineSearch.toLowerCase();
       return (a.note || '').toLowerCase().includes(q) || (a.user?.name || '').toLowerCase().includes(q);
@@ -266,443 +357,1100 @@ export default function CustomerDetailPage() {
     return true;
   });
 
-  return (
-    <div className="lead-record-ui">
-      <nav className="lead-detail-breadcrumbs">
-        <Link to={isClientProfile ? '/clients' : '/customers'}>
-          {isClientProfile ? crmTerms.recordPlural : crmTerms.leadPlural}
-        </Link>
-        <span>/</span>
-        <strong>{customer.name}</strong>
-      </nav>
-      {error && <div className="alert alert-error" role="alert">{error}</div>}
-      {success && <div className="alert alert-success" role="alert">{success}</div>}
+  // Filter work items
+  const filteredWorkItems = relatedWork.filter(item => {
+    const isCompleted = /completed|done|won|delivered/i.test(item.status);
+    if (workFilter === 'active' && isCompleted) return false;
+    if (workFilter === 'completed' && !isCompleted) return false;
+    if (workSearch.trim()) {
+      const q = workSearch.toLowerCase();
+      return (item.title || '').toLowerCase().includes(q) || (item.module?.name || '').toLowerCase().includes(q);
+    }
+    return true;
+  });
 
-      {/* Header card */}
-      <section className="lead-detail-head" style={{ '--stage-color': stageColor } as CSSProperties}>
-        <div className="lead-identity">
-          <span className="lead-avatar" style={{ background: avatarPalette.bg, color: avatarPalette.color }}>{initials}</span>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h1>{customer.name}</h1>
-              <span className="stage-badge-pill" style={{ background: stageBg, color: stageText }}>{customer.stage?.name || 'Unassigned'}</span>
+  const leadCourse = customer.campaign ? customer.campaign.name : (customer.customData && (customer.customData as any).specialization_course) || '';
+
+  return (
+    <div className={isClientProfile ? '' : 'lead-record-ui'} style={{ maxWidth: '1640px', margin: '0 auto', padding: '1.25rem 1.75rem 3rem' }}>
+      {/* Navigation Breadcrumbs */}
+      <div className="breadcrumbs lead-breadcrumbs" style={{ display: 'flex', gap: '0.45rem', fontSize: '0.76rem', color: 'var(--muted)', marginBottom: '12px', paddingLeft: '4px' }}>
+        <Link to={listPath} style={{ color: 'var(--muted)', textDecoration: 'none' }}>{relationshipPlural}</Link>
+        <span>/</span>
+        {(customer as any).clientCompany && (
+          <>
+            <Link to={`/companies/${(customer as any).clientCompany._id}`} style={{ color: 'var(--muted)', textDecoration: 'none' }}>
+              {(customer as any).clientCompany.name}
+            </Link>
+            <span>/</span>
+          </>
+        )}
+        <span style={{ color: 'var(--text)', fontWeight: 600 }}>{customer.name}</span>
+      </div>
+
+      {/* Header Card */}
+      <section className="page-head lead-detail-head" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px 0 32px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03)', marginBottom: '24px', display: 'block' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.75rem' }}>
+          <div className="lead-identity" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <span
+              className="lead-avatar"
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                display: 'grid',
+                placeItems: 'center',
+                fontSize: '1.25rem',
+                fontWeight: 800,
+                background: avatarPalette.bg,
+                color: avatarPalette.color,
+                border: '1px solid var(--border)',
+                flexShrink: 0
+              }}
+            >
+              {initials}
+            </span>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: 'var(--text)' }}>{customer.name}</h1>
+              {!isClientProfile && (
+                <div className="lead-header-labels" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+                  <span className="stage-badge" style={{ ['--stage' as any]: stageColor, fontSize: '0.72rem', padding: '2px 8px', borderRadius: '999px', background: 'var(--panel-muted)' }}>{customer.stage?.name}</span>
+                  {labels.filter(label => (form.labels || []).includes(label._id)).map(label => (
+                    <span className="pill" key={label._id} style={{ ['--pill' as any]: label.color, fontSize: '0.72rem' }}>{label.name}</span>
+                  ))}
+                </div>
+              )}
+              <p className="page-subtitle" style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--muted)' }}>
+                {isClientProfile
+                  ? 'Conversations, work, files, and next steps in one place.'
+                  : `${leadCourse || customer.company || customer.source || 'Direct'} · ${customer.email || customer.phone || 'No contact details'}`}
+              </p>
             </div>
-            <p className="page-subtitle">{customer.company || customer.email || customer.phone || 'No contact details yet'}</p>
-            <div className="lead-header-labels">
-              {labels.filter(label => (form.labels || []).includes(label._id)).map(label => (
-                <span className="pill" key={label._id} style={{ marginInlineEnd: '4px' }}>{label.name}</span>
-              ))}
-            </div>
+          </div>
+          <div className="actions" style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => {
+                setTab('activity');
+                setTimeout(() => document.getElementById('activityNoteArea')?.focus(), 50);
+              }}
+            >
+              {isClientProfile ? 'Add update' : 'Log activity'}
+            </button>
+            {customer.email && (
+              <Link className="btn" to={`/mail?customer=${customer._id}`}>
+                Send email
+              </Link>
+            )}
+            <details className="more-actions" style={{ position: 'relative' }}>
+              <summary className="btn" style={{ listStyle: 'none', cursor: 'pointer' }}>More</summary>
+              <div
+                className="more-actions-menu"
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: '100%',
+                  marginTop: '6px',
+                  background: 'var(--panel)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  padding: '6px',
+                  minWidth: '150px',
+                  zIndex: 20,
+                  boxShadow: 'var(--shadow-md)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ width: '100%', justifyContent: 'flex-start', border: 'none', background: 'transparent', padding: '6px 10px', fontSize: '0.78rem' }}
+                  onClick={() => setEditing(v => !v)}
+                >
+                  {editing ? 'Cancel edit' : `Edit ${relationshipName.toLowerCase()}`}
+                </button>
+                {isManager && (
+                  <button
+                    type="button"
+                    className="btn danger"
+                    style={{ width: '100%', justifyContent: 'flex-start', border: 'none', background: 'transparent', padding: '6px 10px', fontSize: '0.78rem', color: 'var(--red)' }}
+                    onClick={() => void remove()}
+                  >
+                    Delete {relationshipName.toLowerCase()}
+                  </button>
+                )}
+              </div>
+            </details>
           </div>
         </div>
 
-        {/* Quick Contact & Action strip */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
-          {customer.phone && (
-            <>
-              <a className="btn btn-secondary" href={`tel:${customer.phone}`}>
-                📞 Call
-              </a>
-              {cleanPhone && (
-                <a className="btn btn-secondary" href={`https://wa.me/${cleanPhone}`} target="_blank" rel="noreferrer">
-                  💬 WhatsApp
+        {!isClientProfile && (
+          <div className="lead-contact-actions" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', padding: '12px 0 20px', borderTop: '1px solid var(--border)' }}>
+            {customer.phone && (
+              <>
+                <a className="btn small" href={`tel:${customer.phone.replace(/[^+\d]/g, '')}`} style={{ fontSize: '0.76rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <Icon name="phone" size={13} /> Call
                 </a>
-              )}
-            </>
-          )}
-          {customer.email && (
-            <Link className="btn btn-secondary" to={`/mail?customer=${customer._id}`}>
-              ✉️ Send email
-            </Link>
-          )}
-          <button className="btn btn-secondary" onClick={() => setEditing(value => !value)}>
-            {editing ? 'Cancel edit' : 'Edit'}
-          </button>
-          <button className="btn btn-danger" onClick={() => void remove()}>Delete</button>
-        </div>
+                <a className="btn small" href={`https://wa.me/${customer.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.76rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <Icon name="message-circle" size={13} /> WhatsApp
+                </a>
+              </>
+            )}
+            <button className="btn small" onClick={() => setEditing(v => !v)} style={{ fontSize: '0.76rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Icon name="tags" size={13} /> Edit details
+            </button>
+            <div className="lead-header-metrics" style={{ marginLeft: 'auto', display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
+              <div>
+                <small style={{ display: 'block', fontSize: '0.68rem', color: 'var(--muted)' }}>Total value</small>
+                <strong style={{ fontSize: '0.85rem' }}>₹{(customer.value || 0).toLocaleString('en-IN')}</strong>
+              </div>
+              <div>
+                <small style={{ display: 'block', fontSize: '0.68rem', color: 'var(--muted)' }}>Owner</small>
+                <strong style={{ fontSize: '0.85rem' }}>{customer.assignedTo?.name || 'Unassigned'}</strong>
+              </div>
+              <div>
+                <small style={{ display: 'block', fontSize: '0.68rem', color: 'var(--muted)' }}>Next follow-up</small>
+                <strong style={{ fontSize: '0.85rem' }}>{customer.nextFollowUpAt ? new Date(customer.nextFollowUpAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Not scheduled'}</strong>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Prominent Latest Call Summary & Conversation Notes */}
+        {customer.notes && (
+          <div className="lead-call-summary-banner" style={{ background: 'color-mix(in srgb, var(--gold) 8%, var(--panel))', border: '1px solid color-mix(in srgb, var(--gold) 35%, var(--border))', borderRadius: '12px', padding: '14px 18px', marginTop: '1rem', marginBottom: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ color: 'var(--gold)', display: 'grid', placeItems: 'center' }}>
+                  <Icon name="message-square" size={16} />
+                </span>
+                <strong style={{ fontSize: '0.84rem', color: 'var(--text)', letterSpacing: '0.01em' }}>
+                  Latest Call Summary & Conversation Notes
+                </strong>
+              </div>
+              <button type="button" className="btn small" style={{ fontSize: '0.7rem', padding: '2px 8px' }} onClick={() => setEditing(true)}>
+                Edit summary
+              </button>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>
+              {customer.notes}
+            </p>
+          </div>
+        )}
+
+        {/* Tab Navigation */}
+        {isClientProfile ? (
+          <nav className="client-profile-nav" aria-label="Client profile sections" style={{ display: 'flex', gap: '2rem', marginTop: '1.75rem', marginBottom: 0, padding: 0, background: 'transparent' }}>
+            <button
+              type="button"
+              className={tab === 'overview' ? 'active' : ''}
+              onClick={() => setTab('overview')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: '0.5rem 0 0.85rem 0',
+                color: tab === 'overview' ? 'var(--gold)' : 'var(--sub)',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                position: 'relative',
+                borderBottom: tab === 'overview' ? '2px solid var(--gold)' : '2px solid transparent'
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+              Overview
+            </button>
+            <button
+              type="button"
+              className={tab === 'work' ? 'active' : ''}
+              onClick={() => setTab('work')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: '0.5rem 0 0.85rem 0',
+                color: tab === 'work' ? 'var(--gold)' : 'var(--sub)',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                position: 'relative',
+                borderBottom: tab === 'work' ? '2px solid var(--gold)' : '2px solid transparent'
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+              Work
+            </button>
+            <button
+              type="button"
+              className={tab === 'activity' ? 'active' : ''}
+              onClick={() => setTab('activity')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: '0.5rem 0 0.85rem 0',
+                color: tab === 'activity' ? 'var(--gold)' : 'var(--sub)',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                position: 'relative',
+                borderBottom: tab === 'activity' ? '2px solid var(--gold)' : '2px solid transparent'
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              History
+            </button>
+            <button
+              type="button"
+              className={tab === 'files' ? 'active' : ''}
+              onClick={() => setTab('files')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: '0.5rem 0 0.85rem 0',
+                color: tab === 'files' ? 'var(--gold)' : 'var(--sub)',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                position: 'relative',
+                borderBottom: tab === 'files' ? '2px solid var(--gold)' : '2px solid transparent'
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              Files
+            </button>
+          </nav>
+        ) : (
+          <nav className="lead-section-nav" aria-label="Lead sections" style={{ display: 'flex', gap: '24px', overflowX: 'auto', borderTop: '1px solid var(--border)' }}>
+            {(['overview', 'activity', 'work', 'files', 'details'] as Tab[]).map(t => (
+              <button
+                type="button"
+                key={t}
+                onClick={() => setTab(t)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  padding: '15px 0',
+                  whiteSpace: 'nowrap',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  color: tab === t ? 'var(--gold)' : 'var(--sub)',
+                  borderBottom: tab === t ? '2px solid var(--gold)' : '2px solid transparent'
+                }}
+              >
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </nav>
+        )}
       </section>
 
-      {/* Section nav */}
-      <nav className="lead-section-nav" aria-label={`${crmTerms.leadSingular} sections`}>
-        {(Object.keys(TAB_LABELS) as Tab[]).map(item => (
-          <button type="button" key={item} className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>{TAB_LABELS[item]}</button>
-        ))}
-      </nav>
+      {error && <div className="notice danger" style={{ marginBottom: '1rem' }}>{error}</div>}
+      {success && <div className="notice success" style={{ marginBottom: '1rem' }}>{success}</div>}
 
-      <div className="lead-profile-grid">
-        {/* Main column */}
-        <main className="lead-main-column">
+      {/* Grid Layout: Main column + Right Settings Sidebar */}
+      <div className="lead-profile-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(300px, 0.9fr)', gap: '24px', alignItems: 'start' }}>
+        {/* Left Column */}
+        <div className="lead-main-column" style={{ display: 'flex', flexDirection: 'column', gap: '24px', minWidth: 0 }}>
           {editing ? (
-            <section className="lead-tab-pane">
-              <div className="lead-overview-card">
-                <h2>Edit {crmTerms.leadSingular}</h2>
-                <div className="form-grid">
-                  <label>Name *<input required value={form.name || ''} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} /></label>
-                  <label>Company / Brand<input value={form.company || ''} onChange={event => setForm(current => ({ ...current, company: event.target.value }))} /></label>
-                  <label>Phone<input value={form.phone || ''} onChange={event => setForm(current => ({ ...current, phone: event.target.value }))} /></label>
-                  <label>Email<input type="email" value={form.email || ''} onChange={event => setForm(current => ({ ...current, email: event.target.value }))} /></label>
-                  <label>Source<input value={form.source || ''} onChange={event => setForm(current => ({ ...current, source: event.target.value }))} /></label>
-                  <label>Value<input type="number" min="0" value={form.value || 0} onChange={event => setForm(current => ({ ...current, value: Number(event.target.value) || 0 }))} /></label>
-                  <label>Priority<select value={form.priority || 'medium'} onChange={event => setForm(current => ({ ...current, priority: event.target.value as CustomerInput['priority'] }))}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
-                  <label>Stage<select value={form.stage || ''} onChange={event => setForm(current => ({ ...current, stage: event.target.value }))}>{stages.filter(stage => stage.isActive || stage._id === customer.stage?._id).map(stage => <option key={stage._id} value={stage._id}>{stage.name}</option>)}</select></label>
-                  <label>Campaign<select value={form.campaign || ''} onChange={event => setForm(current => ({ ...current, campaign: event.target.value }))}><option value="">No campaign</option>{campaigns.map(campaign => <option key={campaign._id} value={campaign._id}>{campaign.name}</option>)}</select></label>
-                  <label>Assigned owner<select value={form.assignedTo || ''} onChange={event => setForm(current => ({ ...current, assignedTo: event.target.value }))}><option value="">Unassigned</option>{users.map(user => <option key={user._id} value={user._id}>{user.name}</option>)}</select></label>
-                </div>
-                {labels.length > 0 && <div className="check-grid">{labels.map(label => <label className="check-pill" key={label._id}><input type="checkbox" checked={(form.labels || []).includes(label._id)} onChange={() => setForm(current => ({ ...current, labels: (current.labels || []).includes(label._id) ? (current.labels || []).filter(innerId => innerId !== label._id) : [...(current.labels || []), label._id] }))} />{label.name}</label>)}</div>}
-                <label>Internal notes<textarea rows={6} value={form.notes || ''} onChange={event => setForm(current => ({ ...current, notes: event.target.value }))} /></label>
-                <div className="form-actions"><button className="btn primary" disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</button></div>
+            <article className="profile-panel lead-overview-card" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px' }}>
+              <h2 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 800 }}>Edit {relationshipName}</h2>
+              <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
+                  Name *
+                  <input required value={form.name || ''} onChange={e => setForm(c => ({ ...c, name: e.target.value }))} style={{ width: '100%', marginTop: '4px' }} />
+                </label>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
+                  Company / Brand
+                  <input value={form.company || ''} onChange={e => setForm(c => ({ ...c, company: e.target.value }))} style={{ width: '100%', marginTop: '4px' }} />
+                </label>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
+                  Phone
+                  <input value={form.phone || ''} onChange={e => setForm(c => ({ ...c, phone: e.target.value }))} style={{ width: '100%', marginTop: '4px' }} />
+                </label>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
+                  Email
+                  <input type="email" value={form.email || ''} onChange={e => setForm(c => ({ ...c, email: e.target.value }))} style={{ width: '100%', marginTop: '4px' }} />
+                </label>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
+                  Source
+                  <input value={form.source || ''} onChange={e => setForm(c => ({ ...c, source: e.target.value }))} style={{ width: '100%', marginTop: '4px' }} />
+                </label>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
+                  Value
+                  <input type="number" min="0" value={form.value || 0} onChange={e => setForm(c => ({ ...c, value: Number(e.target.value) || 0 }))} style={{ width: '100%', marginTop: '4px' }} />
+                </label>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
+                  Priority
+                  <div style={{ marginTop: '4px' }}>
+                    <CustomSelect
+                      value={form.priority || 'medium'}
+                      onChange={val => setForm(c => ({ ...c, priority: val as CustomerInput['priority'] }))}
+                      options={[
+                        { value: 'low', label: 'Low' },
+                        { value: 'medium', label: 'Medium' },
+                        { value: 'high', label: 'High' },
+                      ]}
+                    />
+                  </div>
+                </label>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
+                  Stage
+                  <div style={{ marginTop: '4px' }}>
+                    <CustomSelect
+                      value={form.stage || ''}
+                      onChange={val => setForm(c => ({ ...c, stage: val }))}
+                      options={stages.filter(s => s.isActive || s._id === customer.stage?._id).map(s => ({ value: s._id, label: s.name }))}
+                    />
+                  </div>
+                </label>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
+                  Campaign
+                  <div style={{ marginTop: '4px' }}>
+                    <CustomSelect
+                      value={form.campaign || ''}
+                      onChange={val => setForm(c => ({ ...c, campaign: val }))}
+                      placeholder="No campaign"
+                      options={[
+                        { value: '', label: 'No campaign' },
+                        ...campaigns.map(c => ({ value: c._id, label: c.name }))
+                      ]}
+                    />
+                  </div>
+                </label>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
+                  Assigned owner
+                  <div style={{ marginTop: '4px' }}>
+                    <CustomSelect
+                      value={form.assignedTo || ''}
+                      onChange={val => setForm(c => ({ ...c, assignedTo: val }))}
+                      placeholder="Unassigned"
+                      options={[
+                        { value: '', label: 'Unassigned' },
+                        ...users.map(u => ({ value: u._id, label: u.name }))
+                      ]}
+                    />
+                  </div>
+                </label>
               </div>
-            </section>
+              {labels.length > 0 && (
+                <div style={{ marginTop: '1rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: '6px' }}>Labels</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {labels.map(l => (
+                      <label key={l._id} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', cursor: 'pointer', background: 'var(--panel-muted)', padding: '4px 10px', borderRadius: '6px' }}>
+                        <input
+                          type="checkbox"
+                          checked={(form.labels || []).includes(l._id)}
+                          onChange={() => setForm(c => ({
+                            ...c,
+                            labels: (c.labels || []).includes(l._id) ? (c.labels || []).filter(id => id !== l._id) : [...(c.labels || []), l._id]
+                          }))}
+                        />
+                        {l.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, marginTop: '1rem' }}>
+                Internal notes
+                <textarea rows={4} value={form.notes || ''} onChange={e => setForm(c => ({ ...c, notes: e.target.value }))} style={{ width: '100%', marginTop: '4px' }} />
+              </label>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '1.25rem' }}>
+                <button type="button" className="btn primary" disabled={saving} onClick={() => void save()}>
+                  {saving ? 'Saving…' : 'Save changes'}
+                </button>
+                <button type="button" className="btn" onClick={() => setEditing(false)}>
+                  Cancel
+                </button>
+              </div>
+            </article>
           ) : (
             <>
+              {/* Overview Tab */}
               {tab === 'overview' && (
-                <section className="lead-overview-card">
-                  <h2>{isClientProfile ? `${crmTerms.recordSingular} information` : `${crmTerms.leadSingular} information`}</h2>
+                <article className="profile-panel lead-overview-card" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03)' }}>
+                  <div className="profile-summary" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                    <strong style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text)' }}>
+                      {isClientProfile ? 'Relationship overview' : `Rs. ${(customer.value || 0).toLocaleString('en-IN')}`}
+                    </strong>
+                    <span className="stage-badge" style={{ ['--stage' as any]: stageColor, fontSize: '0.72rem', padding: '4px 10px', borderRadius: '999px', fontWeight: 700 }}>
+                      {customer.stage?.name}
+                    </span>
+                  </div>
+
                   {isClientProfile && (
-                    <div className="client-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', margin: '1rem 0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--panel-muted)' }}>
-                        <div><small style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)' }}>Work items</small><strong style={{ fontSize: '1.15rem' }}>{relatedWork.length}</strong></div>
+                    <div className="client-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px', margin: '1.25rem 0' }}>
+                      <div
+                        onClick={() => setTab('work')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--panel-muted)', cursor: 'pointer' }}
+                      >
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--sub)" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                        <div className="metric-value" style={{ display: 'flex', flexDirection: 'column-reverse', gap: '0.1rem' }}>
+                          <small style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 650 }}>Work items</small>
+                          <strong style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text)', margin: 0, lineHeight: 1.1 }}>{relatedWork.length}</strong>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--panel-muted)' }}>
-                        <div><small style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)' }}>Completed</small><strong style={{ fontSize: '1.15rem', color: '#10b981' }}>{completedWork}</strong></div>
+                      <div
+                        onClick={() => setTab('work')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--panel-muted)', cursor: 'pointer' }}
+                      >
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#10b981" strokeWidth="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        <div className="metric-value" style={{ display: 'flex', flexDirection: 'column-reverse', gap: '0.1rem' }}>
+                          <small style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 650 }}>Completed</small>
+                          <strong style={{ fontSize: '1.15rem', fontWeight: 800, color: '#10b981', margin: 0, lineHeight: 1.1 }}>{completedWork}</strong>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--panel-muted)' }}>
-                        <div><small style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)' }}>In progress</small><strong style={{ fontSize: '1.15rem', color: '#3b82f6' }}>{activeWork}</strong></div>
+                      <div
+                        onClick={() => setTab('work')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--panel-muted)', cursor: 'pointer' }}
+                      >
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#3b82f6" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <div className="metric-value" style={{ display: 'flex', flexDirection: 'column-reverse', gap: '0.1rem' }}>
+                          <small style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 650 }}>In progress</small>
+                          <strong style={{ fontSize: '1.15rem', fontWeight: 800, color: '#3b82f6', margin: 0, lineHeight: 1.1 }}>{activeWork}</strong>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--panel-muted)' }}>
-                        <div><small style={{ display: 'block', fontSize: '0.7rem', color: 'var(--muted)' }}>Meetings</small><strong style={{ fontSize: '1.15rem', color: '#8b5cf6' }}>{meetingsCount}</strong></div>
+                      <div
+                        onClick={() => setTab('activity')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--panel-muted)', cursor: 'pointer' }}
+                      >
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#8b5cf6" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        <div className="metric-value" style={{ display: 'flex', flexDirection: 'column-reverse', gap: '0.1rem' }}>
+                          <small style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 650 }}>Meetings</small>
+                          <strong style={{ fontSize: '1.15rem', fontWeight: 800, color: '#8b5cf6', margin: 0, lineHeight: 1.1 }}>{meetingsCount}</strong>
+                        </div>
                       </div>
                     </div>
                   )}
-                  <div className="lead-facts">
-                    <div><small>Phone</small><strong>{customer.phone || 'Not set'}</strong></div>
-                    <div><small>Email</small><strong>{customer.email || 'Not set'}</strong></div>
-                    <div><small>Organisation</small><strong>{customer.company || 'Not set'}</strong></div>
-                    <div><small>{isClientProfile ? 'How they came to you' : 'Course / Campaign'}</small><strong>{customer.campaign?.name || customer.source || (isClientProfile ? 'Direct' : 'Direct lead')}</strong></div>
-                    <div><small>Assigned owner</small><strong>{customer.assignedTo?.name || 'Unassigned'}</strong></div>
-                    <div><small>{isClientProfile ? 'Next planned contact' : 'Next follow-up'}</small><strong>{customer.nextFollowUpAt ? new Date(customer.nextFollowUpAt).toLocaleString('en-IN') : 'Not scheduled'}</strong></div>
-                  </div>
-                  {customer.notes && <div className="lead-notes"><h3>Internal notes</h3><p>{customer.notes}</p></div>}
-                </section>
-              )}
 
-              {tab === 'activity' && (
-                <section className="lead-tab-pane">
-                  {/* Activity Composer Box */}
-                  <div className="lead-overview-card" style={{ marginBottom: '1.5rem' }}>
-                    <h2 style={{ fontSize: '0.92rem', marginBottom: '0.75rem' }}>Log activity & follow-up</h2>
-                    <div style={{ display: 'flex', gap: '6px', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', overflowX: 'auto' }}>
-                      {[
-                        { key: 'note', label: 'Note' },
-                        { key: 'call', label: 'Call' },
-                        { key: 'email', label: 'Email' },
-                        { key: 'whatsapp', label: 'WhatsApp' },
-                        { key: 'meeting', label: 'Meeting' },
-                        { key: 'task', label: 'Task' },
-                      ].map(type => (
-                        <button
-                          key={type.key}
-                          type="button"
-                          onClick={() => setActivityType(type.key)}
-                          style={{
-                            background: activityType === type.key ? 'var(--gold, #ea580c)' : 'transparent',
-                            color: activityType === type.key ? '#fff' : 'var(--muted)',
-                            border: 'none',
-                            padding: '4px 12px',
-                            borderRadius: 6,
-                            fontSize: '0.76rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {type.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    <textarea
-                      rows={3}
-                      placeholder={`Write a ${activityType} note...`}
-                      value={activityNote}
-                      onChange={e => setActivityNote(e.target.value)}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', marginBottom: '0.75rem', fontSize: '0.82rem' }}
-                    />
-
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted)' }}>Next follow-up:</label>
-                      <input
-                        type="date"
-                        value={followUpDate}
-                        onChange={e => setFollowUpDate(e.target.value)}
-                        style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.76rem' }}
-                      />
-                      <input
-                        type="time"
-                        value={followUpTime}
-                        onChange={e => setFollowUpTime(e.target.value)}
-                        style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.76rem' }}
-                      />
-                      <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Quick reschedule:</span>
-                      <button type="button" className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.72rem' }} onClick={() => handleQuickFollowUp(1)}>+1 Day</button>
-                      <button type="button" className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.72rem' }} onClick={() => handleQuickFollowUp(3)}>+3 Days</button>
-                      <button type="button" className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.72rem' }} onClick={() => handleQuickFollowUp(7)}>+1 Week</button>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <button
-                        className="btn btn-primary"
-                        type="button"
-                        disabled={submittingActivity || !activityNote.trim()}
-                        onClick={handleLogActivity}
-                      >
-                        {submittingActivity ? 'Saving...' : 'Save Activity'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Activity Timeline */}
-                  <div className="lead-overview-card">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '8px' }}>
-                      <h2>Activity timeline</h2>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <input
-                          type="text"
-                          placeholder="Search history..."
-                          value={timelineSearch}
-                          onChange={e => setTimelineSearch(e.target.value)}
-                          style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.76rem' }}
-                        />
-                        <select
-                          value={timelineFilter}
-                          onChange={e => setTimelineFilter(e.target.value)}
-                          style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.76rem' }}
-                        >
-                          <option value="all">All types</option>
-                          <option value="note">Notes</option>
-                          <option value="call">Calls</option>
-                          <option value="email">Emails</option>
-                          <option value="whatsapp">WhatsApp</option>
-                          <option value="meeting">Meetings</option>
-                          <option value="task">Tasks</option>
-                          <option value="stage_changed">Stage changes</option>
-                        </select>
+                  {/* Fact Grid */}
+                  <div className="lead-facts" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px 18px', marginTop: '1.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                      <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                      </span>
+                      <div className="fact-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1, minWidth: 0 }}>
+                        <small style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 650 }}>Phone</small>
+                        <strong style={{ fontSize: '0.85rem', color: 'var(--text)', wordBreak: 'break-all' }}>{customer.phone || 'Not set'}</strong>
                       </div>
                     </div>
 
-                    <div className="lead-timeline-list">
-                      {filteredActivities.length === 0 ? (
-                        <div className="empty-state">No matching activity yet.</div>
-                      ) : filteredActivities.map(activity => (
-                        <article className="lead-timeline-item" key={activity._id}>
-                          <span className="lead-timeline-icon" />
-                          <div className="lead-timeline-content">
-                            <div className="lead-timeline-meta">
-                              <strong>{activity.type.replace('_', ' ').toUpperCase()}</strong>
-                              <span>{new Date(activity.createdAt).toLocaleString('en-IN')}</span>
-                            </div>
-                            <p className="lead-timeline-text">{activity.note}</p>
-                            <small>{activity.user?.name || 'System'}</small>
-                          </div>
-                        </article>
-                      ))}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                      <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="m22 6-10 7L2 6"/></svg>
+                      </span>
+                      <div className="fact-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1, minWidth: 0 }}>
+                        <small style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 650 }}>Email</small>
+                        <strong style={{ fontSize: '0.85rem', color: 'var(--text)', wordBreak: 'break-all' }}>{customer.email || 'Not set'}</strong>
+                      </div>
                     </div>
-                  </div>
-                </section>
-              )}
 
-              {tab === 'work' && (
-                <section className="lead-tab-pane">
-                  <div className="lead-overview-card">
-                    <h2>Related work</h2>
-                    {relatedWork.length === 0 ? (
-                      <div className="empty-state">No related work yet.</div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {relatedWork.map(item => (
-                          <Link className="business-row" key={item._id} to={`/work/${item.module?.key || 'task'}/${item._id}`}>
-                            <strong>{item.title}</strong>
-                            <span>{item.module?.name || 'Work'} · <span className="stage-badge-pill" style={{ background: 'var(--panel-muted)' }}>{item.status}</span></span>
-                          </Link>
-                        ))}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                      <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 12h4M10 8h4M14 21v-3a2 2 0 0 0-4 0v3M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/></svg>
+                      </span>
+                      <div className="fact-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1, minWidth: 0 }}>
+                        <small style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 650 }}>Organisation</small>
+                        <strong style={{ fontSize: '0.85rem', color: 'var(--text)', wordBreak: 'break-all' }}>{customer.company || 'Not set'}</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                      <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                      </span>
+                      <div className="fact-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1, minWidth: 0 }}>
+                        <small style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 650 }}>{isClientProfile ? 'How they came to you' : 'Source / campaign'}</small>
+                        <strong style={{ fontSize: '0.85rem', color: 'var(--text)', wordBreak: 'break-all' }}>{leadCourse || customer.source || 'Not recorded'}</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                      <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      </span>
+                      <div className="fact-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1, minWidth: 0 }}>
+                        <small style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 650 }}>Owner</small>
+                        <strong style={{ fontSize: '0.85rem', color: 'var(--text)', wordBreak: 'break-all' }}>{customer.assignedTo ? customer.assignedTo.name : 'Unassigned'}</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                      <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/></svg>
+                      </span>
+                      <div className="fact-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1, minWidth: 0 }}>
+                        <small style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 650 }}>{isClientProfile ? 'Next planned contact' : 'Next follow-up'}</small>
+                        <strong style={{ fontSize: '0.85rem', color: 'var(--text)', wordBreak: 'break-all' }}>
+                          {customer.nextFollowUpAt ? new Date(customer.nextFollowUpAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Not scheduled'}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                      <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                      </span>
+                      <div className="fact-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1, minWidth: 0 }}>
+                        <small style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 650 }}>Last contact</small>
+                        <strong style={{ fontSize: '0.85rem', color: 'var(--text)', wordBreak: 'break-all' }}>
+                          {customer.lastContactedAt ? new Date(customer.lastContactedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'No interaction yet'}
+                        </strong>
+                      </div>
+                    </div>
+
+                    {!isClientProfile && customer.labels && customer.labels.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                        <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                        </span>
+                        <div className="fact-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1, minWidth: 0 }}>
+                          <small style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 650 }}>Labels / qualification</small>
+                          <strong style={{ fontSize: '0.85rem', color: 'var(--text)', wordBreak: 'break-all' }}>{customer.labels.map(l => l.name).join(' · ')}</strong>
+                        </div>
                       </div>
                     )}
+
+                    {fields.map(field => {
+                      const val = customer.customData?.[field.key];
+                      if (val == null || val === '') return null;
+                      return (
+                        <div key={field._id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                          <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+                          </span>
+                          <div className="fact-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1, minWidth: 0 }}>
+                            <small style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 650 }}>{field.label}</small>
+                            <strong style={{ fontSize: '0.85rem', color: 'var(--text)', wordBreak: 'break-all' }}>{formatWorkValue(val, field)}</strong>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                </section>
+
+                  {customer.labels && customer.labels.length > 0 && (
+                    <div className="label-row" style={{ marginTop: '1.25rem', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {customer.labels.map(label => (
+                        <span key={label._id} className="pill" style={{ ['--pill' as any]: label.color, fontSize: '0.72rem' }}>{label.name}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {customer.notes && (
+                    <p className="notes lead-notes" style={{ marginTop: '1.25rem', background: 'var(--panel-muted)', padding: '0.85rem 1rem', borderRadius: '8px', fontSize: '0.82rem', color: 'var(--text)' }}>
+                      {customer.notes}
+                    </p>
+                  )}
+                </article>
               )}
 
-              {tab === 'files' && (
-                <section className="lead-tab-pane">
-                  <div className="lead-overview-card" style={{ marginBottom: '1.5rem' }}>
-                    <h2>Upload attachment</h2>
-                    <form onSubmit={handleUploadAttachment} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <select
-                          value={uploadCategory}
-                          onChange={e => setUploadCategory(e.target.value)}
-                          style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.78rem' }}
-                        >
-                          <option value="proposal">Proposal</option>
-                          <option value="contract">Contract</option>
-                          <option value="invoice">Invoice</option>
-                          <option value="brief">Brief</option>
-                          <option value="screenshot">Screenshot</option>
-                          <option value="other">Other</option>
-                        </select>
-                        <input
-                          type="file"
-                          multiple
-                          accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.txt,.csv"
-                          onChange={e => { setUploadFile(e.target.files?.[0] || null); setUploadFiles([...(e.target.files || [])]); }}
-                          style={{ fontSize: '0.78rem' }}
-                        />
-                      </div>
+              {/* Work Tab */}
+              {tab === 'work' && (
+                <>
+                  <article className="profile-panel lead-overview-card" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px' }}>
+                    <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.1rem', fontWeight: 800 }}>{isClientProfile ? 'Work for this client' : 'Related work'}</h2>
+                    <p className="muted-small" style={{ margin: '0 0 1rem', fontSize: '0.76rem', color: 'var(--muted)' }}>
+                      {isClientProfile ? 'See what is in progress and what has been completed.' : `Every record from any custom work module linked to this ${relationshipName.toLowerCase()} appears here.`}
+                    </p>
+
+                    <div className="work-filters-bar" style={{ display: 'flex', gap: '0.5rem', margin: '0.75rem 0 1.25rem 0', flexWrap: 'wrap', alignItems: 'center' }}>
                       <input
                         type="text"
-                        placeholder="Notes (optional)..."
-                        value={uploadNotes}
-                        onChange={e => setUploadNotes(e.target.value)}
-                        style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.78rem' }}
+                        placeholder="Search work items..."
+                        value={workSearch}
+                        onChange={e => setWorkSearch(e.target.value)}
+                        style={{ flex: 1, minWidth: '140px', height: '36px', fontSize: '0.76rem', padding: '0 0.75rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text)' }}
                       />
-                      <button className="btn btn-primary" type="submit" disabled={uploading || (uploadFiles.length === 0 && !uploadFile)} style={{ alignSelf: 'flex-start' }}>
-                        {uploading ? 'Uploading...' : uploadFiles.length > 1 ? `Upload ${uploadFiles.length} Files` : 'Upload File'}
-                      </button>
-                    </form>
-                  </div>
+                      <CustomSelect
+                        value={workFilter}
+                        onChange={val => setWorkFilter(val)}
+                        options={[
+                          { value: 'all', label: 'All statuses' },
+                          { value: 'active', label: 'Active' },
+                          { value: 'completed', label: 'Completed' },
+                        ]}
+                        style={{ width: '140px' }}
+                      />
+                    </div>
 
-                  <div className="lead-overview-card">
-                    <h2>Attachments ({attachments.length})</h2>
-                    {attachments.length === 0 ? (
-                      <div className="empty-state">No attachments uploaded yet.</div>
+                    {filteredWorkItems.length === 0 ? (
+                      <p className="empty" style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontSize: '0.82rem' }}>No related work found.</p>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {attachments.map(file => (
-                          <article className="business-row" key={file._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="attachment-list work-lifecycle-list client-profile-work-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {filteredWorkItems.map(item => (
+                          <article
+                            key={item._id}
+                            className="work-lifecycle-card client-profile-work-card"
+                            style={{
+                              borderLeft: '4px solid var(--gold)',
+                              padding: '1rem',
+                              borderRadius: '10px',
+                              background: 'var(--panel-muted)',
+                              border: '1px solid var(--border)',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: '1rem'
+                            }}
+                          >
                             <div>
-                              <strong>{file.originalName}</strong>
-                              <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
-                                {file.category} · {Math.ceil((file.size || 0) / 1024)} KB · {new Date(file.createdAt).toLocaleDateString('en-IN')}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <Link to={`/work/${item.module?.key || 'task'}/${item._id}`} style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text)' }}>
+                                  {item.title}
+                                </Link>
+                                <span className="meta-tag" style={{ fontSize: '0.68rem', padding: '2px 6px', borderRadius: '4px', background: 'var(--panel)', border: '1px solid var(--border)', color: 'var(--sub)' }}>
+                                  {item.module?.name || 'Work'}
+                                </span>
+                                <span className="meta-tag" style={{ fontSize: '0.68rem', padding: '2px 6px', borderRadius: '4px', background: 'var(--panel)', border: '1px solid var(--border)', color: /completed|done|won/i.test(item.status) ? '#10b981' : '#3b82f6', fontWeight: 700 }}>
+                                  {item.status}
+                                </span>
                               </div>
+                              {item.deadline && (
+                                <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: '4px' }}>
+                                  Due {new Date(item.deadline).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                </div>
+                              )}
                             </div>
-                            <div style={{ display: 'flex', gap: '6px' }}>
-                              <button
-                                type="button"
-                                className="btn btn-secondary"
-                                style={{ padding: '2px 8px', fontSize: '0.72rem' }}
-                                onClick={() => downloadAuthenticatedFile(`/customers/${customer._id}/attachments/${file._id}/download`, file.originalName)}
-                              >
-                                Download
-                              </button>
-                              <button
-                                className="btn btn-danger"
-                                style={{ padding: '2px 8px', fontSize: '0.72rem' }}
-                                onClick={() => confirmDeleteAttachment(file._id)}
-                              >
-                                Delete
-                              </button>
-                            </div>
+                            <Link className="btn small" to={`/work/${item.module?.key || 'task'}/${item._id}`} style={{ fontSize: '0.74rem', padding: '4px 10px' }}>
+                              Open task
+                            </Link>
                           </article>
                         ))}
                       </div>
                     )}
-                  </div>
-                </section>
+                  </article>
+
+                  <article className="profile-panel lead-overview-card" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px' }}>
+                    <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.1rem', fontWeight: 800 }}>{isClientProfile ? 'Add work' : 'Create related work'}</h2>
+                    <p className="muted-small" style={{ margin: '0 0 1rem', fontSize: '0.76rem', color: 'var(--muted)' }}>Create a record in any module and keep it attached to this {relationshipName.toLowerCase()}.</p>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <CustomSelect
+                        value={selectedWorkType}
+                        onChange={val => setSelectedWorkType(val)}
+                        options={workTypeChoices.map(choice => ({ value: choice.key, label: choice.name }))}
+                        style={{ minWidth: '180px' }}
+                      />
+                      <button
+                        type="button"
+                        className="btn primary"
+                        onClick={() => {
+                          navigate(`/work/${selectedWorkType}?prefill_customer=${customer._id}&prefill_title=${encodeURIComponent(customer.name + ' - ' + selectedWorkType)}`);
+                        }}
+                      >
+                        Open new work form
+                      </button>
+                    </div>
+                  </article>
+                </>
               )}
 
+              {/* History / Activity Tab */}
+              {tab === 'activity' && (
+                <>
+                  <article className="profile-panel lead-overview-card" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px' }}>
+                    <h2 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 800 }}>{isClientProfile ? 'Add an update' : 'Activity timeline'}</h2>
+                    <form id="activityForm" onSubmit={handleLogActivity}>
+                      <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', overflowX: 'auto' }}>
+                        {[
+                          { key: 'note', label: 'Note' },
+                          { key: 'call', label: 'Call' },
+                          { key: 'email', label: 'Email' },
+                          { key: 'whatsapp', label: 'WhatsApp' },
+                          { key: 'meeting_client', label: 'Client Meeting' },
+                          { key: 'meeting_internal', label: 'Team Meeting' },
+                          { key: 'task', label: 'Task' },
+                        ].map(type => (
+                          <button
+                            key={type.key}
+                            type="button"
+                            onClick={() => setActivityType(type.key)}
+                            style={{
+                              background: activityType === type.key ? 'var(--hover)' : 'transparent',
+                              color: activityType === type.key ? 'var(--gold)' : 'var(--sub)',
+                              border: 'none',
+                              padding: '0.45rem 0.85rem',
+                              borderRadius: '6px',
+                              fontSize: '0.76rem',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {type.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <textarea
+                        id="activityNoteArea"
+                        rows={4}
+                        placeholder={
+                          activityType === 'call' ? 'Log call outcome details...' :
+                          activityType === 'email' ? 'Record email communication details...' :
+                          activityType === 'whatsapp' ? 'Log WhatsApp message summary...' :
+                          MEETING_TYPES.includes(activityType) ? 'Summarize meeting discussions and items...' :
+                          activityType === 'task' ? 'Assign a task/to-do item...' : 'Write a note...'
+                        }
+                        value={activityNote}
+                        onChange={e => setActivityNote(e.target.value)}
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)', fontSize: '0.82rem', marginBottom: '1rem' }}
+                        required
+                      />
+
+                      {(activityType === 'call' || MEETING_TYPES.includes(activityType)) && (
+                        <div style={{ marginBottom: '1rem' }}>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sub)', marginBottom: '0.35rem' }}>
+                            {activityType === 'call' ? 'Call recording link (optional)' : 'Meeting / recording link (optional)'}
+                          </label>
+                          <input
+                            type="url"
+                            placeholder="https://meet.google.com/... or recording URL"
+                            value={activityRecordingUrl}
+                            onChange={e => setActivityRecordingUrl(e.target.value)}
+                            style={{ width: '100%', padding: '0.65rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)', fontSize: '0.82rem' }}
+                          />
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, minWidth: '160px' }}>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sub)', marginBottom: '0.35rem' }}>
+                            {isClientProfile ? 'Next planned contact' : 'Next Follow-up Date'}
+                          </label>
+                          <DatePicker
+                            value={followUpDate}
+                            onChange={val => setFollowUpDate(val)}
+                            style={{ width: '100%', height: '38px' }}
+                          />
+                        </div>
+                        <div style={{ width: '140px' }}>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: 'var(--sub)', marginBottom: '0.35rem' }}>Time</label>
+                          <CustomSelect
+                            value={followUpTime}
+                            onChange={val => setFollowUpTime(val)}
+                            options={[
+                              { value: '09:00', label: '09:00 AM' },
+                              { value: '10:00', label: '10:00 AM' },
+                              { value: '11:00', label: '11:00 AM' },
+                              { value: '12:00', label: '12:00 PM' },
+                              { value: '14:00', label: '02:00 PM' },
+                              { value: '15:00', label: '03:00 PM' },
+                              { value: '16:00', label: '04:00 PM' },
+                              { value: '17:00', label: '05:00 PM' },
+                              { value: '18:00', label: '06:00 PM' },
+                            ]}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Quick reschedule:</span>
+                          <button type="button" className="btn small" style={{ fontSize: '0.72rem', padding: '2px 8px' }} onClick={() => void handleQuickFollowUp(1)}>+1 Day</button>
+                          <button type="button" className="btn small" style={{ fontSize: '0.72rem', padding: '2px 8px' }} onClick={() => void handleQuickFollowUp(3)}>+3 Days</button>
+                          <button type="button" className="btn small" style={{ fontSize: '0.72rem', padding: '2px 8px' }} onClick={() => void handleQuickFollowUp(7)}>+1 Week</button>
+                        </div>
+                        <button className="btn primary" type="submit" disabled={submittingActivity || !activityNote.trim()}>
+                          {submittingActivity ? 'Saving…' : 'Save Activity'}
+                        </button>
+                      </div>
+                    </form>
+                  </article>
+
+                  <article className="profile-panel lead-overview-card" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px' }}>
+                    <h2 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 800 }}>{isClientProfile ? 'All history' : 'History timeline'}</h2>
+                    <div className="timeline-filters-bar" style={{ display: 'flex', gap: '0.5rem', margin: '0.75rem 0 1rem 0', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        placeholder="Search history..."
+                        value={timelineSearch}
+                        onChange={e => setTimelineSearch(e.target.value)}
+                        style={{ flex: 1, minWidth: '140px', height: '36px', fontSize: '0.76rem', padding: '0 0.75rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text)' }}
+                      />
+                      <CustomSelect
+                        value={timelineFilter}
+                        onChange={val => setTimelineFilter(val)}
+                        options={[
+                          { value: 'all', label: 'All types' },
+                          { value: 'marker-note', label: 'Notes' },
+                          { value: 'marker-work', label: 'Work updates' },
+                          { value: 'marker-call', label: 'Calls' },
+                          { value: 'marker-email', label: 'Emails' },
+                          { value: 'marker-meeting', label: 'Meetings' },
+                          { value: 'marker-whatsapp', label: 'WhatsApp' },
+                          { value: 'marker-task', label: 'Tasks' },
+                          { value: 'marker-stage', label: 'Stage changes' },
+                          { value: 'marker-label', label: 'Label changes' },
+                        ]}
+                        style={{ width: '140px' }}
+                      />
+                    </div>
+
+                    <div className="timeline" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {filteredActivities.length === 0 ? (
+                        <p className="empty" style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontSize: '0.82rem' }}>No history yet.</p>
+                      ) : (
+                        filteredActivities.map(act => {
+                          const markerClass = act.type === 'call' ? 'marker-call' :
+                            act.type === 'email' ? 'marker-email' :
+                            MEETING_TYPES.includes(act.type) ? 'marker-meeting' :
+                            act.type === 'whatsapp' ? 'marker-whatsapp' :
+                            act.type === 'task' ? 'marker-task' :
+                            act.type === 'stage_changed' ? 'marker-stage' :
+                            act.type === 'label_changed' ? 'marker-label' : 'marker-note';
+
+                          return (
+                            <div key={act._id} className="timeline-item" style={{ display: 'flex', gap: '12px', padding: '12px 14px', borderRadius: '8px', background: 'var(--panel-muted)', border: '1px solid var(--border)' }}>
+                              <div className={`timeline-marker ${markerClass}`} style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'grid', placeItems: 'center', flexShrink: 0, fontSize: '0.72rem', fontWeight: 800 }}>
+                                {act.type === 'call' ? '📞' : act.type === 'email' ? '✉️' : MEETING_TYPES.includes(act.type) ? '📅' : act.type === 'whatsapp' ? '💬' : act.type === 'task' ? '✓' : '📝'}
+                              </div>
+                              <div className="timeline-content" style={{ flex: 1, minWidth: 0 }}>
+                                <div className="timeline-meta" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text)' }}>
+                                    {(ACTIVITY_TYPE_LABELS[act.type] || act.type).toUpperCase()} <small style={{ fontWeight: 400, color: 'var(--muted)', marginLeft: '6px' }}>by {act.user ? act.user.name : 'System'}</small>
+                                  </span>
+                                  <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{new Date(act.createdAt).toLocaleString('en-IN')}</small>
+                                </div>
+                                <p style={{ margin: '0', fontSize: '0.82rem', color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{act.note}</p>
+                                {act.callRecordingUrl && (
+                                  <a
+                                    href={act.callRecordingUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ display: 'inline-block', marginTop: '6px', fontSize: '0.78rem', fontWeight: 700, color: 'var(--gold)', textDecoration: 'none' }}
+                                  >
+                                    🎙️ Call / meeting recording ↗
+                                  </a>
+                                )}
+                                {act.nextFollowUpAt && (
+                                  <small style={{ display: 'block', marginTop: '4px', color: 'var(--gold)', fontWeight: 700 }}>
+                                    Next Follow-up: {new Date(act.nextFollowUpAt).toLocaleString('en-IN')}
+                                  </small>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </article>
+                </>
+              )}
+
+              {/* Files Tab */}
+              {tab === 'files' && (
+                <>
+                  <article className="profile-panel lead-overview-card" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px' }}>
+                    <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.1rem', fontWeight: 800 }}>Files</h2>
+                    <p className="muted-small" style={{ margin: '0 0 1rem', fontSize: '0.76rem', color: 'var(--muted)' }}>
+                      Store documents, confirmations, requests, receipts, contracts, and any other files related to this {relationshipName.toLowerCase()}.
+                    </p>
+                    <form onSubmit={handleUploadAttachment} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <CustomSelect
+                        value={uploadCategory}
+                        onChange={val => setUploadCategory(val)}
+                        options={[
+                          { value: 'proposal', label: 'Proposal' },
+                          { value: 'contract', label: 'Contract' },
+                          { value: 'invoice', label: 'Invoice' },
+                          { value: 'brief', label: 'Brief' },
+                          { value: 'screenshot', label: 'Screenshot' },
+                          { value: 'other', label: 'Other' },
+                        ]}
+                        style={{ maxWidth: '200px' }}
+                      />
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.txt,.csv"
+                        onChange={e => setUploadFiles(Array.from(e.target.files || []))}
+                        style={{ fontSize: '0.78rem' }}
+                      />
+                      <textarea
+                        rows={2}
+                        placeholder="Notes (optional)..."
+                        value={uploadNotes}
+                        onChange={e => setUploadNotes(e.target.value)}
+                        style={{ padding: '0.65rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)', fontSize: '0.82rem' }}
+                      />
+                      <button className="btn primary" type="submit" disabled={uploading || uploadFiles.length === 0} style={{ alignSelf: 'flex-start' }}>
+                        {uploading ? 'Uploading...' : uploadFiles.length > 1 ? `Upload ${uploadFiles.length} files` : 'Upload file'}
+                      </button>
+                    </form>
+                  </article>
+
+                  <article className="profile-panel lead-overview-card" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px' }}>
+                    <h2 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 800 }}>Uploaded files ({attachments.length})</h2>
+                    {attachments.length === 0 ? (
+                      <p className="empty" style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontSize: '0.82rem' }}>No attachments uploaded yet.</p>
+                    ) : (
+                      <div className="attachment-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {attachments.map(att => (
+                          <div key={att._id} className="attachment-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: 'var(--panel-muted)', border: '1px solid var(--border)' }}>
+                            <div>
+                              <strong style={{ display: 'block', fontSize: '0.84rem', color: 'var(--text)' }}>{att.originalName}</strong>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
+                                {att.category} · {Math.ceil((att.size || 0) / 1024)} KB · {att.uploadedBy ? att.uploadedBy.name : 'System'}
+                              </span>
+                              {att.notes && <small style={{ display: 'block', fontSize: '0.72rem', color: 'var(--sub)', marginTop: '2px' }}>{att.notes}</small>}
+                            </div>
+                            <div className="attachment-actions" style={{ display: 'flex', gap: '6px' }}>
+                              <button
+                                type="button"
+                                className="btn small"
+                                style={{ fontSize: '0.72rem', padding: '2px 8px' }}
+                                onClick={() => downloadAuthenticatedFile(`/customers/${customer._id}/attachments/${att._id}/download`, att.originalName)}
+                              >
+                                Download
+                              </button>
+                              {(isManager || String(att.uploadedBy?._id) === String(user?._id)) && (
+                                <button
+                                  type="button"
+                                  className="btn small danger"
+                                  style={{ fontSize: '0.72rem', padding: '2px 8px' }}
+                                  onClick={() => confirmDeleteAttachment(att._id)}
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                </>
+              )}
+
+              {/* Details Tab (for leads) */}
               {tab === 'details' && (
-                <section className="lead-tab-pane">
-                  <div className="lead-overview-card">
-                    <h2>Additional details</h2>
-                    <dl className="sidebar-quick-dl">
-                      {fields.map(field => (
-                        <div key={field._id}><dt>{field.label}</dt><dd>{String(customer.customData?.[field.key] ?? '—')}</dd></div>
-                      ))}
-                      <div><dt>UTM source</dt><dd>{customer.utmSource || '—'}</dd></div>
-                      <div><dt>UTM medium</dt><dd>{customer.utmMedium || '—'}</dd></div>
-                      <div><dt>UTM campaign</dt><dd>{customer.utmCampaign || '—'}</dd></div>
-                    </dl>
-                  </div>
-                </section>
+                <article className="profile-panel lead-overview-card" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px' }}>
+                  <h2 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 800 }}>Additional details</h2>
+                  <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', margin: 0 }}>
+                    {fields.map(field => (
+                      <div key={field._id}>
+                        <dt style={{ fontSize: '0.72rem', color: 'var(--muted)', fontWeight: 700 }}>{field.label}</dt>
+                        <dd style={{ margin: '2px 0 0', fontSize: '0.85rem', color: 'var(--text)', fontWeight: 600 }}>{String(customer.customData?.[field.key] ?? '—')}</dd>
+                      </div>
+                    ))}
+                    <div>
+                      <dt style={{ fontSize: '0.72rem', color: 'var(--muted)', fontWeight: 700 }}>UTM source</dt>
+                      <dd style={{ margin: '2px 0 0', fontSize: '0.85rem', color: 'var(--text)' }}>{customer.utmSource || '—'}</dd>
+                    </div>
+                    <div>
+                      <dt style={{ fontSize: '0.72rem', color: 'var(--muted)', fontWeight: 700 }}>UTM medium</dt>
+                      <dd style={{ margin: '2px 0 0', fontSize: '0.85rem', color: 'var(--text)' }}>{customer.utmMedium || '—'}</dd>
+                    </div>
+                    <div>
+                      <dt style={{ fontSize: '0.72rem', color: 'var(--muted)', fontWeight: 700 }}>UTM campaign</dt>
+                      <dd style={{ margin: '2px 0 0', fontSize: '0.85rem', color: 'var(--text)' }}>{customer.utmCampaign || '—'}</dd>
+                    </div>
+                  </dl>
+                </article>
               )}
             </>
           )}
-        </main>
+        </div>
 
-        {/* Side column */}
-        <aside className="lead-side-column">
-          <section className="lead-controls-card">
-            <div className="lead-quick-card">
-              <h3>Quick summary</h3>
-              <dl>
-                <dt>Phone</dt><dd>{customer.phone || '—'}</dd>
-                <dt>Email</dt><dd>{customer.email || '—'}</dd>
-                <dt>Source</dt><dd>{customer.source || 'Direct'}</dd>
-                <dt>Value</dt><dd>₹{customer.value.toLocaleString('en-IN')}</dd>
-                <dt>Created</dt><dd>{new Date(customer.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</dd>
-              </dl>
-            </div>
+        {/* Right Column: Settings Card */}
+        <aside className="lead-side-column" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <article className="profile-panel lead-controls-card" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03)' }}>
+            <h2 style={{ margin: '0 0 1.25rem', fontSize: '1.1rem', fontWeight: 800 }}>
+              {isClientProfile ? 'Relationship settings' : `Manage ${relationshipName.toLowerCase()}`}
+            </h2>
 
-            <div className="lead-stage-card">
-              <h3>{crmTerms.leadSingular} stage</h3>
-              <div className="stack-form">
-                <select value={customer.stage?._id || ''} onChange={async event => {
-                  const next = event.target.value;
-                  try {
-                    await customersApi.updateStage(id!, next);
-                    setSuccess('Stage updated.');
-                    await load(id!);
-                  } catch (caught) {
-                    setError(caught instanceof Error ? caught.message : 'Update failed');
-                  }
-                }}>
-                  {stages.filter(stage => stage.isActive || stage._id === customer.stage?._id).map(stage => <option key={stage._id} value={stage._id}>{stage.name}</option>)}
-                </select>
+            {/* Stage / Status Section */}
+            <section className="lead-stage-card" style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: '0 0 0.4rem', fontSize: '0.72rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
+                {isClientProfile ? 'Client status' : 'Lead stage'}
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <CustomSelect
+                  value={selectedStageId}
+                  onChange={val => setSelectedStageId(val)}
+                  options={stages.filter(s => !isClientProfile || s.isWon).map(s => ({ value: s._id, label: s.name }))}
+                />
+                <button type="button" className="btn primary" onClick={handleUpdateStage} style={{ height: '38px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700 }}>
+                  Update {isClientProfile ? 'status' : 'stage'}
+                </button>
               </div>
-            </div>
+            </section>
 
+            {/* Owner Section */}
             {isManager && (
-              <div className="lead-owner-card">
-                <h3>Assigned owner</h3>
-                <div className="stack-form">
-                  <select value={customer.assignedTo?._id || ''} onChange={async event => {
-                    try {
-                      await customersApi.transferLead(id!, event.target.value || null);
-                      setSuccess('Owner updated.');
-                      await load(id!);
-                    } catch (caught) {
-                      setError(caught instanceof Error ? caught.message : 'Update failed');
-                    }
-                  }}>
-                    <option value="">Unassigned</option>
-                    {users.map(u => <option key={u._id} value={u._id}>{u.name}</option>)}
-                  </select>
+              <section className="lead-owner-card" style={{ marginBottom: '1.5rem' }}>
+                <h3 style={{ margin: '0 0 0.4rem', fontSize: '0.72rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
+                  Owner
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <CustomSelect
+                    value={selectedOwnerId}
+                    onChange={val => setSelectedOwnerId(val)}
+                    placeholder="Unassigned"
+                    options={[
+                      { value: '', label: 'Unassigned' },
+                      ...users.map(u => ({ value: u._id, label: `${u.name}${u.role ? ` (${u.role})` : ''}` }))
+                    ]}
+                  />
+                  <button type="button" className="btn" onClick={handleUpdateOwner} style={{ height: '38px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700 }}>
+                    Update owner
+                  </button>
                 </div>
-              </div>
+              </section>
             )}
 
-            <div className="lead-followup-panel">
-              <h3>Next follow-up</h3>
-              {customer.nextFollowUpAt ? (
-                <div className="lead-followup-summary">
-                  <strong>{new Date(customer.nextFollowUpAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</strong>
-                  <small className="lead-next-date">{new Date(customer.nextFollowUpAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</small>
-                  <span className="lead-scheduled-badge">Scheduled</span>
-                </div>
-              ) : (
-                <div className="lead-followup-summary">
-                  <span className="eyebrow">No follow-up scheduled</span>
-                </div>
-              )}
-            </div>
-          </section>
+            {/* More details toggle */}
+            <details className="lead-extra-details" style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px dashed var(--border)' }}>
+              <summary style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--sub)', cursor: 'pointer', marginBottom: '0.75rem' }}>
+                More {relationshipName.toLowerCase()} data
+              </summary>
+              <h4 style={{ margin: '0.5rem 0', fontSize: '0.72rem', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 700 }}>Custom data</h4>
+              <dl style={{ margin: '0 0 1rem', fontSize: '0.78rem' }}>
+                {fields.map(f => (
+                  <div key={f._id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
+                    <dt style={{ color: 'var(--muted)' }}>{f.label}</dt>
+                    <dd style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>{String(customer.customData?.[f.key] ?? 'Not set')}</dd>
+                  </div>
+                ))}
+              </dl>
+
+              <h4 style={{ margin: '0.5rem 0', fontSize: '0.72rem', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 700 }}>
+                {isClientProfile ? 'Conversion details' : 'Source details'}
+              </h4>
+              <dl style={{ margin: 0, fontSize: '0.78rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><dt style={{ color: 'var(--muted)' }}>UTM Source</dt><dd style={{ margin: 0 }}>{customer.utmSource || 'N/A'}</dd></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><dt style={{ color: 'var(--muted)' }}>UTM Medium</dt><dd style={{ margin: 0 }}>{customer.utmMedium || 'N/A'}</dd></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><dt style={{ color: 'var(--muted)' }}>UTM Campaign</dt><dd style={{ margin: 0 }}>{customer.utmCampaign || 'N/A'}</dd></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><dt style={{ color: 'var(--muted)' }}>UTM Content</dt><dd style={{ margin: 0 }}>{customer.utmContent || 'N/A'}</dd></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><dt style={{ color: 'var(--muted)' }}>UTM Term</dt><dd style={{ margin: 0 }}>{customer.utmTerm || 'N/A'}</dd></div>
+              </dl>
+            </details>
+          </article>
         </aside>
       </div>
 
       <ConfirmDialog
         open={confirmAction !== null}
-        title={confirmAction?.kind === 'deleteAttachment' ? 'Delete Attachment' : `Delete this ${crmTerms.leadSingular.toLowerCase()}?`}
+        title={confirmAction?.kind === 'deleteAttachment' ? 'Delete Attachment' : `Delete this ${relationshipName.toLowerCase()}?`}
         message={confirmAction?.kind === 'deleteAttachment'
           ? 'Delete this attachment permanently?'
-          : `This will permanently delete the ${crmTerms.leadSingular.toLowerCase()} and all of its data. This action cannot be undone.`}
+          : `This will permanently delete the ${relationshipName.toLowerCase()} and all of its data. This action cannot be undone.`}
         confirmText="Delete"
         variant="danger"
         onConfirm={() => void (confirmAction?.kind === 'deleteAttachment' ? handleConfirmDeleteAttachment() : handleConfirmDelete())}

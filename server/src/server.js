@@ -3,11 +3,18 @@
 // Coexists: mounts JSON API routes (/api/*) and serves the React SPA build.
 require('dotenv').config();
 
+// Fail closed: a JWT signing secret is mandatory in EVERY environment. If
+// neither JWT_SECRET nor the SESSION_SECRET fallback is set, refuse to boot
+// rather than silently sign auth tokens with a hardcoded literal.
+const effectiveJwtSecret = String(process.env.JWT_SECRET || '').trim() || String(process.env.SESSION_SECRET || '').trim();
+if (!effectiveJwtSecret) {
+  console.error('CRITICAL ERROR: JWT_SECRET (or SESSION_SECRET as fallback) must be configured. Refusing to boot without a signing secret.');
+  process.exit(1);
+}
+
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
 
 const connectDb = require('./config/db');
 
@@ -21,7 +28,7 @@ const apiWork = require('./api/work');
 const apiTeam = require('./api/team');
 const apiSettings = require('./api/settings');
 const apiCompanies = require('./api/companies');
-const apiTasks = require('./api/tasks');
+const apiFollowUps = require('./api/follow-ups');
 const apiNotifications = require('./api/notifications');
 const apiMail = require('./api/mail');
 const apiIntegrations = require('./api/integrations');
@@ -61,12 +68,13 @@ require('./models/SavedReport');
 require('./models/SavedView');
 require('./models/SyncLog');
 require('./models/User');
-require('./models/WorkItem');
 require('./models/WorkType');
 
 const { ensureCrmIndexes, syncWorkTypeDefaults, syncWorkspaceSeedData } = require('./services/defaults');
 
 const app = express();
+const securityHeaders = require('./middleware/security');
+app.use(securityHeaders);
 app.use('/api', require('./api/middleware/responsePrivacy').responsePrivacy);
 const port = Number(process.env.PORT) || 5000;
 
@@ -77,7 +85,7 @@ app.use(cors({
 }));
 
 if (process.env.NODE_ENV === 'production') {
-  const required = ['MONGO_URI', 'SESSION_SECRET', 'CREDENTIALS_ENCRYPTION_KEY', 'APP_BASE_URL'];
+  const required = ['MONGO_URI', 'SESSION_SECRET', 'CREDENTIALS_ENCRYPTION_KEY', 'APP_BASE_URL', 'JWT_SECRET'];
   const missing = required.filter(name => !String(process.env[name] || '').trim());
   if (missing.length) {
     console.error(`CRITICAL ERROR: production configuration is invalid (missing ${missing.join(', ')}).`);
@@ -90,29 +98,6 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.json({ limit: '10mb' }));
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
-
-const sessionStore = MongoStore.create({
-  mongoUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/vande-agency-crm',
-  collectionName: 'sessions',
-  mongoOptions: { serverSelectionTimeoutMS: 5000 },
-});
-sessionStore.on('error', (error) => {
-  console.error('Session store connection failed:', error.message);
-  process.exit(1);
-});
-
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'dev-session-secret',
-  resave: false,
-  saveUninitialized: false,
-  store: sessionStore,
-  cookie: {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 1000 * 60 * 60 * 24 * 7,
-  },
-}));
 
 // ============================================
 // API ROUTES (JSON)
@@ -130,7 +115,7 @@ app.use('/api/work', apiWork);
 app.use('/api/team', apiTeam);
 app.use('/api/settings', apiSettings);
 app.use('/api/companies', apiCompanies);
-app.use('/api/tasks', apiTasks);
+app.use('/api/follow-ups', apiFollowUps);
 app.use('/api/notifications', apiNotifications);
 app.use('/api/mail', apiMail);
 app.use('/api/integrations', apiIntegrations);
@@ -173,9 +158,11 @@ async function startServer() {
   await syncWorkTypeDefaults();
   await syncWorkspaceSeedData();
   const { startIntegrationScheduler } = require('./services/integrationSync');
+  const { startDeadlineScheduler } = require('./services/deadlineAlerts');
   startIntegrationScheduler();
+  startDeadlineScheduler();
   app.listen(port, '0.0.0.0', () => {
-    console.log(`Vande CRM API running on http://0.0.0.0:${port}`);
+    console.log(`CRM API running on http://0.0.0.0:${port}`);
     console.log(`API available at http://0.0.0.0:${port}/api`);
   });
 }

@@ -16,6 +16,10 @@ const {
   canAssignRole,
   canManageUser,
 } = require('../config/roles');
+const getRateLimiter = require('./middleware/rateLimiter');
+
+const teamExportLimiter = getRateLimiter(30, 60 * 1000);
+const teamImportLimiter = getRateLimiter(10, 60 * 1000);
 
 const roleOptions = Object.keys(ROLE_DEFINITIONS);
 const roleAliases = {
@@ -77,7 +81,9 @@ router.get('/', async (req, res, next) => {
     const activeWorkspace = req.activeCompanyId ? String(req.activeCompanyId) : null;
 
     const [allUsers, companies, customRoles, workTypes, leadFields] = await Promise.all([
-      User.find({ organization }).populate('customRole').sort({ role: 1, name: 1 }).lean(),
+      User.find({ organization })
+        .select('-passwordHash -passwordResetTokenHash -passwordResetExpiresAt')
+        .populate('customRole').sort({ role: 1, name: 1 }).lean(),
       ClientCompany.find({ organization }).populate('assignedUsers').sort({ name: 1 }).lean(),
       CustomRole.find({ organization }).sort({ name: 1 }).lean(),
       activeWorkspace
@@ -179,7 +185,7 @@ router.post('/', async (req, res, next) => {
       message: `Team member "${user.name}" created with role ${user.role}.`,
     });
 
-    const populated = await User.findById(user._id).populate('customRole').lean();
+    const populated = await User.findById(user._id).populate('customRole').select('-passwordHash -passwordResetTokenHash -passwordResetExpiresAt').lean();
     res.json({ ok: true, data: populated });
   } catch (error) {
     next(error);
@@ -254,7 +260,7 @@ router.put('/:id', async (req, res, next) => {
       message: `Team member "${user.name}" updated.`,
     });
 
-    const populated = await User.findById(user._id).populate('customRole').lean();
+    const populated = await User.findById(user._id).populate('customRole').select('-passwordHash -passwordResetTokenHash -passwordResetExpiresAt').lean();
     res.json({ ok: true, data: populated });
   } catch (error) {
     next(error);
@@ -347,18 +353,18 @@ router.get('/template.csv', async (req, res, next) => {
   try {
     const headers = ['name', 'email', 'password', 'role', 'customRole', 'permissionTemplate', 'isActive', 'assignedCompanies'];
     const rows = [{
-      name: 'Priya Sharma',
-      email: 'priya@example.com',
+      name: 'Jane Doe',
+      email: 'agent@example.com',
       password: 'ChangeMe123',
       role: 'Agent',
       customRole: '',
       permissionTemplate: '',
       isActive: 'yes',
-      assignedCompanies: 'Vande Digital Academy|Shopify Fashion Store'
+      assignedCompanies: 'Acme Inc|Example Corp'
     }];
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="team-import-template.csv"');
+    res.setHeader('Content-Disposition', 'attachment; filename="crm-team-import-template.csv"');
     res.send(toCsv(headers, rows));
   } catch (error) {
     next(error);
@@ -366,7 +372,7 @@ router.get('/template.csv', async (req, res, next) => {
 });
 
 // GET /api/team/export.csv — Export all team members
-router.get('/export.csv', async (req, res, next) => {
+router.get('/export.csv', teamExportLimiter, async (req, res, next) => {
   try {
     const organization = req.user.organization._id;
     const [users, companies] = await Promise.all([
@@ -393,7 +399,7 @@ router.get('/export.csv', async (req, res, next) => {
     });
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="vande-crm-team.csv"');
+    res.setHeader('Content-Disposition', 'attachment; filename="crm-team.csv"');
     res.send(toCsv(headers, rows));
   } catch (error) {
     next(error);
@@ -401,7 +407,7 @@ router.get('/export.csv', async (req, res, next) => {
 });
 
 // POST /api/team/import — Import team members from CSV
-router.post('/import', async (req, res, next) => {
+router.post('/import', teamImportLimiter, async (req, res, next) => {
   try {
     const organization = req.user.organization._id;
     const csvText = String(req.body.csvData || '').trim();

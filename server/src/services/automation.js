@@ -1,6 +1,17 @@
 const AutomationRule = require('../models/AutomationRule');
 const WorkType = require('../models/WorkType');
 const CustomRecord = require('../models/CustomRecord');
+const User = require('../models/User');
+
+// Pick a real User to stamp as createdBy when an automation creates a record
+// from an unassigned lead. Never fall back to a non-User ObjectId (e.g. rule._id).
+async function resolveCreatedBy({ organization, assignedTo }) {
+  if (assignedTo) return assignedTo;
+  const admin = await User.findOne({ organization, role: 'admin', isActive: { $ne: false } }).select('_id').lean();
+  if (admin) return admin._id;
+  const anyUser = await User.findOne({ organization, isActive: { $ne: false } }).select('_id').lean();
+  return anyUser ? anyUser._id : null;
+}
 
 async function runLeadAutomation({ customer, trigger, previousStage = null }) {
   const rules = await AutomationRule.find({ organization: customer.organization, clientCompany: customer.clientCompany, entityType: { $in: ['lead', null] }, trigger, isActive: true });
@@ -26,7 +37,7 @@ async function runLeadAutomation({ customer, trigger, previousStage = null }) {
           priority: 'medium',
           deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
           customer: customer._id,
-          createdBy: customer.assignedTo || customer.createdBy || rule._id
+          createdBy: await resolveCreatedBy({ organization: customer.organization, assignedTo: customer.assignedTo })
         });
       }
     }

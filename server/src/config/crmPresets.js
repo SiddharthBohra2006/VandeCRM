@@ -29,7 +29,7 @@ module.exports = {
       { name: 'Won', isWon: true },
       { name: 'Lost', isLost: true }
     ],
-    labels: ['HP', 'Follow up', 'Decision maker'],
+    labels: ['HP', 'Follow up'],
     fields: [['Product interest', 'text'], ['Budget range', 'text'], ['Next follow-up', 'date']]
   },
   commerce: {

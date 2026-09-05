@@ -12,6 +12,7 @@ export default function CustomerImportResultsPage() {
     totalRows?: number;
     warnings?: string[];
     fieldsCreated?: number;
+    scope?: string;
   };
 
   const imported = state.imported || 0;
@@ -20,6 +21,9 @@ export default function CustomerImportResultsPage() {
   const totalRows = state.totalRows || (imported + updated + skipped);
   const warnings = state.warnings || [];
   const fieldsCreated = state.fieldsCreated || 0;
+  const isClientScope = state.scope === 'clients';
+  const directoryPath = isClientScope ? '/clients' : '/customers';
+  const importHref = `/customers/import${isClientScope ? '?scope=client' : ''}`;
 
   return (
     <div className="page-container">
@@ -30,7 +34,7 @@ export default function CustomerImportResultsPage() {
           <p className="page-subtitle">Summary of the import completed.</p>
         </div>
         <div className="actions">
-          <Link className="btn primary" to="/customers">View {crmTerms.recordPlural} Directory</Link>
+          <Link className="btn primary" to={directoryPath}>View {crmTerms.recordPlural} Directory</Link>
         </div>
       </section>
 
@@ -89,8 +93,8 @@ export default function CustomerImportResultsPage() {
         </div>
         <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.75rem' }}>
           <Link className="btn primary" to="/">Go to Dashboard</Link>
-          <Link className="btn secondary outline" to="/customers">View {crmTerms.recordPlural} Directory</Link>
-          <Link className="btn secondary outline" to="/customers/import">Import Another CSV</Link>
+          <Link className="btn secondary outline" to={directoryPath}>View {crmTerms.recordPlural} Directory</Link>
+          <Link className="btn secondary outline" to={importHref}>Import Another CSV</Link>
         </div>
       </section>
     </div>

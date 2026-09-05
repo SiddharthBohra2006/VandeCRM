@@ -1,5 +1,16 @@
 const mongoose = require('mongoose');
 
+const workflowEventSchema = new mongoose.Schema({
+  event: { type: String, enum: ['created', 'assigned', 'forwarded', 'status', 'rejected', 'completed'], required: true },
+  actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  fromUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  toUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  fromStatus: { type: String, default: '' },
+  toStatus: { type: String, default: '' },
+  note: { type: String, default: '', trim: true, maxlength: 500 },
+  at: { type: Date, default: Date.now }
+});
+
 const customRecordSchema = new mongoose.Schema({
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
   workspace: { type: mongoose.Schema.Types.ObjectId, ref: 'ClientCompany', required: true, index: true },
@@ -17,8 +28,9 @@ const customRecordSchema = new mongoose.Schema({
   customFields: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', default: null, index: true },
   parentRecord: { type: mongoose.Schema.Types.ObjectId, ref: 'CustomRecord', default: null, index: true },
+  workflowHistory: { type: [workflowEventSchema], default: [] },
   relatedRecords: [{ record: { type: mongoose.Schema.Types.ObjectId, ref: 'CustomRecord', required: true }, relation: { type: String, default: 'related to', trim: true } }],
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
 }, { timestamps: true });
 
 customRecordSchema.index({ organization: 1, workspace: 1, module: 1, status: 1, updatedAt: -1 });

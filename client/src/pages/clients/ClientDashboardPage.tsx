@@ -9,6 +9,8 @@ import {
   ClientPortalCustomer,
   ClientDashboardMetrics,
 } from '../../api/clientDashboard';
+import CustomSelect from '../../components/CustomSelect';
+import DatePicker from '../../components/DatePicker';
 
 export default function ClientDashboardPage() {
   const { user, activeCompany, crmTerms } = useAuth();
@@ -129,15 +131,12 @@ export default function ClientDashboardPage() {
             </>
           )}
           {companies.length > 1 && (
-            <select
+            <CustomSelect
               className="client-dashboard-company-filter"
               value={filters.company}
-              onChange={e => handleCompanySwitch(e.target.value)}
-            >
-              {companies.map(item => (
-                <option key={item._id} value={item._id}>{item.name}</option>
-              ))}
-            </select>
+              onChange={val => handleCompanySwitch(val)}
+              options={companies.map(item => ({ value: item._id, label: item.name }))}
+            />
           )}
         </div>
       </section>
@@ -146,26 +145,27 @@ export default function ClientDashboardPage() {
         <>
           <form className="filter-bar client-dashboard-filter-bar" onSubmit={handleDateFilter} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <input type="hidden" name="company" value={company._id} />
-            <input
-              type="date"
+            <DatePicker
+              placeholder="From date"
               value={filters.dateFrom}
-              onChange={e => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+              onChange={val => setFilters(prev => ({ ...prev, dateFrom: val }))}
             />
-            <input
-              type="date"
+            <DatePicker
+              placeholder="To date"
               value={filters.dateTo}
-              onChange={e => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+              onChange={val => setFilters(prev => ({ ...prev, dateTo: val }))}
             />
             <button type="submit" className="btn">Apply</button>
             <button type="button" className="btn" onClick={handleResetDates}>Reset Dates</button>
           </form>
           <form className="filter-bar client-dashboard-filter-bar" onSubmit={handleDownloadMonthly} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <input type="hidden" name="company" value={company._id} />
-            <input
+            <DatePicker
               className="client-dashboard-month-input"
-              type="month"
+              mode="month"
+              placeholder="Select month"
               value={monthInput}
-              onChange={e => setMonthInput(e.target.value)}
+              onChange={val => setMonthInput(val)}
             />
             <button className="btn primary" type="submit">Download Monthly Package</button>
           </form>

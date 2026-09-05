@@ -115,6 +115,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, applyTheme]);
 
+  // White-label the browser tab title per tenant.
+  useEffect(() => {
+    document.title = user?.organization?.name ? `${user.organization.name} CRM` : 'CRM';
+  }, [user]);
+
   const loadUser = useCallback(async () => {
     setAuthBootError(false);
     try {

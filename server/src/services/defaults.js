@@ -45,8 +45,7 @@ const defaultLabels = [
 const defaultFields = [
   { label: 'Service Interested', key: 'service_interested', type: 'select', options: ['Marketing', 'Website', 'SEO', 'Branding', 'Automation'], order: 10 },
   { label: 'Budget Range', key: 'budget_range', type: 'select', options: ['Under 25k', '25k-50k', '50k-1L', '1L+'], order: 20 },
-  { label: 'Decision Maker', key: 'decision_maker', type: 'checkbox', order: 30 },
-  { label: 'Expected Start Date', key: 'expected_start_date', type: 'date', order: 40 }
+  { label: 'Expected Start Date', key: 'expected_start_date', type: 'date', order: 30 }
 ];
 
 async function getOrCreateDefaultOrganization() {

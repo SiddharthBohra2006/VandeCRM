@@ -54,23 +54,57 @@ export async function request<T>(path: string, options: ApiOptions = {}): Promis
   return data;
 }
 
-export const api = {
-  get: <T,>(path: string) => request<T>(path),
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
 
-  post: <T,>(path: string, body?: any) =>
-    request<T>(path, {
+const cache = new Map<string, CacheEntry<any>>();
+const CACHE_TTL_MS = 60 * 1000; // 1 minute fresh TTL
+
+export function clearApiCache(prefix?: string) {
+  if (!prefix) {
+    cache.clear();
+  } else {
+    for (const key of cache.keys()) {
+      if (key.startsWith(prefix)) cache.delete(key);
+    }
+  }
+}
+
+export const api = {
+  get: async <T,>(path: string, options?: { skipCache?: boolean }): Promise<T> => {
+    if (!options?.skipCache) {
+      const cached = cache.get(path);
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+        return cached.data as T;
+      }
+    }
+    const result = await request<T>(path);
+    cache.set(path, { data: result, timestamp: Date.now() });
+    return result;
+  },
+
+  post: async <T,>(path: string, body?: any) => {
+    clearApiCache();
+    return request<T>(path, {
       method: 'POST',
       body: body ? JSON.stringify(body) : undefined,
-    }),
+    });
+  },
 
-  put: <T,>(path: string, body?: any) =>
-    request<T>(path, {
+  put: async <T,>(path: string, body?: any) => {
+    clearApiCache();
+    return request<T>(path, {
       method: 'PUT',
       body: body ? JSON.stringify(body) : undefined,
-    }),
+    });
+  },
 
-  delete: <T,>(path: string) =>
-    request<T>(path, { method: 'DELETE' }),
+  delete: async <T,>(path: string) => {
+    clearApiCache();
+    return request<T>(path, { method: 'DELETE' });
+  },
 };
 
 export async function downloadAuthenticatedFile(path: string, filename?: string): Promise<void> {

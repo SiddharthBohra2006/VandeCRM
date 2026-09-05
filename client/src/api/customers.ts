@@ -17,6 +17,10 @@ export interface Activity {
   type: string;
   note: string;
   user?: { _id: string; name: string };
+  nextFollowUpAt?: string;
+  callRecordingUrl?: string;
+  message?: string;
+  timelineType?: string;
   createdAt: string;
 }
 
@@ -25,6 +29,8 @@ export interface Attachment {
   originalName: string;
   category: string;
   size: number;
+  notes?: string;
+  uploadedBy?: { _id: string; name: string };
   createdAt: string;
 }
 
@@ -32,6 +38,10 @@ export interface RelatedWork {
   _id: string;
   title: string;
   status: string;
+  deadline?: string;
+  priority?: string;
+  notes?: string;
+  assignedTo?: { _id: string; name: string };
   module?: { key: string; name: string };
 }
 
@@ -43,7 +53,7 @@ export interface CustomerDetailResponse {
   relatedWork: RelatedWork[];
   stages: Stage[];
   labels: Label[];
-  users: { _id: string; name: string }[];
+  users: { _id: string; name: string; role?: string }[];
   campaigns: { _id: string; name: string }[];
   fields: CustomField[];
 }
@@ -86,6 +96,7 @@ export interface ImportPreviewPayload {
   defaultClientCompanyId?: string;
   defaultNextFollowUpAt?: string;
   defaultFollowUpComment?: string;
+  scope?: string;
 }
 
 export interface ImportPayload {
@@ -98,6 +109,7 @@ export interface ImportPayload {
   defaultClientCompanyId?: string;
   defaultNextFollowUpAt?: string;
   defaultFollowUpComment?: string;
+  scope?: string;
 }
 
 export const customersApi = {
@@ -137,7 +149,7 @@ export const customersApi = {
   mergeDuplicate: (primaryId: string, duplicateId: string) =>
     api.post<{ ok: true }>('/customers/duplicates/merge', { primaryId, duplicateId }),
 
-  addActivity: (id: string, data: { type: string; note: string; nextFollowUpAt?: string }) =>
+  addActivity: (id: string, data: { type: string; note: string; nextFollowUpAt?: string; callRecordingUrl?: string }) =>
     api.post<{ ok: true; data: Activity }>(`/customers/${id}/activity`, data),
 
   updateStage: (id: string, stageId: string) =>

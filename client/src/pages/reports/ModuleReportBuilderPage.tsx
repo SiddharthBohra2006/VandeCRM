@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { reportsApi, ModuleReportBuilderResponse } from '../../api/reports';
+import DatePicker from '../../components/DatePicker';
 
 const CHART_COLORS = ['#b58d00', '#0f766e', '#2563eb', '#9333ea', '#e11d48', '#ea580c', '#0891b2', '#4f46e5'];
 
@@ -17,6 +18,7 @@ export default function ModuleReportBuilderPage() {
   const [data, setData] = useState<ModuleReportBuilderResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [reload, setReload] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [notice, setNotice] = useState('');
@@ -67,10 +69,10 @@ export default function ModuleReportBuilderPage() {
       }
     })();
     return () => { active = false; };
-  }, [searchParams.toString()]);
+  }, [searchParams.toString(), reload]);
 
-  function buildParams(cfg: typeof config): Record<string, string> {
-    const params: Record<string, string> = {};
+  function buildParams(cfg: typeof config): Record<string, string | string[]> {
+    const params: Record<string, string | string[]> = {};
     if (cfg.module) params.module = cfg.module;
     if (cfg.groupBy) params.groupBy = cfg.groupBy;
     if (cfg.chart) params.chart = cfg.chart;
@@ -80,7 +82,7 @@ export default function ModuleReportBuilderPage() {
     if (cfg.filterValue) params.filterValue = cfg.filterValue;
     if (cfg.dateFrom) params.dateFrom = cfg.dateFrom;
     if (cfg.dateTo) params.dateTo = cfg.dateTo;
-    cfg.metrics.forEach(m => params[`metrics`] = m);
+    params.metrics = cfg.metrics;
     return params;
   }
 
@@ -159,7 +161,22 @@ export default function ModuleReportBuilderPage() {
   }
 
   if (loading && !data) return <div className="loading" style={{ padding: '2rem', textAlign: 'center' }}>Loading module report builder...</div>;
-  if (error) return <div className="page-container"><div className="auth-error">{error}</div></div>;
+
+  if (error) {
+    return (
+      <div className="page-container">
+        <section className="page-head"><div><p className="eyebrow">Reports</p><h1>Custom Module Report Builder</h1><p className="page-subtitle">Group any module and calculate counts, totals, averages, minimums, or maximums from its numeric fields.</p></div><div className="actions"><Link className="btn" to="/reports">All reports</Link></div></section>
+        <section className="table-card empty" style={{ textAlign: 'center', padding: '2.5rem 1.5rem' }}>
+          <strong style={{ display: 'block', fontSize: '1rem', color: 'var(--text)' }}>The module report builder could not be loaded.</strong>
+          <p style={{ color: 'var(--sub)', fontSize: '.85rem', margin: '.5rem 0 1rem' }}>{error}</p>
+          <div className="actions" style={{ justifyContent: 'center', gap: '.5rem' }}>
+            <button className="btn primary" onClick={() => setReload(r => r + 1)}>Retry</button>
+            <Link className="btn" to="/reports">All reports</Link>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   if (!data?.workType) {
     return (
@@ -237,10 +254,20 @@ export default function ModuleReportBuilderPage() {
           <input name="filterValue" value={filterValue} onChange={e => setFilterValue(e.target.value)} placeholder="Optional exact match" />
         </label>
         <label>From
-          <input type="date" name="dateFrom" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+          <DatePicker
+            name="dateFrom"
+            value={dateFrom}
+            placeholder="From date"
+            onChange={val => setDateFrom(val)}
+          />
         </label>
         <label>To
-          <input type="date" name="dateTo" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+          <DatePicker
+            name="dateTo"
+            value={dateTo}
+            placeholder="To date"
+            onChange={val => setDateTo(val)}
+          />
         </label>
         <fieldset>
           <legend>Formulas (up to four)</legend>

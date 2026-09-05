@@ -97,7 +97,7 @@ router.get('/', async (req, res, next) => {
     );
 
     const items = await CustomRecord.find(filter)
-      .populate('workType assignedTo customer collaborators secondaryAssignee')
+      .populate('workType assignedTo customer collaborators secondaryAssignee workflowHistory.actor workflowHistory.fromUser workflowHistory.toUser')
       .sort({ deadline: 1, createdAt: -1 })
       .lean();
 
@@ -106,10 +106,13 @@ router.get('/', async (req, res, next) => {
     const completedItems = items.filter(item => isComplete(item));
     const overdueItems = items.filter(item => !isClosed(item) && item.deadline && new Date(item.deadline) < now);
 
+    const userLists = await Promise.all(workTypes.map(type => assignableWorkUsers(organization, activeWorkspace, type)));
+    const users = [...new Map(userLists.flat().map(user => [String(user._id), user])).values()];
     res.json({
       ok: true,
       workTypes,
       items,
+      users,
       counts: {
         open: openItems.length,
         completed: completedItems.length,
@@ -218,7 +221,7 @@ router.get('/:type', resolveWorkType, async (req, res, next) => {
     const skip = (Math.max(1, Number(page)) - 1) * Number(pageSize);
     const [items, total, users, customers, relatedItems] = await Promise.all([
       CustomRecord.find(filter)
-        .populate('workType assignedTo customer collaborators secondaryAssignee parentRecord')
+        .populate('workType assignedTo customer collaborators secondaryAssignee parentRecord workflowHistory.actor workflowHistory.fromUser workflowHistory.toUser')
         .sort({ deadline: 1, createdAt: -1 })
         .skip(skip)
         .limit(Number(pageSize))
@@ -267,7 +270,7 @@ router.get('/:type/:id', resolveWorkType, async (req, res, next) => {
     restrictToAssigned(filter, req.user);
 
     const item = await CustomRecord.findOne(filter)
-      .populate('workType assignedTo customer collaborators secondaryAssignee createdBy relatedRecords')
+      .populate('workType assignedTo customer collaborators secondaryAssignee createdBy relatedRecords workflowHistory.actor workflowHistory.fromUser workflowHistory.toUser')
       .lean();
 
     if (!item) {
@@ -342,6 +345,11 @@ router.post('/:type', resolveWorkType, async (req, res, next) => {
 
     const customFields = body.customFields || {};
 
+    const assignedTo = body.assignedTo || req.user._id;
+    if (!(await assignableWorkUsers(organization, activeWorkspace, req.workType)).some(user => String(user._id) === String(assignedTo))) {
+      return res.status(400).json({ ok: false, error: 'Choose an eligible team member.' });
+    }
+
     const item = await CustomRecord.create({
       organization,
       workspace: activeWorkspace,
@@ -353,10 +361,11 @@ router.post('/:type', resolveWorkType, async (req, res, next) => {
       startDate,
       notes: String(body.notes || '').trim(),
       customer: body.customer || null,
-      assignedTo: body.assignedTo || req.user._id,
+      assignedTo,
       collaborators: ids(body.collaborators),
       secondaryAssignee: body.secondaryAssignee || null,
       relatedRecords: Array.isArray(body.relatedRecords) ? body.relatedRecords : [],
+      workflowHistory: [{ event: 'created', actor: req.user._id, toUser: assignedTo, toStatus: status, note: 'Task created.' }],
       customFields,
       createdBy: req.user._id,
     });
@@ -408,14 +417,24 @@ router.put('/:type/:id', resolveWorkType, async (req, res, next) => {
     const previousOwner = item.assignedTo ? String(item.assignedTo) : null;
 
     if (body.title !== undefined) item.title = String(body.title).trim();
-    if (body.status !== undefined) item.status = body.status;
+    if (body.status !== undefined) {
+      item.status = body.status;
+      if (previousStatus !== body.status) {
+        const definition = req.workType.statuses.find(s => s.key === body.status);
+        item.workflowHistory.push({ event: definition?.isTerminalLost ? 'rejected' : definition?.isTerminalWon ? 'completed' : 'status', actor: req.user._id, fromStatus: previousStatus, toStatus: body.status, note: String(body.statusNote || '').trim().slice(0, 500) });
+      }
+    }
     if (body.priority !== undefined && priorities.includes(body.priority)) item.priority = body.priority;
     if (body.deadline !== undefined) item.deadline = body.deadline ? new Date(body.deadline) : null;
     if (body.startDate !== undefined) item.startDate = body.startDate ? new Date(body.startDate) : null;
     if (body.deliveredAt !== undefined) item.deliveredAt = body.deliveredAt ? new Date(body.deliveredAt) : null;
     if (body.notes !== undefined) item.notes = String(body.notes).trim();
     if (body.customer !== undefined) item.customer = body.customer || null;
-    if (body.assignedTo !== undefined) item.assignedTo = body.assignedTo || null;
+    if (body.assignedTo !== undefined) {
+      const nextOwner = body.assignedTo || null;
+      if (String(previousOwner || '') !== String(nextOwner || '')) item.workflowHistory.push({ event: previousOwner ? 'forwarded' : 'assigned', actor: req.user._id, fromUser: previousOwner, toUser: nextOwner, note: String(body.assignmentNote || '').trim().slice(0, 500) });
+      item.assignedTo = nextOwner;
+    }
     if (body.collaborators !== undefined) item.collaborators = ids(body.collaborators);
     if (body.secondaryAssignee !== undefined) item.secondaryAssignee = body.secondaryAssignee || null;
     if (body.relatedRecords !== undefined) item.relatedRecords = Array.isArray(body.relatedRecords) ? body.relatedRecords : [];
@@ -482,6 +501,10 @@ router.post('/:type/:id/status', resolveWorkType, async (req, res, next) => {
     if (!req.workType.statuses.some(s => s.key === status)) return res.status(400).json({ ok: false, error: 'Invalid status.' });
     const previousStatus = item.status;
     item.status = status;
+    if (previousStatus !== status) {
+      const definition = req.workType.statuses.find(s => s.key === status);
+      item.workflowHistory.push({ event: definition?.isTerminalLost ? 'rejected' : definition?.isTerminalWon ? 'completed' : 'status', actor: req.user._id, fromStatus: previousStatus, toStatus: status, note: String(req.body.note || '').trim().slice(0, 500) });
+    }
     if (req.workType.statuses.some(s => s.key === item.status && s.isTerminalWon) && !item.deliveredAt) {
       item.deliveredAt = new Date();
     }
@@ -502,6 +525,56 @@ router.post('/:type/:id/status', resolveWorkType, async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+// POST /api/work/:type/:id/delegate — forward work while preserving its lifecycle.
+router.post('/:type/:id/delegate', resolveWorkType, async (req, res, next) => {
+  try {
+    if (!hasWorkPermission(req.user, req.workType, 'update')) return res.status(403).json({ ok: false, error: 'Permission denied.' });
+    const organization = req.user.organization._id;
+    const workspace = String(req.activeCompanyId);
+    const item = await CustomRecord.findOne(restrictToAssigned({ _id: req.params.id, organization, workspace, module: req.workType._id }, req.user));
+    if (!item) return res.status(404).json({ ok: false, error: 'Record not found.' });
+    const assignee = (await assignableWorkUsers(organization, workspace, req.workType)).find(user => String(user._id) === String(req.body.toUser || ''));
+    if (!assignee) return res.status(400).json({ ok: false, error: 'Choose an eligible team member.' });
+    const fromUser = item.assignedTo || null;
+    if (String(fromUser || '') === String(assignee._id)) return res.status(400).json({ ok: false, error: 'This task is already assigned to that person.' });
+    const fromStatus = item.status;
+    const nextStatus = req.body.status || fromStatus;
+    if (!req.workType.statuses.some(status => status.key === nextStatus)) return res.status(400).json({ ok: false, error: 'Invalid status.' });
+    item.assignedTo = assignee._id;
+    item.status = nextStatus;
+    item.workflowHistory.push({ event: fromUser ? 'forwarded' : 'assigned', actor: req.user._id, fromUser, toUser: assignee._id, fromStatus, toStatus: nextStatus, note: String(req.body.note || '').trim().slice(0, 500) });
+    if (fromUser && !item.collaborators.some(user => String(user) === String(fromUser))) item.collaborators.push(fromUser);
+    await item.save();
+    await Promise.all([
+      Notification.create({ organization, user: assignee._id, title: 'Task forwarded to you', message: `${req.user.name} forwarded "${item.title}" to you.`, link: `/work/${req.workType.key}/${item._id}` }),
+      logAudit(req, { action: 'work_forward', entityType: 'custom_record', entityId: item._id, entityName: item.title, message: `${req.user.name} forwarded "${item.title}" to ${assignee.name}.` }),
+      runRecordAutomation({ record: item, workType: req.workType, trigger: 'owner_changed', previousOwner: fromUser })
+    ]);
+    res.json({ ok: true, data: await CustomRecord.findById(item._id).populate('workType assignedTo collaborators workflowHistory.actor workflowHistory.fromUser workflowHistory.toUser').lean() });
+  } catch (error) { next(error); }
+});
+
+// POST /api/work/:type/bulk — create one task per non-empty line.
+router.post('/:type/bulk', resolveWorkType, async (req, res, next) => {
+  try {
+    if (!hasWorkPermission(req.user, req.workType, 'create')) return res.status(403).json({ ok: false, error: 'Permission denied.' });
+    const titles = (Array.isArray(req.body.titles) ? req.body.titles : String(req.body.titles || '').split(/\r?\n/)).map(title => String(title).trim()).filter(Boolean).slice(0, 100);
+    if (!titles.length) return res.status(400).json({ ok: false, error: 'Enter at least one task.' });
+    const organization = req.user.organization._id;
+    const workspace = String(req.activeCompanyId);
+    const status = req.body.status || req.workType.statuses[0]?.key;
+    if (!req.workType.statuses.some(item => item.key === status)) return res.status(400).json({ ok: false, error: 'Invalid status.' });
+    const assignedTo = req.body.assignedTo || req.user._id;
+    if (!(await assignableWorkUsers(organization, workspace, req.workType)).some(user => String(user._id) === String(assignedTo))) return res.status(400).json({ ok: false, error: 'Choose an eligible team member.' });
+    const deadline = req.body.deadline ? new Date(req.body.deadline) : null;
+    if (deadline && Number.isNaN(deadline.getTime())) return res.status(400).json({ ok: false, error: 'Choose a valid deadline.' });
+    const records = await CustomRecord.create(titles.map(title => ({ organization, workspace, module: req.workType._id, title, status, assignedTo, priority: priorities.includes(req.body.priority) ? req.body.priority : 'medium', deadline, createdBy: req.user._id, workflowHistory: [{ event: 'created', actor: req.user._id, toUser: assignedTo, toStatus: status, note: `Created in a batch of ${titles.length} tasks.` }] })));
+    if (String(assignedTo) !== String(req.user._id)) await Notification.create({ organization, user: assignedTo, title: `${titles.length} new tasks assigned`, message: `${req.user.name} assigned ${titles.length} tasks to you.`, link: `/work/${req.workType.key}` });
+    await logAudit(req, { action: 'work_bulk_create', entityType: 'custom_record', entityName: req.workType.name, message: `Created ${records.length} tasks.` });
+    res.status(201).json({ ok: true, created: records.length });
+  } catch (error) { next(error); }
 });
 
 // DELETE /api/work/:type/:id — Delete work item

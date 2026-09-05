@@ -75,7 +75,8 @@ function normalizeCustomerCsv(rows, mappings = new Map()) {
 }
 
 function escapeCsvValue(value) {
-  const text = value === null || value === undefined ? '' : String(value);
+  let text = value === null || value === undefined ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   if (/[",\r\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
   return text;
 }

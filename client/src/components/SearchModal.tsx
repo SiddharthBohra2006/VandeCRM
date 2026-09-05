@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { searchApi, SearchResponse, SearchResultItem, SearchStats } from '../api/search';
+import DatePicker from './DatePicker';
 
 interface SearchModalProps {
   open: boolean;
@@ -253,11 +254,36 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
     [navigate, onClose, query, type, saveRecent]
   );
 
+  const DEFAULT_SUGGESTIONS = useMemo(() => [
+    { label: 'Follow-ups due today', query: 'Follow-up', type: 'activities' },
+    { label: 'Qualified leads', query: 'Qualified', type: 'leads' },
+    { label: 'High priority tasks', query: 'High', type: 'work' },
+    { label: 'Recent clients', query: 'Client', type: 'clients' },
+    { label: 'Meetings this week', query: 'Meeting', type: 'activities' },
+  ], []);
+
+  const matchingSuggestion = useMemo(() => {
+    if (!query.trim()) return null;
+    const q = query.trim().toLowerCase();
+    const fromRecent = recent.find(r => r.query.toLowerCase().startsWith(q) && r.query.toLowerCase() !== q);
+    if (fromRecent) return fromRecent.query;
+    const fromDefault = DEFAULT_SUGGESTIONS.find(s => s.label.toLowerCase().startsWith(q) || s.query.toLowerCase().startsWith(q));
+    if (fromDefault) return fromDefault.label;
+    const fromResults = allNavItems.find(item => item.title.toLowerCase().startsWith(q) && item.title.toLowerCase() !== q);
+    if (fromResults) return fromResults.title;
+    return null;
+  }, [query, recent, allNavItems, DEFAULT_SUGGESTIONS]);
+
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         onClose();
+        return;
+      }
+      if (e.key === 'Tab' && matchingSuggestion && document.activeElement === inputRef.current) {
+        e.preventDefault();
+        setQuery(matchingSuggestion);
         return;
       }
       if (e.key === 'Enter') {
@@ -289,7 +315,7 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, selectedIndex, query, type, onClose, navigate, goTo, saveRecent]);
+  }, [open, selectedIndex, query, type, onClose, navigate, goTo, saveRecent, matchingSuggestion]);
 
   if (!open) return null;
 
@@ -333,6 +359,18 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
               value={query}
               onChange={e => setQuery(e.target.value)}
             />
+            {matchingSuggestion && (
+              <div
+                className="crm-search-tab-hint"
+                onClick={() => {
+                  setQuery(matchingSuggestion);
+                  inputRef.current?.focus();
+                }}
+                title="Click or press Tab to complete"
+              >
+                <span>Tab: <strong>{matchingSuggestion}</strong></span>
+              </div>
+            )}
             {query && (
               <button
                 type="button"
@@ -358,6 +396,28 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
             >
               &times;
             </button>
+          </div>
+        </div>
+
+        {/* Quick Suggestion Chips Bar */}
+        <div className="crm-search-suggestions-bar">
+          <span className="crm-suggestions-label">Suggestions:</span>
+          <div className="crm-suggestions-chips">
+            {DEFAULT_SUGGESTIONS.map(sug => (
+              <button
+                key={sug.label}
+                type="button"
+                className={`crm-suggestion-chip ${query.toLowerCase() === sug.query.toLowerCase() ? 'active' : ''}`}
+                onClick={() => {
+                  setQuery(sug.query);
+                  setType(sug.type);
+                  inputRef.current?.focus();
+                }}
+              >
+                <span className="chip-sparkle">✦</span>
+                <span>{sug.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -398,14 +458,13 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
           <div className="crm-filter-item">
             <label>From</label>
             <div className="crm-date-box">
-              <input
-                type="date"
+              <DatePicker
                 id="airbnbDateFromInput"
-                className="crm-date-input"
+                placeholder="From date"
                 value={from}
-                onChange={e => {
+                onChange={val => {
                   setPreset('custom');
-                  setFrom(e.target.value);
+                  setFrom(val);
                 }}
               />
             </div>
@@ -414,14 +473,13 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
           <div className="crm-filter-item">
             <label>To</label>
             <div className="crm-date-box">
-              <input
-                type="date"
+              <DatePicker
                 id="airbnbDateToInput"
-                className="crm-date-input"
+                placeholder="To date"
                 value={to}
-                onChange={e => {
+                onChange={val => {
                   setPreset('custom');
-                  setTo(e.target.value);
+                  setTo(val);
                 }}
               />
             </div>
@@ -563,11 +621,11 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
                   </div>
                   <div className="crm-kpi-grid">
                     <a
-                      href="/tasks"
+                      href="/follow-ups"
                       className="crm-kpi-card"
                       onClick={e => {
                         e.preventDefault();
-                        goTo('/tasks');
+                        goTo('/follow-ups');
                       }}
                     >
                       <div className="crm-kpi-title">My follow-ups</div>
@@ -584,7 +642,7 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
                         goTo('/work');
                       }}
                     >
-                      <div className="crm-kpi-title">Open tasks</div>
+                      <div className="crm-kpi-title">Open work</div>
                       <div className="crm-kpi-val" id="statOpenTasks">
                         {stats.openTasks || 0}
                       </div>

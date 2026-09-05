@@ -9,6 +9,9 @@ const { encrypt } = require('../services/encryption');
 const { isValidEmail, renderTemplate, sendEmail, usesImplicitTls, verifyEmailAccount } = require('../services/emailService');
 const { logAudit } = require('../utils/audit');
 const { hasPermission, isRestrictedUser } = require('../config/roles');
+const getRateLimiter = require('./middleware/rateLimiter');
+
+const mailSendLimiter = getRateLimiter(60, 60 * 1000);
 
 const router = express.Router();
 router.use(requireApiAuth);
@@ -97,7 +100,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // POST /api/mail/send — Send email to customer
-router.post('/send', apiPermission('mail.create'), async (req, res, next) => {
+router.post('/send', mailSendLimiter, apiPermission('mail.create'), async (req, res, next) => {
   try {
     const organization = req.user.organization._id;
     const { customerId, templateId, subject: rawSubject, body: rawBody } = req.body;

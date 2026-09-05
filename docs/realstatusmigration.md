@@ -5,6 +5,20 @@ Audit date: 4 September 2026. Requested by the project owner. Independent source
 Reference: `D:\VandeAgencyCRM`. Migration: `D:\vandecrmreact`.
 Migration HEAD inspected: `d54da637563453d601419da7b45ad6f3dd7138a2` — `fix(dashboard): resolve pin dashboard cards modal toggle and state handling`.
 
+## Task workflow implementation — 5 September 2026
+
+The React migration now includes the missing operational task flow across every configured work area (including video production):
+
+- Task Center has a team-workload view showing each eligible team member and their current tasks, plus an unassigned lane.
+- Tasks can be assigned from the overview or board selector and moved between people by drag and drop.
+- Managers can create up to 100 tasks from newline-separated titles with one owner, priority, and deadline.
+- Forwarding preserves the former owner as a collaborator and records actor, previous/new owner, previous/new status, handoff note, and timestamp.
+- Every task detail shows its lifecycle, including explicit rejected and completed events; board cards show forwarding counts.
+- Status drag and drop continues to use the configured statuses and now records every transition in the lifecycle.
+- The deadline scheduler starts with the server, runs hourly, and alerts the owner, secondary assignee, and collaborators with per-person daily deduplication.
+
+Verification: production client build passed (1,915 modules), TypeScript passed, all changed server files passed `node --check`, workflow schema validation passed for valid and rejected event values, route registration passed for bulk-create, delegate, and status endpoints, and `git diff --check` passed.
+
 ## Recheck after repair commit and follow-up fixes — 5 September 2026
 
 Migration HEAD rechecked: `5a17aefb404406d8cb617ceb1f2b745392e3719b`. The working tree also contains the follow-up fixes listed below; they are intentionally left uncommitted for review.

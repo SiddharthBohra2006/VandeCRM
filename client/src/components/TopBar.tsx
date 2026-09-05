@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { Sun, Moon, Palette, Check, ChevronDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { User, Company } from '../api/auth';
 import { notificationsApi, NotificationItem } from '../api/notifications';
@@ -12,34 +14,7 @@ interface TopBarProps {
   onToggleMobile?: () => void;
 }
 
-const THEME_PRESETS = [
-  { name: 'Classic Dark', description: 'Midnight slate', type: 'dark', gold: '#ffcc00', teal: '#00bcd4', bg: '#090d16', surface: '#121b2d', text: '#f8fafc' },
-  { name: 'OLED Black', description: 'Pure black', type: 'dark', gold: '#ffcc00', teal: '#a855f7', bg: '#000000', surface: '#0e0e11', text: '#eeeeee' },
-  { name: 'Cozy Cream', description: 'Warm light', type: 'light', gold: '#d97706', teal: '#0f766e', bg: '#fcfaf7', surface: '#ffffff', text: '#1c1917' },
-  { name: 'Crystal Light', description: 'Cool light', type: 'light', gold: '#b58d00', teal: '#2563eb', bg: '#f1f5f9', surface: '#ffffff', text: '#0f172a' },
-];
-
-function applyThemePreset(preset: typeof THEME_PRESETS[number]) {
-  const root = document.documentElement;
-  root.setAttribute('data-theme', preset.type);
-  root.classList.toggle('dark-theme', preset.type === 'dark');
-  const s = root.style;
-  s.setProperty('--gold', preset.gold);
-  s.setProperty('--teal', preset.teal);
-  s.setProperty('--bg', preset.bg);
-  s.setProperty('--panel', preset.surface);
-  s.setProperty('--panel-2', preset.surface);
-  s.setProperty('--text', preset.text);
-  s.setProperty('--bg-soft', `color-mix(in srgb, ${preset.bg} 92%, ${preset.text})`);
-  s.setProperty('--panel-muted', `color-mix(in srgb, ${preset.surface} 95%, ${preset.text})`);
-  s.setProperty('--input', `color-mix(in srgb, ${preset.surface} 96%, ${preset.text})`);
-  s.setProperty('--border', `color-mix(in srgb, ${preset.surface} 88%, ${preset.text})`);
-  s.setProperty('--muted', `color-mix(in srgb, ${preset.surface} 45%, ${preset.text})`);
-  s.setProperty('--sub', `color-mix(in srgb, ${preset.surface} 30%, ${preset.text})`);
-  s.setProperty('--hover', `color-mix(in srgb, ${preset.surface} 94%, ${preset.text})`);
-  localStorage.setItem('theme-name', preset.name);
-  localStorage.setItem('theme-preset', JSON.stringify(preset));
-}
+import { THEME_PRESETS, applyThemePreset, changeThemeWithAnimation } from '../theme';
 
 function LiveClock() {
   const [time, setTime] = useState(() => new Date());
@@ -64,8 +39,25 @@ export default function TopBar({ user, activeCompany, companies, onSwitchCompany
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [activeTheme, setActiveTheme] = useState(() => {
-    return localStorage.getItem('theme-name') || 'Classic Dark';
+    return localStorage.getItem('theme-name') || 'Midnight Slate';
   });
+
+  useEffect(() => {
+    const handleThemeEvent = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      if (customEvt.detail?.name) {
+        setActiveTheme(customEvt.detail.name);
+      } else {
+        setActiveTheme(localStorage.getItem('theme-name') || 'Midnight Slate');
+      }
+    };
+    window.addEventListener('crm-theme-changed', handleThemeEvent);
+    window.addEventListener('storage', handleThemeEvent);
+    return () => {
+      window.removeEventListener('crm-theme-changed', handleThemeEvent);
+      window.removeEventListener('storage', handleThemeEvent);
+    };
+  }, []);
 
   const loadNotifications = useCallback(async () => {
     try {
@@ -76,6 +68,11 @@ export default function TopBar({ user, activeCompany, companies, onSwitchCompany
       // Ignore background notification fetch errors
     }
   }, []);
+
+  useEffect(() => {
+    const saved = THEME_PRESETS.find(p => p.name === activeTheme) || THEME_PRESETS[0];
+    applyThemePreset(saved);
+  }, [activeTheme]);
 
   useEffect(() => {
     loadNotifications();
@@ -164,63 +161,71 @@ export default function TopBar({ user, activeCompany, companies, onSwitchCompany
         <svg className="topbar-search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
-        <span className="topbar-search-placeholder">Search clients, leads, tasks, team, meeting notes, history...</span>
+        <span className="topbar-search-placeholder">Search clients, leads, follow-ups, team, meeting notes, history...</span>
       </div>
 
       <div className="topbar-actions">
-        {/* Theme picker — matches EJS theme picker with 4 presets */}
-        <div className="theme-picker">
-          <button
-            type="button"
-            className="theme-toggle-btn"
-            aria-label="Toggle Theme"
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowThemePicker(!showThemePicker);
-              setShowNotifications(false);
-              setShowCompanyDropdown(false);
-              setShowUserMenu(false);
-            }}
-          >
-            <svg className="theme-palette-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M12 3a9 9 0 0 0 0 18h1.5a2 2 0 0 0 0-4H12a2 2 0 0 1 0-4h5a4 4 0 0 0 4-4c0-3.3-4-6-9-6Z" />
-              <circle cx="7.5" cy="10.5" r=".75" fill="currentColor" stroke="none" />
-              <circle cx="10" cy="7" r=".75" fill="currentColor" stroke="none" />
-              <circle cx="14" cy="7" r=".75" fill="currentColor" stroke="none" />
-            </svg>
-            <span className="theme-toggle-label">Theme</span>
-          </button>
-          {showThemePicker && (
-            <div className="theme-picker-menu">
-              {THEME_PRESETS.map(preset => (
+        {/* Minimal Theme Capsule — Option 1 from design */}
+        <div className="topbar-minimal-theme-pill" role="radiogroup" aria-label="Theme Color Switcher">
+          <div className="theme-dots-row">
+            {THEME_PRESETS.map(preset => {
+              const isActive = activeTheme === preset.name;
+              return (
                 <button
                   key={preset.name}
                   type="button"
-                  title={`${preset.name} — ${preset.description}`}
-                  className={activeTheme === preset.name ? 'active' : ''}
+                  role="radio"
+                  aria-checked={isActive}
+                  className={`theme-dot-btn ${isActive ? 'active' : ''}`}
+                  title={`${preset.name} (${preset.description}) — Click to apply`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    applyThemePreset(preset);
+                    changeThemeWithAnimation(preset, e);
                     setActiveTheme(preset.name);
-                    setShowThemePicker(false);
                   }}
                 >
-                  <span style={{ '--theme-bg': preset.bg, '--theme-accent': preset.teal, width: 22, height: 22, display: 'block', border: '1px solid var(--border)', borderRadius: 6, background: `linear-gradient(135deg, ${preset.bg} 55%, ${preset.teal} 56%)` } as React.CSSProperties} />
-                  <span>{preset.name}</span>
+                  <span
+                    className="theme-dot-swatch"
+                    style={{
+                      background: preset.dotBg,
+                      borderColor: preset.dotBorder,
+                    }}
+                  />
                 </button>
-              ))}
-              {['admin', 'manager'].includes(user.role) && (
-                <a href="/settings" onClick={(e) => { e.stopPropagation(); setShowThemePicker(false); }}>Custom colors</a>
-              )}
-            </div>
-          )}
+              );
+            })}
+          </div>
+
+          <span className="theme-pill-divider" />
+
+          {/* Quick Light / Dark Mode Toggle Button */}
+          <button
+            type="button"
+            className="theme-quick-mode-btn"
+            title={`Toggle Light / Dark mode (currently ${THEME_PRESETS.find(p => p.name === activeTheme)?.type || 'dark'})`}
+            onClick={(e) => {
+              e.stopPropagation();
+              const currentType = THEME_PRESETS.find(p => p.name === activeTheme)?.type || 'dark';
+              const nextPreset = currentType === 'dark'
+                ? THEME_PRESETS.find(p => p.type === 'light') || THEME_PRESETS[2]
+                : THEME_PRESETS.find(p => p.type === 'dark') || THEME_PRESETS[0];
+              changeThemeWithAnimation(nextPreset, e);
+              setActiveTheme(nextPreset.name);
+            }}
+          >
+            {THEME_PRESETS.find(p => p.name === activeTheme)?.type === 'dark' ? (
+              <Moon size={14} className="theme-quick-icon dark" />
+            ) : (
+              <Sun size={14} className="theme-quick-icon light" />
+            )}
+          </button>
         </div>
 
-        {/* Notifications Bell */}
+        {/* Notifications Bell & Luxury Dropdown */}
         <div className="notifications-bell-container">
           <button
             type="button"
-            className={`bell-btn ${unreadCount > 0 ? 'has-unread' : ''}`}
+            className={`bell-btn luxury-bell-btn ${unreadCount > 0 ? 'has-unread' : ''}`}
             aria-label="Notifications"
             onClick={(e) => {
               e.stopPropagation();
@@ -230,17 +235,20 @@ export default function TopBar({ user, activeCompany, companies, onSwitchCompany
               setShowThemePicker(false);
             }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
-            {unreadCount > 0 && <span className="bell-badge">{unreadCount}</span>}
+            {unreadCount > 0 && <span className="bell-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
           </button>
 
           {showNotifications && (
-            <div className="notification-dropdown" style={{ display: 'block' }}>
+            <div className="notification-dropdown luxury-notification-dropdown" style={{ display: 'block' }}>
               <div className="notification-header">
-                <span>Notifications</span>
+                <div className="notif-header-title">
+                  <span>Notifications</span>
+                  {unreadCount > 0 && <span className="notif-count-pill">{unreadCount} new</span>}
+                </div>
                 {unreadCount > 0 && (
                   <button type="button" className="mark-all-read-btn" onClick={handleMarkAllRead}>
                     Mark all read
@@ -249,34 +257,59 @@ export default function TopBar({ user, activeCompany, companies, onSwitchCompany
               </div>
               <div className="notification-list">
                 {notifications.length === 0 ? (
-                  <div className="notification-empty">No unread notifications</div>
+                  <div className="notification-empty">
+                    <div className="empty-notif-icon">
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <polyline points="22 4 12 14.01 9 11.01" />
+                      </svg>
+                    </div>
+                    <strong>All caught up!</strong>
+                    <p>No new unread notifications</p>
+                  </div>
                 ) : (
                   notifications.map(n => (
-                    <div key={n._id} className="notification-item">
-                      <div className="notification-item-content">
-                        <strong>{n.title}</strong>
-                        <p>{n.message}</p>
-                        <small>{new Date(n.createdAt).toLocaleString('en-IN')}</small>
+                    <div key={n._id} className="notification-item luxury-notif-item">
+                      <div className="notif-avatar-col">
+                        <div className="notif-icon-circle">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                          </svg>
+                        </div>
                       </div>
-                      <div className="notification-item-actions">
+                      <div className="notification-item-content">
+                        <div className="notif-item-top">
+                          <strong>{n.title}</strong>
+                          <small>{(() => {
+                            const d = new Date(n.createdAt);
+                            const min = Math.floor((Date.now() - d.getTime()) / 60000);
+                            if (min < 1) return 'Just now';
+                            if (min < 60) return `${min}m ago`;
+                            if (min < 1440) return `${Math.floor(min / 60)}h ago`;
+                            return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+                          })()}</small>
+                        </div>
+                        <p>{n.message}</p>
                         {n.link && (
                           <a
                             href={n.link}
                             className="notification-action-link"
                             onClick={() => setShowNotifications(false)}
                           >
-                            Open
+                            <span>Open details</span>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                           </a>
                         )}
-                        <button
-                          type="button"
-                          className="notification-dismiss-btn"
-                          title="Dismiss"
-                          onClick={(e) => handleDismiss(n._id, e)}
-                        >
-                          &times;
-                        </button>
                       </div>
+                      <button
+                        type="button"
+                        className="notification-dismiss-btn"
+                        title="Dismiss"
+                        onClick={(e) => handleDismiss(n._id, e)}
+                      >
+                        &times;
+                      </button>
                     </div>
                   ))
                 )}

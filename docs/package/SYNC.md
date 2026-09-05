@@ -31,7 +31,7 @@
   2. Companies (`/companies`, `/companies/:id`, 10-card metric grid, inline lead form, stored documents table, activity stream, collaborators)
   3. Campaigns (`/campaigns`, `/campaigns/:id`, spend/leads/CPR/conversion metrics, live toggle)
   4. Work (`/work`, `/work/:type`, view toggle: list + subtask tree, drag-and-drop board, month calendar; `/work/:type/:id` detail with rich subtask composer, custom fields, audit log)
-  5. Tasks (`/tasks`, follow-up center tabs, inline reschedule & completion)
+  5. Follow-ups (`/follow-ups`, follow-up center tabs, inline reschedule & completion)
   6. Team (`/team`, members list, invite, roles permissions matrix)
   7. Settings (`/settings`, 7 tabs: stages, fields, labels, terminology, appearance, custom modules builder `WorkTypeBuilder.tsx`, automations engine `AutomationsTab.tsx`)
   8. Mail (`/mail`, 3-pane layout, template merge tags, SMTP test)

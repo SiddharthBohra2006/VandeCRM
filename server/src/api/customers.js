@@ -20,6 +20,10 @@ const { logAudit } = require('../utils/audit');
 const { parseCsv, rowsToObjects, normalizeCustomerCsv, toCsv, suggestCustomerHeader } = require('../utils/csv');
 const { potentialFilter } = require('../utils/leadPotential');
 const { requireApiAuth } = require('./middleware/auth');
+const getRateLimiter = require('./middleware/rateLimiter');
+
+const exportLimiter = getRateLimiter(30, 60 * 1000);
+const importLimiter = getRateLimiter(10, 60 * 1000);
 
 const router = express.Router();
 router.use(requireApiAuth);
@@ -30,6 +34,7 @@ const selectedIds = value => (Array.isArray(value) ? value : value ? [value] : [
 const labels = value => Array.isArray(value) ? value : value ? [value] : [];
 const csvHeaders = ['name', 'company', 'email', 'phone', 'source', 'value', 'priority', 'leadScore', 'stage', 'labels', 'notes', 'campaign', 'nextFollowUpAt'];
 const normalizePhone = value => { const clean = String(value || '').replace(/\D/g, ''); return clean.length >= 10 ? clean.slice(-10) : clean; };
+const normalizeNameForKey = value => { const normalized = String(value || '').trim().toLowerCase().replace(/\s+/g, ' '); return normalized.length >= 2 ? normalized : ''; };
 
 function workspace(req, res) {
   if (req.activeCompanyId) return String(req.activeCompanyId);
@@ -196,7 +201,7 @@ async function csvContext(req) {
   };
 }
 
-router.get('/export/csv', async (req, res, next) => {
+router.get('/export/csv', exportLimiter, async (req, res, next) => {
   try {
     if (!workspace(req, res)) return;
     const organization = req.user.organization._id;
@@ -293,7 +298,7 @@ router.post('/import/preview', permits('businesses.create'), express.text({ type
   } catch (error) { next(error); }
 });
 
-router.post('/import', permits('businesses.create'), express.text({ type: ['text/csv', 'text/plain', 'application/octet-stream'], limit: '4mb' }), async (req, res, next) => {
+router.post('/import', importLimiter, permits('businesses.create'), express.text({ type: ['text/csv', 'text/plain', 'application/octet-stream'], limit: '4mb' }), async (req, res, next) => {
   try {
     if (!isManager(req.user)) return res.status(403).json({ ok: false, error: 'Access denied' });
     if (!workspace(req, res)) return;
@@ -325,7 +330,18 @@ router.post('/import', permits('businesses.create'), express.text({ type: ['text
     }
     context.fields = await CustomField.find({ organization: req.user.organization._id, clientCompany: req.activeCompanyId, entity: 'customer', isActive: true }).sort({ order: 1, createdAt: 1 });
     context.fields = context.fields.filter(field => canAccessLeadField(req.user, field.key, 'view'));
-    const defaultStage = context.stages.find(stage => String(stage._id) === String(req.body?.defaultStageId)) || context.stages.find(stage => stage.isDefault) || context.stages[0];
+    let defaultStage = context.stages.find(stage => String(stage._id) === String(req.body?.defaultStageId)) || null;
+    const isClientScope = String(req.body?.scope) === 'clients';
+    if (isClientScope) {
+      if (!defaultStage || !defaultStage.isWon) {
+        defaultStage = context.stages.find(stage => stage.isWon && stage.isActive)
+          || context.stages.find(stage => stage.isWon)
+          || context.stages.find(stage => stage.isDefault)
+          || defaultStage;
+      }
+    } else if (!defaultStage) {
+      defaultStage = context.stages.find(stage => stage.isDefault) || context.stages[0];
+    }
     if (!defaultStage) return res.status(400).json({ ok: false, error: 'Create an active CRM stage before importing leads.' });
     const defaultAssignedTo = (req.body?.defaultAssignedToId && context.userById.get(String(req.body.defaultAssignedToId))) ? req.body.defaultAssignedToId : req.user._id;
     const duplicateRule = ['update', 'skip', 'create'].includes(req.body?.duplicateRule) ? req.body.duplicateRule : 'update';
@@ -495,11 +511,17 @@ router.get('/', async (req, res, next) => {
     else if (view === 'high-value') filter.value = { $gte: 50000 };
     else if (view === 'assigned') filter.assignedTo = req.user._id;
     else if (view === 'overdue' || view === 'followup') filter.nextFollowUpAt = { $lt: new Date() };
+    else if (view === 'stale') {
+      const staleCutoff = new Date(); staleCutoff.setDate(staleCutoff.getDate() - 14);
+      filter.$or = [{ lastContactedAt: { $exists: false } }, { lastContactedAt: null }, { lastContactedAt: { $lt: staleCutoff } }];
+    }
     else if (view === 'potential' || view === 'hot') Object.assign(filter, potentialFilter(options.labels, options.stages));
     else if (view === 'qualified') filter.stage = { $in: options.stages.filter(item => /qualified/i.test(item.name)).map(item => item._id) };
     if (q) {
       const escaped = String(q).replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
-      filter.$or = ['name', 'company', 'email', 'phone'].map(key => ({ [key]: { $regex: escaped, $options: 'i' } }));
+      const textConditions = ['name', 'company', 'email', 'phone'].map(key => ({ [key]: { $regex: escaped, $options: 'i' } }));
+      if (filter.$or) filter.$or = [...filter.$or, ...textConditions];
+      else filter.$or = textConditions;
     }
     const sorts = { recent: { updatedAt: -1 }, old: { updatedAt: 1 }, 'highest-value': { value: -1 }, 'lowest-value': { value: 1 }, name: { name: 1 } };
     const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 10));
@@ -618,6 +640,8 @@ router.get('/duplicates', async (req, res, next) => {
     customers.forEach(customer => {
       addDuplicate(groups, customer.email ? `email:${customer.email.toLowerCase()}` : '', 'Same email', customer);
       addDuplicate(groups, normalizePhone(customer.phone) ? `phone:${normalizePhone(customer.phone)}` : '', 'Same phone', customer);
+      const nameKey = normalizeNameForKey(customer.name);
+      addDuplicate(groups, nameKey ? `name:${nameKey}` : '', 'Same name', customer);
     });
 
     const duplicateGroups = Array.from(groups.values())
@@ -657,8 +681,10 @@ router.post('/duplicates/merge', permits('businesses.update'), async (req, res, 
 
     const sameEmail = primary.email && duplicate.email && primary.email.toLowerCase() === duplicate.email.toLowerCase();
     const samePhone = normalizePhone(primary.phone) && normalizePhone(primary.phone) === normalizePhone(duplicate.phone);
-    if (!sameEmail && !samePhone) {
-      return res.status(400).json({ ok: false, error: 'Selected leads do not share the same email or phone.' });
+    const nameKey = normalizeNameForKey(primary.name);
+    const sameName = nameKey && nameKey === normalizeNameForKey(duplicate.name);
+    if (!sameEmail && !samePhone && !sameName) {
+      return res.status(400).json({ ok: false, error: 'Selected leads do not share the same email, phone, or name.' });
     }
 
     await mergeDuplicateCustomer({ organization, primary, duplicate, user: req.user });
@@ -723,12 +749,17 @@ router.post('/:id/activity', permits('businesses.update'), async (req, res, next
     const customer = await Customer.findOne(scope(req, { _id: req.params.id }));
     if (!customer) return res.status(404).json({ ok: false, error: 'Lead not found.' });
 
+    const allowedTypes = ['note', 'call', 'email', 'whatsapp', 'meeting', 'meeting_client', 'meeting_internal', 'stage_changed', 'label_changed', 'task'];
+    const type = allowedTypes.includes(req.body.type) ? req.body.type : 'note';
+    const callRecordingUrl = String(req.body.callRecordingUrl || '').trim().slice(0, 2000);
+
     const activity = await Activity.create({
       organization,
       customer: customer._id,
       user: req.user._id,
-      type: req.body.type || 'note',
+      type,
       note: req.body.note || '',
+      callRecordingUrl,
       nextFollowUpAt: req.body.nextFollowUpAt || null,
     });
 

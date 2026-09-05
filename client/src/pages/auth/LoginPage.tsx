@@ -24,7 +24,7 @@ export default function LoginPage() {
 
   return (
     <div className="auth-card">
-      <h1 className="auth-title">Sign in to Vande Agency CRM</h1>
+      <h1 className="auth-title">Sign in to your CRM</h1>
       {error && <div className="alert alert-error">{error}</div>}
       <form onSubmit={handleSubmit}>
         <div className="form-group">

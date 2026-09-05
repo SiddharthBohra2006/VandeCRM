@@ -319,7 +319,7 @@ export default function App() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/companies" element={<CompaniesPage />} />
             <Route path="/companies/:id" element={<CompanyDetailPage />} />
-            <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/follow-ups" element={<FollowUpsPage />} />
             <Route path="/mail" element={<MailPage />} />
             <Route path="/integrations" element={<IntegrationsPage />} />
             <Route path="/audit" element={<AuditPage />} />

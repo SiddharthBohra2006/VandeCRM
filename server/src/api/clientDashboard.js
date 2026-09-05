@@ -10,6 +10,9 @@ const { toCsv } = require('../utils/csv');
 const { createSimpleReportPdf } = require('../utils/pdf');
 const { calculateCampaignMetrics, calculateCompanyMetrics, getDateRangeFilter } = require('../utils/reporting');
 const { logAudit } = require('../utils/audit');
+const getRateLimiter = require('./middleware/rateLimiter');
+
+const clientExportLimiter = getRateLimiter(15, 60 * 1000);
 
 const router = express.Router();
 router.use(requireApiAuth);
@@ -186,7 +189,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // GET /api/client-dashboard/export.csv — CSV export of leads
-router.get('/export.csv', async (req, res, next) => {
+router.get('/export.csv', clientExportLimiter, async (req, res, next) => {
   try {
     if (!allowRole(req, res)) return;
     const { organization, company } = await getClientPortalCompany(req);
@@ -214,7 +217,7 @@ router.get('/export.csv', async (req, res, next) => {
 });
 
 // GET /api/client-dashboard/export.pdf — PDF report package
-router.get('/export.pdf', async (req, res, next) => {
+router.get('/export.pdf', clientExportLimiter, async (req, res, next) => {
   try {
     if (!allowRole(req, res)) return;
     const { organization, company } = await getClientPortalCompany(req);

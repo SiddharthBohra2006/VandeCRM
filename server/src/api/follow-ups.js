@@ -29,7 +29,7 @@ function buildCustomerFilter(req, activeWorkspace) {
   return filter;
 }
 
-// GET /api/tasks — List follow-up tasks
+// GET /api/follow-ups — List follow-ups
 router.get('/', async (req, res, next) => {
   try {
     const activeWorkspace = workspace(req, res);
@@ -60,7 +60,7 @@ router.get('/', async (req, res, next) => {
     const accessibleCustomers = await Customer.find(baseFilter).select('_id').lean();
     const customerIds = accessibleCustomers.map(c => c._id);
 
-    const [tasks, allFollowups, completedActivities] = await Promise.all([
+    const [followUps, allFollowups, completedActivities] = await Promise.all([
       Customer.find(filter)
         .populate('stage assignedTo clientCompany campaign')
         .sort({ nextFollowUpAt: 1 })
@@ -89,8 +89,8 @@ router.get('/', async (req, res, next) => {
 
     res.json({
       ok: true,
-      tasks,
-      completedTasks: completedActivities,
+      followUps,
+      completedFollowUps: completedActivities,
       stats,
       view,
     });
@@ -99,7 +99,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// POST /api/tasks/:id/complete — Mark follow-up as complete
+// POST /api/follow-ups/:id/complete — Mark follow-up as complete
 router.post('/:id/complete', async (req, res, next) => {
   try {
     const activeWorkspace = workspace(req, res);
@@ -111,7 +111,7 @@ router.post('/:id/complete', async (req, res, next) => {
 
     const customer = await Customer.findOne(filter);
     if (!customer) {
-      return res.status(404).json({ ok: false, error: 'Task or customer not found.' });
+      return res.status(404).json({ ok: false, error: 'Follow-up or customer not found.' });
     }
 
     const completedAt = customer.nextFollowUpAt;
@@ -145,7 +145,7 @@ router.post('/:id/complete', async (req, res, next) => {
   }
 });
 
-// POST /api/tasks/:id/reschedule — Reschedule follow-up
+// POST /api/follow-ups/:id/reschedule — Reschedule follow-up
 router.post('/:id/reschedule', async (req, res, next) => {
   try {
     const activeWorkspace = workspace(req, res);
@@ -157,7 +157,7 @@ router.post('/:id/reschedule', async (req, res, next) => {
 
     const customer = await Customer.findOne(filter).populate('assignedTo');
     if (!customer) {
-      return res.status(404).json({ ok: false, error: 'Task or customer not found.' });
+      return res.status(404).json({ ok: false, error: 'Follow-up or customer not found.' });
     }
 
     const nextFollowUpAt = req.body.nextFollowUpAt ? new Date(req.body.nextFollowUpAt) : null;

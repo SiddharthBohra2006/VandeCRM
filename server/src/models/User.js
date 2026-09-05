@@ -18,7 +18,8 @@ const userSchema = new mongoose.Schema({
   dashboardCardOrder: [{ type: String, trim: true }],
   dashboardCardsCustomized: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
-  lastLoginAt: { type: Date, default: null }
+  lastLoginAt: { type: Date, default: null },
+  loginCount: { type: Number, default: 0 }
 }, { timestamps: true });
 
 userSchema.index({ organization: 1, name: 'text', email: 'text' });

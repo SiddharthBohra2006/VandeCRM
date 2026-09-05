@@ -2,7 +2,10 @@ import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { workApi, WorkType, WorkItem, WorkTypeField } from '../../api/work';
 import { useAuth } from '../../contexts/AuthContext';
-import { parseCsv } from '../../utils/importCsv';
+import { parseCsv, importFileToCsv } from '../../utils/importCsv';
+import DatePicker from '../../components/DatePicker';
+import WorkTypeBuilder from '../settings/WorkTypeBuilder';
+import { Settings as SettingsIcon } from 'lucide-react';
 
 type ViewMode = 'list' | 'board' | 'calendar' | 'overview';
 
@@ -36,6 +39,7 @@ const [workType, setWorkType] = useState<WorkType | null>(null);
   const [success, setSuccess] = useState('');
 
   const [showCreate, setShowCreate] = useState(false);
+  const [builderOpen, setBuilderOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<Record<string, any>>({
     title: '',
@@ -79,6 +83,24 @@ const [workType, setWorkType] = useState<WorkType | null>(null);
 useEffect(() => {
     loadWorkList();
   }, [type, searchParams, page]);
+
+  const prefillCustomerId = searchParams.get('prefill_customer') || '';
+  const prefillTitle = searchParams.get('prefill_title') || '';
+
+  useEffect(() => {
+    if (!prefillCustomerId && !prefillTitle) return;
+    if (customers.length === 0) return;
+    setForm(prev => ({
+      ...prev,
+      customer: prefillCustomerId || prev.customer,
+      title: prefillTitle || prev.title,
+    }));
+    setShowCreate(true);
+    const updated = new URLSearchParams(searchParams);
+    updated.delete('prefill_customer');
+    updated.delete('prefill_title');
+    setSearchParams(updated, { replace: true });
+  }, [prefillCustomerId, prefillTitle, customers, searchParams, setSearchParams]);
 
   async function loadWorkList() {
     try {
@@ -212,25 +234,22 @@ function setParam(key: string, value: string) {
     }
   }
 
-function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = String(reader.result || '');
+    try {
+      const text = await importFileToCsv(file);
       setImportCsvText(text);
-      try {
-        const parsed = parseCsv(text);
-        if (parsed.length > 0) {
-          setImportHeaders(parsed[0]);
-          setImportPreviewRows(parsed.slice(1, 6));
-        }
-      } catch {
-        setImportHeaders(['title', 'status', 'assignedTo', 'priority', 'deadline', 'notes']);
-        setImportPreviewRows([]);
+      const parsed = parseCsv(text);
+      if (parsed.length > 0) {
+        setImportHeaders(parsed[0]);
+        setImportPreviewRows(parsed.slice(1, 6));
       }
-    };
-    reader.readAsText(file);
+    } catch (caught: any) {
+      setError(caught?.message || 'Failed to read file');
+      setImportHeaders(['title', 'status', 'assignedTo', 'priority', 'deadline', 'notes']);
+      setImportPreviewRows([]);
+    }
   }
 
   async function handleConfirmImport(e: React.FormEvent) {
@@ -256,6 +275,16 @@ function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
   async function handleStatusDrag(itemId: string, newStatus: string) {
     if (!itemId || !newStatus) return;
     await handleQuickStatusChange(itemId, newStatus);
+  }
+
+  async function handleQuickAssign(item: WorkItem, toUser: string) {
+    if (!toUser || toUser === item.assignedTo?._id) return;
+    try {
+      setError('');
+      await workApi.delegate(type, item._id, { toUser });
+      setSuccess('Task assigned.');
+      await loadWorkList();
+    } catch (err: any) { setError(err.message || 'Failed to assign task'); }
   }
 
   function onDragStart(e: React.DragEvent, item: WorkItem) {
@@ -331,8 +360,20 @@ function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
           >
             Import CSV
           </button>
+          {user?.role === 'admin' && (
+            <button
+              type="button"
+              className="btn small"
+              onClick={() => setBuilderOpen(true)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}
+              title={`Customize ${workType?.name || type} module`}
+            >
+              <SettingsIcon size={13} />
+              <span>Customize module</span>
+            </button>
+          )}
           <button type="button" className="btn primary" onClick={() => setShowCreate(!showCreate)}>
-            {showCreate ? 'Cancel' : `+ Add ${type}`}
+            {showCreate ? 'Cancel' : `+ Add ${workType?.name || type}`}
           </button>
         </div>
       </section>
@@ -379,7 +420,11 @@ function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
               Deadline
-              <input type="date" value={form.deadline} onChange={e => setForm({ ...form, deadline: e.target.value })} />
+              <DatePicker
+                placeholder="Select deadline"
+                value={form.deadline}
+                onChange={val => setForm({ ...form, deadline: val })}
+              />
             </label>
           </div>
           {(workType?.fields || []).length > 0 && (
@@ -394,8 +439,13 @@ function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
                     </select>
                   ) : field.type === 'checkbox' ? (
                     <input type="checkbox" checked={!!form.customFields?.[field.key]} onChange={e => setForm({ ...form, customFields: { ...form.customFields, [field.key]: e.target.checked } })} />
+                  ) : field.type === 'date' ? (
+                    <DatePicker
+                      value={form.customFields?.[field.key] || ''}
+                      onChange={val => setForm({ ...form, customFields: { ...form.customFields, [field.key]: val } })}
+                    />
                   ) : (
-                    <input type={field.type === 'number' || field.type === 'currency' ? 'number' : field.type === 'date' ? 'date' : 'text'} value={form.customFields?.[field.key] || ''} onChange={e => setForm({ ...form, customFields: { ...form.customFields, [field.key]: e.target.value } })} />
+                    <input type={field.type === 'number' || field.type === 'currency' ? 'number' : 'text'} value={form.customFields?.[field.key] || ''} onChange={e => setForm({ ...form, customFields: { ...form.customFields, [field.key]: e.target.value } })} />
                   )}
                 </label>
               ))}
@@ -527,6 +577,10 @@ function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
                           </span>
                         ))}
                       </div>
+                      <select aria-label={`Assign ${item.title}`} value={item.assignedTo?._id || ''} onMouseDown={e => e.stopPropagation()} onChange={e => void handleQuickAssign(item, e.target.value)} style={{ width: '100%', marginTop: '.5rem' }}>
+                        <option value="">Assign to…</option>{users.map(person => <option key={person._id} value={person._id}>{person.name}</option>)}
+                      </select>
+                      {(item.workflowHistory || []).some(event => event.event === 'forwarded') && <small style={{ display: 'block', marginTop: '.35rem', color: 'var(--muted)' }}>Forwarded {(item.workflowHistory || []).filter(event => event.event === 'forwarded').length}×</small>}
                     </article>
                   ))}
                 </div>
@@ -651,7 +705,7 @@ function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
             
             <input
               type="file"
-              accept=".csv,text/csv"
+              accept=".xlsx,.xls,.csv,text/csv"
               onChange={handleFileChange}
               style={{ border: '1px dashed var(--border)', padding: '1rem', borderRadius: '8px', background: 'var(--panel-muted)' }}
             />
@@ -692,6 +746,14 @@ function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
             </div>
           </form>
         </div>
+      )}
+
+      {builderOpen && (
+        <WorkTypeBuilder
+          workType={workType}
+          onClose={() => setBuilderOpen(false)}
+          onChanged={loadWorkList}
+        />
       )}
     </div>
   );

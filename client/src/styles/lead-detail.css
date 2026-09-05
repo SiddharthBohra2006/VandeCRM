@@ -89,29 +89,10 @@
   .lead-record-ui #activityForm { padding: 10px; }
   .lead-record-ui .lead-followup-panel input { font-size: 16px; }
 }
-/* Reference layout: scoped to the lead page, including its application chrome. */
-body:has(.lead-record-ui) .main-wrap, .lead-record-ui {
-  --bg: #f8f9fc; --panel: #fff; --input: #fff; --text: #101828; --sub: #344054; --muted: #697586;
-  --border: #e6eaf0; --gold: #f58200; --gold-hover: #df7100; --gold-dim: #fff0e2;
-  --teal: #039855; --teal-dim: #e8f8ef; --hover: #fff5eb;
-  color: var(--text); color-scheme: light;
+/* Scoped lead record inner styling */
+.lead-record-ui {
+  color: var(--text);
 }
-body:has(.lead-record-ui) .main-wrap { background: #f8f9fc !important; }
-body:has(.lead-record-ui) .page-content { padding: 20px 28px !important; }
-body:has(.lead-record-ui) .topbar { background: #fff !important; color: #101828; border-color: #e6eaf0 !important; min-height: 68px; }
-body:has(.lead-record-ui) .topbar-clock-section { display: none; }
-body:has(.lead-record-ui) .topbar-search { max-width: 410px; background: #fff !important; border: 1px solid #e6eaf0 !important; border-radius: 8px; }
-body:has(.lead-record-ui) .sidebar { --panel: #091524; --text: #f8fafc; --sub: #d6dce6; --muted: #9faabc; --border: #263241; --gold: #ff9300; background: linear-gradient(150deg,#050d18,#0b1a2a) !important; color: #f8fafc; }
-body:has(.lead-record-ui) .sidebar .nav-item { color: #e3e8ee !important; font-size: 13px !important; min-height: 45px; border-radius: 7px; }
-body:has(.lead-record-ui) .sidebar .nav-item.active { background: #ffffff12 !important; color: #ff9300 !important; border-left: 3px solid #ff9300; }
-body:has(.lead-record-ui) .sidebar .nav-item svg { color: inherit !important; }
-body:has(.lead-record-ui) .sidebar-logo { height: 94px !important; padding: 16px !important; border: 0 !important; }
-body:has(.lead-record-ui) .crm-switcher > summary { border: 1px solid #293645 !important; padding: 12px !important; border-radius: 8px !important; }
-body:has(.lead-record-ui) .crm-current-avatar { display: none; }
-.lead-app-brand { display: flex; align-items: center; padding: 18px 22px; height: 64px; border-bottom: 1px solid #25303c; color: #fff; font-size: 19px; font-weight: 600; }
-.lead-app-brand > span { color: #ff9200; font-size: 30px; font-weight: 800; margin-right: 9px; transform: rotate(-12deg); }
-.lead-app-brand b { color: #ff9200; }
-body:has(.lead-record-ui) .sidebar.collapsed:not(:hover) .lead-app-brand { overflow: hidden; font-size: 0; padding-left: 16px; }
 .lead-record-ui .lead-detail-head { padding: 22px 20px 0 !important; box-shadow: 0 3px 12px #172b4d05 !important; }
 .lead-record-ui .lead-identity h1 { font-size: 23px !important; font-weight: 650 !important; }
 .lead-record-ui .lead-identity > div { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
@@ -181,39 +162,13 @@ body:has(.lead-record-ui) .sidebar.collapsed:not(:hover) .lead-app-brand { overf
  .lead-record-ui .lead-section-nav { gap: 6px; }
  .lead-record-ui .lead-section-nav a { padding: 12px; }
 }
-body:has(.lead-record-ui) .topbar { display: flex !important; gap: 24px; padding: 0 28px !important; }
-body:has(.lead-record-ui) .topbar-search { display: flex !important; width: min(410px, 45vw); margin-right: auto; }
-body:has(.lead-record-ui) .topbar-search input { color: #344054 !important; background: #fff !important; font-size: 12px; height: 40px; }
-body:has(.lead-record-ui) .topbar-actions { margin-left: auto; }
-body:has(.lead-record-ui) .sidebar .nav-item, body:has(.lead-record-ui) .sidebar .nav-item span { font-weight: 400 !important; }
-body:has(.lead-record-ui) .sidebar .crm-current-avatar { display: none !important; }
-body:has(.lead-record-ui) .sidebar .brand-text strong { font-size: 11px !important; font-weight: 600 !important; }
-body:has(.lead-record-ui) .sidebar .brand-text small { font-size: 9px !important; }
 .lead-record-ui #history .timeline::before, .lead-record-ui #history .timeline::after { display: none !important; }
 .lead-record-ui .lead-event-author { font-weight: 400 !important; }
 .lead-record-ui .lead-followup-history .btn { margin-top: 8px; }
-@media (max-width:600px) { body:has(.lead-record-ui) .topbar { padding: 0 14px !important; gap: 8px; } body:has(.lead-record-ui) .topbar-search { width: auto; min-width: 0; } }
 .lead-record-ui .timeline-content { position: relative; }
-.lead-record-ui .lead-event-details > summary { display: inline-block; margin-top: 8px; border: 1px solid #e6eaf0; border-radius: 5px; padding: 5px 12px; font-size: 9px; color: #101828; }
-.lead-record-ui .lead-event-details[open] { border-top: 1px solid #eef1f5; margin-top: 8px; }
+.lead-record-ui .lead-event-details > summary { display: inline-block; margin-top: 8px; border: 1px solid #e6eaf0; border-radius: 5px; padding: 5px 12px; font-size: 9px; color: var(--text); }
+.lead-record-ui .lead-event-details[open] { border-top: 1px solid var(--border); margin-top: 8px; }
 .lead-record-ui .lead-event-details[open] > p { font-size: 12px; }
-body:has(.lead-record-ui) .theme-toggle-btn { color: #344054 !important; background: #fff !important; border-color: #e6eaf0 !important; }
-body:has(.lead-record-ui) .sidebar-user .user-avatar, body:has(.lead-record-ui) .topbar .user-avatar { border-radius: 50%; background: #ffd08c !important; color: #172033 !important; }
-
-/* --- React adaptations (button-based section nav + timeline/card classes) --- */
-.lead-record-ui .lead-section-nav { display: flex; gap: 26px; list-style: none; }
-.lead-record-ui .lead-section-nav button {
-  background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer;
-  font-size: .76rem; padding: 14px 16px 12px; color: var(--muted); font-weight: 650; border-radius: 0;
-  transition: color .15s ease, border-color .15s ease;
-}
-.lead-record-ui .lead-section-nav button:hover { color: var(--text); }
-.lead-record-ui .lead-section-nav button.active { color: var(--gold); border-bottom-color: var(--gold); font-weight: 700; }
-
-.lead-record-ui .lead-detail-breadcrumbs { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; color: var(--muted); font-size: .72rem; font-weight: 700; }
-.lead-record-ui .lead-detail-breadcrumbs a { color: var(--muted); text-decoration: none; }
-.lead-record-ui .lead-detail-breadcrumbs a:hover { color: var(--gold); }
-.lead-record-ui .lead-detail-breadcrumbs strong { color: var(--text); }
 
 .lead-record-ui .lead-tab-pane { display: block; }
 .lead-record-ui .lead-notes h3 { margin: 0 0 6px; font-size: .68rem; text-transform: uppercase; color: var(--muted); }

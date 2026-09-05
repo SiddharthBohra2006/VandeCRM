@@ -26,6 +26,7 @@ export default function CustomerImportPreviewPage() {
     defaultClientCompanyId?: string;
     defaultNextFollowUpAt?: string;
     defaultFollowUpComment?: string;
+    scope?: string;
   };
 
   const [importing, setImporting] = useState(false);
@@ -42,7 +43,7 @@ export default function CustomerImportPreviewPage() {
         </section>
         <div className="empty-state" style={{ padding: '3rem', textAlign: 'center' }}>
           <p>No import data found. Start a new import.</p>
-          <Link className="btn primary" to="/customers/import">Go to Import Wizard</Link>
+          <Link className="btn primary" to={`/customers/import${state.scope === 'clients' ? '?scope=client' : ''}`}>Go to Import Wizard</Link>
         </div>
       </div>
     );
@@ -65,6 +66,7 @@ export default function CustomerImportPreviewPage() {
         defaultClientCompanyId: state.defaultClientCompanyId,
         defaultNextFollowUpAt: state.defaultNextFollowUpAt,
         defaultFollowUpComment: state.defaultFollowUpComment,
+        scope: state.scope,
       });
       navigate('/customers/import/results', {
         state: {
@@ -73,6 +75,7 @@ export default function CustomerImportPreviewPage() {
           skipped: res.skipped,
           totalRows: preview.totalRows,
           warnings: preview.rows.filter(r => r.messages.length > 0).map(r => `Row ${r.rowNumber}: ${r.messages.join('; ')}`),
+          scope: state.scope,
         }
       });
     } catch (err: any) {

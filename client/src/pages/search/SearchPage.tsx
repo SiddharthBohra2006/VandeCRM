@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { searchApi, SearchResponse, SearchGroup } from '../../api/search';
+import DatePicker from '../../components/DatePicker';
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -165,12 +166,20 @@ export default function SearchPage() {
 
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--muted)' }}>
             From:
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ padding: '4px 8px', borderRadius: '4px' }} />
+            <DatePicker
+              placeholder="From"
+              value={from}
+              onChange={val => setFrom(val)}
+            />
           </label>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--muted)' }}>
             To:
-            <input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ padding: '4px 8px', borderRadius: '4px' }} />
+            <DatePicker
+              placeholder="To"
+              value={to}
+              onChange={val => setTo(val)}
+            />
           </label>
 
           <button type="button" className="btn small" onClick={handleClear}>

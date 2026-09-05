@@ -4,7 +4,14 @@ const ClientCompany = require('../../../src/models/ClientCompany');
 const WorkType = require('../../../src/models/WorkType');
 const { hasPermission } = require('../../config/roles');
 
-const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || 'dev-jwt-secret-change-in-production';
+const FALLBACK_SECRET = 'dev-jwt-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || FALLBACK_SECRET;
+if (JWT_SECRET === FALLBACK_SECRET) {
+  // Defense in depth: server.js refuses to boot without a secret, but if this
+  // module is ever loaded elsewhere, never sign/verify tokens with a literal
+  // sitting in source code.
+  throw new Error('JWT signing secret is not configured. Set JWT_SECRET or SESSION_SECRET.');
+}
 const JWT_EXPIRES = '7d';
 
 function generateToken(user, activeCompanyId) {

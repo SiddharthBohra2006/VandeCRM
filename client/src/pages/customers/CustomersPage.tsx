@@ -4,6 +4,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { customersApi, downloadCustomersCsv, downloadImportTemplate, CustomersListResponse, ImportPreviewRow } from '../../api/customers';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import CustomizeColumnsModal, { ColumnDefinition } from '../../components/CustomizeColumnsModal';
+import CustomSelect from '../../components/CustomSelect';
+import DatePicker from '../../components/DatePicker';
 import { SCHEMA_OPTIONS, importFileToCsv, parseCsvRow, suggestTarget } from '../../utils/importCsv';
 
 const CUSTOMER_COLUMNS: ColumnDefinition[] = [
@@ -581,12 +583,16 @@ export default function CustomersPage() {
             }}
           />
 
-          <select value={searchParams.get('stage') || ''} onChange={e => handleFilterChange('stage', e.target.value)}>
-            <option value="">All stages</option>
-            {stages.map(stage => (
-              <option key={stage._id} value={stage._id}>{stage.name}</option>
-            ))}
-          </select>
+          <CustomSelect
+            value={searchParams.get('stage') || ''}
+            onChange={val => handleFilterChange('stage', val)}
+            placeholder="All stages"
+            options={[
+              { value: '', label: 'All stages' },
+              ...stages.map(stage => ({ value: stage._id, label: stage.name }))
+            ]}
+            style={{ width: '160px' }}
+          />
 
           <button className="btn secondary outline" type="button" onClick={() => setShowColumnsModal(true)}>
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -609,36 +615,46 @@ export default function CustomersPage() {
                 <small>Narrow this workspace</small>
               </header>
               <div className="advanced-filter-fields">
-                <select value={searchParams.get('label') || ''} onChange={e => handleFilterChange('label', e.target.value)}>
-                  <option value="">All labels</option>
-                  {labels.map(l => (
-                    <option key={l._id} value={l._id}>{l.name}</option>
-                  ))}
-                </select>
-                <select value={searchParams.get('campaign') || ''} onChange={e => handleFilterChange('campaign', e.target.value)}>
-                  <option value="">All Campaigns</option>
-                  {campaigns.map(c => (
-                    <option key={c._id} value={c._id}>{c.name} ({c.platform})</option>
-                  ))}
-                </select>
-                <select value={searchParams.get('sortBy') || 'recent'} onChange={e => handleFilterChange('sortBy', e.target.value)}>
-                  <option value="recent">Recently Updated</option>
-                  <option value="old">Oldest leads</option>
-                  <option value="highest-value">Highest Value</option>
-                  <option value="lowest-value">Lowest Value</option>
-                  <option value="name">Lead name</option>
-                </select>
-                <input
-                  type="date"
-                  aria-label="From date"
-                  value={searchParams.get('dateFrom') || ''}
-                  onChange={e => handleFilterChange('dateFrom', e.target.value)}
+                <CustomSelect
+                  value={searchParams.get('label') || ''}
+                  onChange={val => handleFilterChange('label', val)}
+                  placeholder="All labels"
+                  options={[
+                    { value: '', label: 'All labels' },
+                    ...labels.map(l => ({ value: l._id, label: l.name }))
+                  ]}
                 />
-                <input
-                  type="date"
+                <CustomSelect
+                  value={searchParams.get('campaign') || ''}
+                  onChange={val => handleFilterChange('campaign', val)}
+                  placeholder="All Campaigns"
+                  options={[
+                    { value: '', label: 'All Campaigns' },
+                    ...campaigns.map(c => ({ value: c._id, label: `${c.name}${c.platform ? ` (${c.platform})` : ''}` }))
+                  ]}
+                />
+                <CustomSelect
+                  value={searchParams.get('sortBy') || 'recent'}
+                  onChange={val => handleFilterChange('sortBy', val)}
+                  options={[
+                    { value: 'recent', label: 'Recently Updated' },
+                    { value: 'old', label: 'Oldest leads' },
+                    { value: 'highest-value', label: 'Highest Value' },
+                    { value: 'lowest-value', label: 'Lowest Value' },
+                    { value: 'name', label: 'Lead name' },
+                  ]}
+                />
+                <DatePicker
+                  aria-label="From date"
+                  placeholder="From date"
+                  value={searchParams.get('dateFrom') || ''}
+                  onChange={val => handleFilterChange('dateFrom', val)}
+                />
+                <DatePicker
                   aria-label="To date"
+                  placeholder="To date"
                   value={searchParams.get('dateTo') || ''}
-                  onChange={e => handleFilterChange('dateTo', e.target.value)}
+                  onChange={val => handleFilterChange('dateTo', val)}
                 />
               </div>
               <footer>
@@ -683,36 +699,63 @@ export default function CustomersPage() {
 
       {/* Bulk Action Bar */}
       {selectedIds.size > 0 && (
-        <div className="bulk-actions" style={{ margin: '0 32px 14px 32px' }}>
+        <div className="bulk-actions" style={{ margin: '0 32px 14px 32px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <strong>{selectedIds.size} selected</strong>
-          <select value={bulkAction} onChange={event => { setBulkAction(event.target.value); setBulkValue(''); }}>
-            <option value="">Choose action</option>
-            <option value="stage">Change stage</option>
-            <option value="transfer">Transfer</option>
-            <option value="priority">Set priority</option>
-            <option value="value">Set value</option>
-            <option value="source">Set source</option>
-            <option value="delete">Delete</option>
-          </select>
+          <CustomSelect
+            value={bulkAction}
+            onChange={val => { setBulkAction(val); setBulkValue(''); }}
+            placeholder="Choose action"
+            options={[
+              { value: '', label: 'Choose action' },
+              { value: 'stage', label: 'Change stage' },
+              { value: 'transfer', label: 'Transfer' },
+              { value: 'priority', label: 'Set priority' },
+              { value: 'value', label: 'Set value' },
+              { value: 'source', label: 'Set source' },
+              { value: 'delete', label: 'Delete' },
+            ]}
+            style={{ width: '150px' }}
+          />
           {bulkAction === 'stage' && (
-            <select aria-label="New stage" value={bulkValue} onChange={event => setBulkValue(event.target.value)}>
-              <option value="">Choose stage</option>
-              {stages.filter(s => s.isActive).map(s => <option value={s._id} key={s._id}>{s.name}</option>)}
-            </select>
+            <CustomSelect
+              aria-label="New stage"
+              value={bulkValue}
+              onChange={val => setBulkValue(val)}
+              placeholder="Choose stage"
+              options={[
+                { value: '', label: 'Choose stage' },
+                ...stages.filter(s => s.isActive).map(s => ({ value: s._id, label: s.name }))
+              ]}
+              style={{ width: '160px' }}
+            />
           )}
           {bulkAction === 'transfer' && (
-            <select aria-label="New owner" value={bulkValue} onChange={event => setBulkValue(event.target.value)}>
-              <option value="">Unassigned</option>
-              {users.map(u => <option value={u._id} key={u._id}>{u.name}</option>)}
-            </select>
+            <CustomSelect
+              aria-label="New owner"
+              value={bulkValue}
+              onChange={val => setBulkValue(val)}
+              placeholder="Unassigned"
+              options={[
+                { value: '', label: 'Unassigned' },
+                ...users.map(u => ({ value: u._id, label: u.name }))
+              ]}
+              style={{ width: '160px' }}
+            />
           )}
           {bulkAction === 'priority' && (
-            <select aria-label="New priority" value={bulkValue} onChange={event => setBulkValue(event.target.value)}>
-              <option value="">Choose priority</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
+            <CustomSelect
+              aria-label="New priority"
+              value={bulkValue}
+              onChange={val => setBulkValue(val)}
+              placeholder="Choose priority"
+              options={[
+                { value: '', label: 'Choose priority' },
+                { value: 'low', label: 'Low' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'high', label: 'High' },
+              ]}
+              style={{ width: '150px' }}
+            />
           )}
           {['value', 'source'].includes(bulkAction) && (
             <input
@@ -1097,44 +1140,61 @@ export default function CustomersPage() {
                       {csvHeaders.map(header => (
                         <label key={header} style={{ display: 'grid', gap: '0.2rem', fontSize: '0.72rem', fontWeight: 600, color: 'var(--muted)', padding: '0.15rem 0' }}>
                           <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text)', fontWeight: 700 }}>{header}</span>
-                          <select className="app-select" value={csvMappings[header] || header} onChange={e => setCsvMappings(prev => ({ ...prev, [header]: e.target.value }))}>
-                            {SCHEMA_OPTIONS.map(opt => (
-                              <option key={opt.value} value={opt.value}>{opt.label}</option>
-                            ))}
-                            <option value={header}>New custom field</option>
-                            <option value="__ignore">Ignore column</option>
-                          </select>
+                          <CustomSelect
+                            value={csvMappings[header] || header}
+                            onChange={val => setCsvMappings(prev => ({ ...prev, [header]: val }))}
+                            options={[
+                              ...SCHEMA_OPTIONS.map(opt => ({ value: opt.value, label: opt.label })),
+                              { value: header, label: 'New custom field' },
+                              { value: '__ignore', label: 'Ignore column' },
+                            ]}
+                          />
                         </label>
                       ))}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.75rem' }}>
                       <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
                         Default pipeline stage
-                        <select className="app-select" style={{ display: 'block', width: '100%', marginTop: '0.25rem' }} value={defaultStageId} onChange={e => setDefaultStageId(e.target.value)}>
-                          <option value="">Default CRM Stage</option>
-                          {importStages.map(stage => (
-                            <option key={stage._id} value={stage._id}>{stage.name} {stage.isDefault ? '(Default)' : ''}</option>
-                          ))}
-                        </select>
+                        <div style={{ marginTop: '0.25rem' }}>
+                          <CustomSelect
+                            value={defaultStageId}
+                            onChange={val => setDefaultStageId(val)}
+                            placeholder="Default CRM Stage"
+                            options={[
+                              { value: '', label: 'Default CRM Stage' },
+                              ...importStages.map(stage => ({ value: stage._id, label: `${stage.name} ${stage.isDefault ? '(Default)' : ''}` }))
+                            ]}
+                          />
+                        </div>
                       </label>
                       <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
                         Default owner
-                        <select className="app-select" style={{ display: 'block', width: '100%', marginTop: '0.25rem' }} value={defaultAssignedToId} onChange={e => setDefaultAssignedToId(e.target.value)}>
-                          <option value="">Current user ({user?.name || 'Me'})</option>
-                          {importUsers.map(importUser => (
-                            <option key={importUser._id} value={importUser._id}>{importUser.name}</option>
-                          ))}
-                        </select>
+                        <div style={{ marginTop: '0.25rem' }}>
+                          <CustomSelect
+                            value={defaultAssignedToId}
+                            onChange={val => setDefaultAssignedToId(val)}
+                            placeholder={`Current user (${user?.name || 'Me'})`}
+                            options={[
+                              { value: '', label: `Current user (${user?.name || 'Me'})` },
+                              ...importUsers.map(importUser => ({ value: importUser._id, label: importUser.name }))
+                            ]}
+                          />
+                        </div>
                       </label>
                       {importCompanies.length > 0 && (
                         <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
                           Default company
-                          <select className="app-select" style={{ display: 'block', width: '100%', marginTop: '0.25rem' }} value={defaultClientCompanyId} onChange={e => setDefaultClientCompanyId(e.target.value)}>
-                            <option value="">{activeCompany?.name || 'Default company'}</option>
-                            {importCompanies.map(company => (
-                              <option key={company._id} value={company._id}>{company.name}</option>
-                            ))}
-                          </select>
+                          <div style={{ marginTop: '0.25rem' }}>
+                            <CustomSelect
+                              value={defaultClientCompanyId}
+                              onChange={val => setDefaultClientCompanyId(val)}
+                              placeholder={activeCompany?.name || 'Default company'}
+                              options={[
+                                { value: '', label: activeCompany?.name || 'Default company' },
+                                ...importCompanies.map(company => ({ value: company._id, label: company.name }))
+                              ]}
+                            />
+                          </div>
                         </label>
                       )}
                       <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
@@ -1150,11 +1210,17 @@ export default function CustomersPage() {
                 )}
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, margin: '0.75rem 0 0.25rem' }}>
                   On duplicate match
-                  <select value={duplicateRule} onChange={e => setDuplicateRule(e.target.value as 'update' | 'skip' | 'create')} className="app-select" style={{ display: 'block', width: '100%', marginTop: '0.25rem' }}>
-                    <option value="update">Update existing record</option>
-                    <option value="skip">Skip duplicate</option>
-                    <option value="create">Create new anyway</option>
-                  </select>
+                  <div style={{ marginTop: '0.25rem' }}>
+                    <CustomSelect
+                      value={duplicateRule}
+                      onChange={val => setDuplicateRule(val as 'update' | 'skip' | 'create')}
+                      options={[
+                        { value: 'update', label: 'Update existing record' },
+                        { value: 'skip', label: 'Skip duplicate' },
+                        { value: 'create', label: 'Create new anyway' },
+                      ]}
+                    />
+                  </div>
                 </label>
                 <button className="btn btn-primary" style={{ width: '100%' }} type="button" disabled={previewing || !csvText.trim()} onClick={() => void handlePreviewImport()}>
                   {previewing ? 'Previewing...' : 'Preview Import'}

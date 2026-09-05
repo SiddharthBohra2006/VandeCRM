@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { reportsApi, Report } from '../../api/reports';
+import DatePicker from '../../components/DatePicker';
 
 function formatCell(column: string, value: any) {
   if (typeof value === 'number' && /value|revenue/i.test(column)) {
@@ -120,8 +121,24 @@ export default function ReportTablePage() {
           <input type="number" min={1} style={{ ...selectStyle, width: 80 }} value={searchParams.get('staleDays') || report?.staleDays || 14} onChange={e => setFilter('staleDays', e.target.value)} />
         )}
 
-        <label className="date-field"><span>Start date</span><input type="date" aria-label="Start date" value={searchParams.get('dateFrom') || ''} onChange={e => setFilter('dateFrom', e.target.value)} /></label>
-        <label className="date-field"><span>End date</span><input type="date" aria-label="End date" value={searchParams.get('dateTo') || ''} onChange={e => setFilter('dateTo', e.target.value)} /></label>
+        <label className="date-field">
+          <span>Start date</span>
+          <DatePicker
+            aria-label="Start date"
+            placeholder="Start date"
+            value={searchParams.get('dateFrom') || ''}
+            onChange={val => setFilter('dateFrom', val)}
+          />
+        </label>
+        <label className="date-field">
+          <span>End date</span>
+          <DatePicker
+            aria-label="End date"
+            placeholder="End date"
+            value={searchParams.get('dateTo') || ''}
+            onChange={val => setFilter('dateTo', val)}
+          />
+        </label>
         <a className="btn" href={`/reports/${key}`} onClick={e => { e.preventDefault(); navigate(`/reports/${key}`); }}>Reset</a>
       </form>
 

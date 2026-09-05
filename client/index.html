@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vande Agency CRM</title>
+    <title>CRM</title>
     <script>
       // Synchronous theme/density bootstrap — mirrors EJS partials/head.ejs.
       // Must run before first paint so app.css `html.dark-theme`/`data-theme`
@@ -38,12 +38,17 @@
           root.setProperty('--sub', 'color-mix(in srgb, ' + theme.surface + ' 30%, ' + theme.text + ')');
           root.setProperty('--hover', 'color-mix(in srgb, ' + theme.surface + ' 94%, ' + theme.text + ')');
           root.setProperty('--panel-2', 'color-mix(in srgb, ' + theme.surface + ' 96%, ' + theme.text + ')');
+          document.addEventListener('DOMContentLoaded', function() {
+            if (document.body) {
+              document.body.classList.toggle('dark-theme', theme.type === 'dark');
+            }
+          });
         } catch (_) {}
       })();
     </script>
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png?v=2" />
   </head>
-  <body class="dark-theme">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

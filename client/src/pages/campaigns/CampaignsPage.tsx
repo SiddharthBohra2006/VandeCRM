@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { campaignsApi, Campaign, CampaignInput } from '../../api/campaigns';
 import { Company } from '../../api/companies';
 import { useAuth } from '../../contexts/AuthContext';
+import DatePicker from '../../components/DatePicker';
 
 export default function CampaignsPage() {
   const { user } = useAuth();
@@ -267,10 +268,9 @@ export default function CampaignsPage() {
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
               Start Date
-              <input
-                type="date"
+              <DatePicker
                 value={newCampaign.startDate || ''}
-                onChange={e => setNewCampaign({ ...newCampaign, startDate: e.target.value })}
+                onChange={val => setNewCampaign({ ...newCampaign, startDate: val })}
               />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
@@ -317,16 +317,16 @@ export default function CampaignsPage() {
           ))}
         </select>
 
-        <input
-          type="date"
+        <DatePicker
+          placeholder="From date"
           value={currentDateFrom}
-          onChange={e => handleFilterChange('dateFrom', e.target.value)}
+          onChange={val => handleFilterChange('dateFrom', val)}
           style={{ minWidth: '140px' }}
         />
-        <input
-          type="date"
+        <DatePicker
+          placeholder="To date"
           value={currentDateTo}
-          onChange={e => handleFilterChange('dateTo', e.target.value)}
+          onChange={val => handleFilterChange('dateTo', val)}
           style={{ minWidth: '140px' }}
         />
 

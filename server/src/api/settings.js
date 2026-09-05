@@ -54,10 +54,10 @@ router.get('/setup', async (req, res, next) => {
     const steps = [
       { title: 'Company profile', detail: 'Add the business contact details for this CRM workspace.', href: `/companies/${companyId}`, done: Boolean(company?.website || company?.contactPerson || company?.email || company?.phone), action: 'Set up profile' },
       { title: 'Team access', detail: 'Invite the people who will use this CRM and give them the right role.', href: '/team', done: teamCount > 1, action: 'Manage team' },
-      { title: 'Pipeline', detail: 'Rename stages so they match how this company sells.', href: '/settings#stages', done: stageCount > 0, action: 'Customize stages' },
-      { title: 'Fields and labels', detail: 'Add the information and tags this company needs to track.', href: '/settings#fields', done: fieldCount > 0 || labelCount > 0, action: 'Customize CRM' },
+      { title: 'Pipeline', detail: 'Rename stages so they match how this company sells.', href: '/settings?category=stages', done: stageCount > 0, action: 'Customize stages' },
+      { title: 'Fields and labels', detail: 'Add the information and tags this company needs to track.', href: '/settings?category=fields', done: fieldCount > 0 || labelCount > 0, action: 'Customize CRM' },
       { title: 'Import existing leads', detail: 'Upload a CSV, review duplicates and mapping, then confirm the import.', href: '/customers', done: leadCount > 0, action: 'Import leads' },
-      { title: 'Work types and targets', detail: 'Choose the work your team delivers and set the fields and statuses it needs.', href: '/settings#work-types', done: workTypeCount > 0, action: 'Customize work' },
+      { title: 'Work types and targets', detail: 'Choose the work your team delivers and set the fields and statuses it needs.', href: '/settings?category=work-types', done: workTypeCount > 0, action: 'Customize work' },
       { title: 'Campaigns and integrations', detail: 'Optional: add active campaigns or connect lead and reporting sources.', href: '/campaigns', done: campaignCount > 0, optional: true, action: 'Configure optional tools' },
       { title: 'Review and launch', detail: 'Open the dashboard and start working from the CRM you configured.', href: '/', done: false, action: 'Open dashboard' }
     ];
@@ -162,13 +162,16 @@ router.get('/', async (req, res, next) => {
       automations,
       users,
       organization: orgDoc,
-      terminology: companyDoc?.terminology || {
-        leadSingular: 'Lead',
-        leadPlural: 'Leads',
-        recordSingular: 'Deliverable',
-        recordPlural: 'Deliverables',
-        pipelineName: 'Pipeline',
-      },
+      terminology: (() => {
+        const t = companyDoc?.terminology || {};
+        return {
+          leadSingular: t.leadSingular || 'Lead',
+          leadPlural: t.leadPlural || 'Leads',
+          recordSingular: t.recordSingular || 'Deliverable',
+          recordPlural: t.recordPlural || 'Deliverables',
+          pipelineName: t.pipelineName || 'Pipeline',
+        };
+      })(),
     });
   } catch (error) {
     next(error);
@@ -543,6 +546,46 @@ router.put('/theme', async (req, res, next) => {
 
     await Organization.updateOne({ _id: organization }, { theme });
     res.json({ ok: true, data: theme });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PUT /api/settings/organization — Update workspace identity (admin only).
+// Edits the org name that drives the sidebar brand, browser-tab title, auth
+// pages, and report headers; plus the analytics heading suffix, currency, and
+// locale for white-labeling / multi-tenant reuse.
+router.put('/organization', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ ok: false, error: 'Admin access required.' });
+    }
+    const updates = {};
+    const name = String(req.body.name || '').trim();
+    if (name) updates.name = name;
+    if (typeof req.body.analyticsHeading === 'string') updates.analyticsHeading = String(req.body.analyticsHeading).trim().slice(0, 60);
+    if (typeof req.body.currency === 'string') updates.currency = String(req.body.currency).trim().toUpperCase().slice(0, 8);
+    if (typeof req.body.locale === 'string') updates.locale = String(req.body.locale).trim().slice(0, 12);
+
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ ok: false, error: 'Nothing to update.' });
+    }
+
+    const organization = await Organization.findByIdAndUpdate(
+      req.user.organization._id,
+      { $set: updates },
+      { new: true, runValidators: true }
+    ).lean();
+
+    await logAudit(req, {
+      action: 'update',
+      entityType: 'organization',
+      entityId: organization._id,
+      entityName: organization.name,
+      message: `Workspace identity updated to "${organization.name}".`,
+    });
+
+    res.json({ ok: true, data: organization });
   } catch (error) {
     next(error);
   }

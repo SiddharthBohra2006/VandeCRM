@@ -40,7 +40,8 @@ const navItems: NavItem[] = [
   { path: '/analytics', label: 'Analytics', icon: 'bar-chart-3', navKey: 'nav-analytics', permission: 'reports.view' },
   { path: '/reports', label: 'Reports', icon: 'file-text', navKey: 'nav-reports', permission: 'reports.view' },
   { path: '/work', label: 'Work Center', icon: 'list-todo', navKey: 'nav-task-center' },
-  { path: '/tasks', label: 'Follow-ups', icon: 'list-checks', navKey: 'nav-tasks', permission: 'tasks.view' },
+  { path: '/work/threads', label: 'Team Chat', icon: 'send', navKey: 'nav-team-chat' },
+  { path: '/follow-ups', label: 'Follow-ups', icon: 'list-checks', navKey: 'nav-follow-ups', permission: 'tasks.view' },
   { path: '/campaigns', label: 'Ads', icon: 'megaphone', navKey: 'nav-campaigns', permission: 'ads.view' },
   { path: '/companies', label: 'CRMs', icon: 'folder-kanban', navKey: 'nav-companies', permission: 'mail.view' },
   { path: '/team', label: 'Team', icon: 'user-check', navKey: 'nav-team', permission: 'team.view' },
@@ -120,19 +121,20 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
   const location = useLocation();
   const resolvedPath = location.pathname;
 
-  const isWorkActive = resolvedPath.startsWith('/work');
   const isClient = user.role === 'client';
+
+  const brandName = user?.organization?.name || 'Vande';
+  const brandInitials = brandName.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('') || 'VD';
 
   const hiddenSet = useMemoSet(user.sidebarHiddenItems || []);
 
   const accessibleWorkTypes = workTypes.filter(wt => canAccessWorkType(user, wt));
-  const visibleWorkTypes = accessibleWorkTypes.filter(wt => !hiddenSet.has(`nav-work-${wt.key}`));
 
   const visibleNavItems = isClient ? [] : navItems.filter(item => {
     if (item.permission && !hasPermission(user, item.permission)) return false;
     if (item.adminOnly && !['admin', 'manager'].includes(user.role)) return false;
     if (item.mainOnly && !(user.role === 'admin' && activeCompany?.isMain)) return false;
-    if (item.navKey === 'nav-task-center' && accessibleWorkTypes.length === 0) return false;
+    if ((item.navKey === 'nav-task-center' || item.navKey === 'nav-team-chat') && accessibleWorkTypes.length === 0) return false;
     if (hiddenSet.has(item.navKey)) return false;
     return true;
   });
@@ -208,14 +210,13 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
     <aside className={`sidebar ${isOpen ? '' : 'collapsed'} ${mobileOpen ? 'mobile-open' : ''}`} id="appSidebar">
       <div className="sidebar-logo" ref={switcherRef}>
         {!isClient ? (
-          <details className="crm-switcher" open={switcherOpen ? true : undefined}>
-            <summary
+          <div className="crm-switcher" ref={switcherRef}>
+            <button
+              type="button"
               className="crm-switcher-summary"
               aria-label="Switch CRM workspace"
-              onClick={(e) => {
-                e.preventDefault();
-                setSwitcherOpen(!switcherOpen);
-              }}
+              aria-expanded={switcherOpen}
+              onClick={() => setSwitcherOpen(prev => !prev)}
             >
               <span className="crm-current-avatar">
                 {activeCompany ? initials(activeCompany.name) : '+'}
@@ -225,38 +226,45 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
                 <small>CRM Workspace</small>
               </span>
               <Icon name="chevrons-up-down" className="crm-switcher-chevron" size={16} />
-            </summary>
+            </button>
 
             {switcherOpen && (
-              <div className="crm-switcher-popover">
+              <div className="crm-switcher-popover" role="menu">
                 <header className="crm-switcher-head">
                   <span>Workspaces</span>
                 </header>
                 <div className="crm-switcher-list">
-                  {companies.length === 0 && (
-                    <div className="crm-switcher-empty">No workspaces</div>
+                  {companies.length === 0 ? (
+                    <div className="crm-switcher-empty" style={{ padding: '0.75rem', color: 'var(--muted)', fontSize: '0.75rem', textAlign: 'center' }}>No workspaces</div>
+                  ) : (
+                    companies.map(company => {
+                      const selected = activeCompany && String(activeCompany._id) === String(company._id);
+                      return (
+                        <button
+                          key={company._id}
+                          type="button"
+                          className={`crm-workspace-item ${selected ? 'active' : ''}`}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              await onSwitchCompany(company._id);
+                            } catch (err) {
+                              console.error('Failed to switch workspace:', err);
+                            } finally {
+                              setSwitcherOpen(false);
+                            }
+                          }}
+                        >
+                          <span className="crm-item-avatar">{initials(company.name)}</span>
+                          <div className="crm-item-info">
+                            <strong>{company.name}</strong>
+                            {selected && <small>Active workspace</small>}
+                          </div>
+                          {selected && <Icon name="check" className="crm-item-check" size={16} />}
+                        </button>
+                      );
+                    })
                   )}
-                  {companies.map(company => {
-                    const selected = activeCompany && String(activeCompany._id) === String(company._id);
-                    return (
-                      <button
-                        key={company._id}
-                        type="button"
-                        className={`crm-workspace-item ${selected ? 'active' : ''}`}
-                        onClick={async () => {
-                          await onSwitchCompany(company._id);
-                          setSwitcherOpen(false);
-                        }}
-                      >
-                        <span className="crm-item-avatar">{initials(company.name)}</span>
-                        <div className="crm-item-info">
-                          <strong>{company.name}</strong>
-                          {selected && <small>Active workspace</small>}
-                        </div>
-                        {selected && <Icon name="check" className="crm-item-check" size={16} />}
-                      </button>
-                    );
-                  })}
                 </div>
                 {hasPermission(user, 'businesses.create') && (
                   <Link to="/companies" className="crm-new-workspace-btn" onClick={() => setSwitcherOpen(false)}>
@@ -266,12 +274,12 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
                 )}
               </div>
             )}
-          </details>
+          </div>
         ) : (
           <Link to="/client-dashboard" className="brand">
-            <span className="crm-current-avatar">VD</span>
+            <span className="crm-current-avatar">{brandInitials}</span>
             <span className="brand-text">
-              <strong>Vande</strong>
+              <strong>{brandName}</strong>
               <small>CRM</small>
             </span>
           </Link>
@@ -321,6 +329,10 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
             isActive = resolvedPath.startsWith('/clients') || (resolvedPath.startsWith('/customers') && isFromClients);
           } else if (isCustomersPath) {
             isActive = resolvedPath.startsWith('/customers') && !isFromClients;
+          } else if (item.path === '/work') {
+            isActive = resolvedPath === '/work' || (resolvedPath.startsWith('/work/') && !resolvedPath.startsWith('/work/threads'));
+          } else if (item.path === '/work/threads') {
+            isActive = resolvedPath.startsWith('/work/threads');
           } else {
             isActive = resolvedPath.startsWith(item.path);
           }
@@ -336,33 +348,11 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
               onDragEnd={onNavDragEnd}
             >
               <Icon name={item.icon} size={18} />
-              <span>{item.labelKey && crmTerms[item.labelKey] ? crmTerms[item.labelKey] : item.label}</span>
-            </Link>
-          );
-        })}
-
-        {visibleWorkTypes.map(wt => {
-          const moduleIcons: Record<string, string> = {
-            '✅': 'square-check-big', '🎬': 'clapperboard', '🎨': 'palette',
-            '🌐': 'globe', '✍️': 'pen-line', '📋': 'clipboard-list',
-            check_square: 'square-check-big', video: 'clapperboard',
-            'file-text': 'pen-line', clipboard: 'clipboard-list',
-            graphic_post: 'image', design: 'palette', task: 'square-check-big',
-          };
-          const iconName = moduleIcons[wt.icon || ''] || moduleIcons[wt.key] || wt.icon || 'clipboard-list';
-          return (
-            <Link
-              key={wt._id}
-              to={`/work/${wt.key}`}
-              data-nav-id={`nav-work-${wt.key}`}
-              draggable
-              className={`nav-item nav-item-sub ${isWorkActive && resolvedPath.includes(wt.key) ? 'active' : ''}`}
-              style={{ '--module-color': wt.color } as React.CSSProperties}
-              onDragStart={onNavDragStart(`nav-work-${wt.key}`)}
-              onDragEnd={onNavDragEnd}
-            >
-              <Icon name={iconName} size={18} className="nav-item-module-icon" />
-              <span>{wt.name}</span>
+              <span>
+                {item.path === '/clients'
+                  ? (crmTerms.recordPlural && crmTerms.recordPlural.toLowerCase() !== crmTerms.leadPlural.toLowerCase() ? crmTerms.recordPlural : 'Clients')
+                  : (item.labelKey && crmTerms[item.labelKey] ? crmTerms[item.labelKey] : item.label)}
+              </span>
             </Link>
           );
         })}
@@ -417,7 +407,6 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
           onCancel={() => setPrefsOpen(false)}
           saving={savingPrefs}
           navItems={orderedNavItems}
-          workTypes={visibleWorkTypes}
           crmTerms={crmTerms}
         />
       )}
@@ -466,11 +455,10 @@ interface PrefsDrawerProps {
   onCancel: () => void;
   saving: boolean;
   navItems: NavItem[];
-  workTypes: WorkType[];
   crmTerms: CrmTerms;
 }
 
-function SidebarPrefsDrawer({ hidden, onToggle, onSave, onCancel, saving, navItems, workTypes, crmTerms }: PrefsDrawerProps) {
+function SidebarPrefsDrawer({ hidden, onToggle, onSave, onCancel, saving, navItems, crmTerms }: PrefsDrawerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   function getLabel(item: NavItem): string {
@@ -505,25 +493,6 @@ function SidebarPrefsDrawer({ hidden, onToggle, onSave, onCancel, saving, navIte
                 </span>
                 <span>
                   <strong>{getLabel(item)}</strong>
-                  <small>Visible in your sidebar</small>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={!hidden.has(key)}
-                  onChange={() => onToggle(key)}
-                />
-              </label>
-            );
-          })}
-          {workTypes.map(wt => {
-            const key = `nav-work-${wt.key}`;
-            return (
-              <label key={key} className="sidebar-preference-row">
-                <span className="sidebar-preference-icon">
-                  <Icon name="clipboard-list" size={16} />
-                </span>
-                <span>
-                  <strong>{wt.name}</strong>
                   <small>Visible in your sidebar</small>
                 </span>
                 <input

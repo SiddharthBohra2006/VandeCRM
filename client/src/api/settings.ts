@@ -18,6 +18,15 @@ export interface ThemeColors {
   text: string;
 }
 
+export interface OrganizationInfo {
+  _id: string;
+  name: string;
+  analyticsHeading?: string;
+  currency?: string;
+  locale?: string;
+  theme?: ThemeColors;
+}
+
 export interface SettingsResponse {
   ok: true;
   stages: Stage[];
@@ -76,6 +85,8 @@ export const settingsApi = {
     api.put<{ ok: true; data: Terminology }>('/settings/terminology', data),
   updateTheme: (data: Partial<ThemeColors>) =>
     api.put<{ ok: true; data: ThemeColors }>('/settings/theme', data),
+  updateOrganization: (data: Partial<OrganizationInfo>) =>
+    api.put<{ ok: true; data: OrganizationInfo }>('/settings/organization', data),
 
   createWorkType: (data: Partial<WorkType> | Record<string, any>) =>
     api.post<{ ok: true; data: WorkType }>('/settings/work-types', data),

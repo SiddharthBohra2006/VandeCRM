@@ -4,6 +4,7 @@ import { workApi, WorkType, WorkItem, WorkSubtask } from '../../api/work';
 import { useAuth } from '../../contexts/AuthContext';
 import Icon from '../../components/Icons';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import DatePicker from '../../components/DatePicker';
 
 function formatDate(val?: string | Date | null): string {
   if (!val) return 'Not set';
@@ -65,6 +66,9 @@ export default function WorkDetailPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
   const [savingEdit, setSavingEdit] = useState(false);
+  const [forwardTo, setForwardTo] = useState('');
+  const [forwardNote, setForwardNote] = useState('');
+  const [forwarding, setForwarding] = useState(false);
 
   useEffect(() => {
     if (type && id) {
@@ -156,6 +160,18 @@ export default function WorkDetailPage() {
     } catch (err: any) {
       setError(err.message || 'Failed to update status');
     }
+  }
+
+  async function handleForward(e: React.FormEvent) {
+    e.preventDefault();
+    if (!type || !id || !forwardTo) return;
+    try {
+      setForwarding(true); setError('');
+      await workApi.delegate(type, id, { toUser: forwardTo, note: forwardNote });
+      setForwardTo(''); setForwardNote(''); setSuccess('Task forwarded. The previous owner remains a collaborator.');
+      await loadWorkItem(type, id);
+    } catch (err: any) { setError(err.message || 'Failed to forward task'); }
+    finally { setForwarding(false); }
   }
 
   async function handleSaveEdit(e: React.FormEvent) {
@@ -276,7 +292,7 @@ export default function WorkDetailPage() {
       {/* Top Breadcrumb Navigation */}
       <nav className="work-center-nav" aria-label="Task navigation">
         <Link to="/work">Task Center</Link>
-        <Link to="/tasks">Lead follow-ups</Link>
+        <Link to="/follow-ups">Lead follow-ups</Link>
       </nav>
 
       {/* Breadcrumb Title Bar */}
@@ -433,31 +449,28 @@ export default function WorkDetailPage() {
 
                   <div className="form-group">
                     <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Start Date</label>
-                    <input
-                      type="date"
+                    <DatePicker
                       value={editForm.startDate || ''}
-                      onChange={e => setEditForm({ ...editForm, startDate: e.target.value })}
-                      style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)' }}
+                      onChange={val => setEditForm({ ...editForm, startDate: val })}
+                      style={{ width: '100%' }}
                     />
                   </div>
 
                   <div className="form-group">
                     <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Deadline</label>
-                    <input
-                      type="date"
+                    <DatePicker
                       value={editForm.deadline || ''}
-                      onChange={e => setEditForm({ ...editForm, deadline: e.target.value })}
-                      style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)' }}
+                      onChange={val => setEditForm({ ...editForm, deadline: val })}
+                      style={{ width: '100%' }}
                     />
                   </div>
 
                   <div className="form-group">
                     <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Delivered Date</label>
-                    <input
-                      type="date"
+                    <DatePicker
                       value={editForm.deliveredAt || ''}
-                      onChange={e => setEditForm({ ...editForm, deliveredAt: e.target.value })}
-                      style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)' }}
+                      onChange={val => setEditForm({ ...editForm, deliveredAt: val })}
+                      style={{ width: '100%' }}
                     />
                   </div>
 
@@ -627,6 +640,26 @@ export default function WorkDetailPage() {
                     </div>
                   )}
                 </div>
+                <form onSubmit={handleForward} style={{ display: 'grid', gap: '.5rem', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+                  <strong style={{ fontSize: '.8rem' }}>Forward this task</strong>
+                  <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
+                    <select required aria-label="Forward task to" value={forwardTo} onChange={e => setForwardTo(e.target.value)}><option value="">Choose team member…</option>{users.filter(person => person._id !== item.assignedTo?._id).map(person => <option key={person._id} value={person._id}>{person.name}</option>)}</select>
+                    <input value={forwardNote} onChange={e => setForwardNote(e.target.value)} maxLength={500} placeholder="Handoff note (optional)" style={{ flex: 1, minWidth: 180 }} />
+                    <button className="btn small" disabled={forwarding}>{forwarding ? 'Forwarding…' : 'Forward'}</button>
+                  </div>
+                </form>
+              </section>
+
+              <section className="work-card-panel edit-card-section">
+                <header className="panel-section-head"><span className="section-icon"><Icon name="history" size={18} /></span><div><h3>Task lifecycle</h3><small>Assignment and status history</small></div></header>
+                {(item.workflowHistory || []).length === 0 ? <small style={{ color: 'var(--muted)' }}>History starts with the next assignment or status change.</small> :
+                  <div style={{ display: 'grid', gap: '.7rem' }}>{[...(item.workflowHistory || [])].reverse().map(event => <div key={event._id || `${event.event}-${event.at}`} style={{ borderLeft: `3px solid ${event.event === 'rejected' ? '#dc2626' : event.event === 'completed' ? '#16a34a' : 'var(--gold)'}`, paddingLeft: '.75rem' }}>
+                    <strong style={{ textTransform: 'capitalize' }}>{event.event}</strong>
+                    <div style={{ fontSize: '.78rem' }}>{event.fromUser?.name && `${event.fromUser.name} → `}{event.toUser?.name || event.toStatus || ''}</div>
+                    {event.fromStatus && event.toStatus && <small>{event.fromStatus} → {event.toStatus}</small>}
+                    {event.note && <div style={{ fontSize: '.75rem', color: 'var(--muted)' }}>{event.note}</div>}
+                    <small style={{ color: 'var(--muted)' }}>{event.actor?.name || 'System'} · {formatDateTime(event.at)}</small>
+                  </div>)}</div>}
               </section>
 
               {/* 3. Subtasks & Execution */}
@@ -749,11 +782,11 @@ export default function WorkDetailPage() {
                         </label>
                         <label>
                           Deadline
-                          <input
-                            type="date"
+                          <DatePicker
+                            placeholder="Deadline"
                             value={newSubtaskDeadline}
-                            onChange={e => setNewSubtaskDeadline(e.target.value)}
-                            style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)' }}
+                            onChange={val => setNewSubtaskDeadline(val)}
+                            style={{ width: '100%' }}
                           />
                         </label>
                         <label>

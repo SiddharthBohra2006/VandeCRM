@@ -5,6 +5,7 @@ import {
 } from '../../api/integrations';
 import { useAuth } from '../../contexts/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import DatePicker from '../../components/DatePicker';
 
 export default function IntegrationsPage() {
   const { user } = useAuth();
@@ -433,10 +434,10 @@ export default function IntegrationsPage() {
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
                 Meta Token Expiry Date
-                <input
-                  type="date"
+                <DatePicker
                   value={metaTokenExpiresAt}
-                  onChange={e => setMetaTokenExpiresAt(e.target.value)}
+                  placeholder="Expiry date"
+                  onChange={val => setMetaTokenExpiresAt(val)}
                 />
               </label>
 
