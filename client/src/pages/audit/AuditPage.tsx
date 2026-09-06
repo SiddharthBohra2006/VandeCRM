@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { auditApi, AuditLogEntry, AuditResponse } from '../../api/audit';
+import CustomSelect from '../../components/CustomSelect';
 
 export default function AuditPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -40,7 +41,7 @@ export default function AuditPage() {
   }
 
   function handleResetFilters() {
-    setSearchParams({});
+    setSearchParams(new URLSearchParams());
   }
 
   return (
@@ -57,38 +58,38 @@ export default function AuditPage() {
 
       {/* Filter Bar */}
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1.25rem' }}>
-        <select
+        <CustomSelect
           value={actionFilter}
-          onChange={e => handleFilterChange('action', e.target.value)}
-          style={{ padding: '6px 10px', borderRadius: '6px', background: 'var(--panel)', color: 'var(--text)', fontSize: '0.82rem', minWidth: '160px' }}
-        >
-          <option value="">All actions</option>
-          {data?.actions.map(act => (
-            <option key={act} value={act}>{act}</option>
-          ))}
-        </select>
+          placeholder="All actions"
+          options={[
+            { value: '', label: 'All actions' },
+            ...(data?.actions || []).map(act => ({ value: act, label: act }))
+          ]}
+          onChange={val => handleFilterChange('action', val)}
+          style={{ minWidth: '160px' }}
+        />
 
-        <select
+        <CustomSelect
           value={entityFilter}
-          onChange={e => handleFilterChange('entityType', e.target.value)}
-          style={{ padding: '6px 10px', borderRadius: '6px', background: 'var(--panel)', color: 'var(--text)', fontSize: '0.82rem', minWidth: '160px' }}
-        >
-          <option value="">All entity types</option>
-          {data?.entityTypes.map(ent => (
-            <option key={ent} value={ent}>{ent}</option>
-          ))}
-        </select>
+          placeholder="All entity types"
+          options={[
+            { value: '', label: 'All entity types' },
+            ...(data?.entityTypes || []).map(ent => ({ value: ent, label: ent }))
+          ]}
+          onChange={val => handleFilterChange('entityType', val)}
+          style={{ minWidth: '160px' }}
+        />
 
-        <select
+        <CustomSelect
           value={userFilter}
-          onChange={e => handleFilterChange('user', e.target.value)}
-          style={{ padding: '6px 10px', borderRadius: '6px', background: 'var(--panel)', color: 'var(--text)', fontSize: '0.82rem', minWidth: '180px' }}
-        >
-          <option value="">All users</option>
-          {data?.users.map(u => (
-            <option key={u._id} value={u._id}>{u.name} ({u.role})</option>
-          ))}
-        </select>
+          placeholder="All users"
+          options={[
+            { value: '', label: 'All users' },
+            ...(data?.users || []).map(u => ({ value: u._id, label: `${u.name} (${u.role})` }))
+          ]}
+          onChange={val => handleFilterChange('user', val)}
+          style={{ minWidth: '180px' }}
+        />
 
         <button
           type="button"

@@ -8,6 +8,7 @@ const CrmStage = require('../models/CrmStage');
 const CustomField = require('../models/CustomField');
 const CustomRecord = require('../models/CustomRecord');
 const Customer = require('../models/Customer');
+const EmailMessage = require('../models/EmailMessage');
 const Notification = require('../models/Notification');
 const SavedView = require('../models/SavedView');
 const SyncLog = require('../models/SyncLog');
@@ -613,6 +614,8 @@ async function mergeDuplicateCustomer({ organization, primary, duplicate, user }
 
   await Activity.updateMany({ organization, customer: duplicate._id }, { $set: { customer: primary._id } });
   await Attachment.updateMany({ organization, customer: duplicate._id }, { $set: { customer: primary._id } });
+  await CustomRecord.updateMany({ organization, customer: duplicate._id }, { $set: { customer: primary._id } });
+  await EmailMessage.updateMany({ organization, customer: duplicate._id }, { $set: { customer: primary._id } });
   await primary.save();
   await Customer.deleteOne({ _id: duplicate._id, organization });
 
@@ -872,7 +875,7 @@ function parseAttachmentPayload(body) {
   if (!match) return { ok: false, message: 'Please select a valid file before uploading.' };
   const buffer = Buffer.from(match[2], 'base64');
   if (!buffer.length) return { ok: false, message: 'Selected file is empty.' };
-  if (buffer.length > 3 * 1024 * 1024) return { ok: false, message: 'Attachment must be 3 MB or smaller.' };
+  if (buffer.length > 5 * 1024 * 1024) return { ok: false, message: 'Attachment must be 5 MB or smaller.' };
   const originalName = String(body.originalName || 'attachment').replace(/[\\/:*?"<>|]+/g, '-').trim();
   return {
     ok: true,
@@ -989,7 +992,13 @@ router.delete('/:id', permits('businesses.delete'), async (req, res, next) => {
     if (!isManager(req.user)) return res.status(403).json({ ok: false, error: 'Access denied' });
     const customer = await Customer.findOne(scope(req, { _id: req.params.id }));
     if (!customer) return res.status(404).json({ ok: false, error: 'Lead not found.' });
-    await Promise.all([Activity.deleteMany({ organization: req.user.organization._id, customer: customer._id }), Attachment.deleteMany({ organization: req.user.organization._id, customer: customer._id }), customer.deleteOne()]);
+    await Promise.all([
+      Activity.deleteMany({ organization: req.user.organization._id, customer: customer._id }),
+      Attachment.deleteMany({ organization: req.user.organization._id, customer: customer._id }),
+      CustomRecord.deleteMany({ organization: req.user.organization._id, customer: customer._id }),
+      EmailMessage.deleteMany({ organization: req.user.organization._id, customer: customer._id }),
+      customer.deleteOne()
+    ]);
     await logAudit(req, { action: 'delete', entityType: 'customer', entityId: customer._id, entityName: customer.name, message: `Lead "${customer.name}" deleted.` });
     res.json({ ok: true });
   } catch (error) { next(error); }

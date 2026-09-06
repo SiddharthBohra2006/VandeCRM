@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const { requireApiAuth } = require('./middleware/auth');
-const { hasWorkPermission, isRestrictedUser } = require('../config/roles');
+const { hasWorkPermission, isRestrictedUser, canEditWorkField } = require('../config/roles');
 const { isClosed, isComplete } = require('../utils/workCompletion');
 const { assignableWorkUsers } = require('../utils/workAssignments');
 const { logAudit } = require('../utils/audit');
@@ -43,15 +43,21 @@ async function ensureMonthlyRecords(req) {
   const activeWorkspace = String(req.activeCompanyId || req.activeCompany?._id);
   const base = { organization: req.user.organization._id, workspace: activeWorkspace, module: req.workType._id };
   const company = req.activeCompany || null;
-  if (req.workType.key === 'payment' && !(await CustomRecord.exists({ ...base, 'customFields.billingMonth': month }))) {
-    await CustomRecord.create({
-      ...base,
-      title: `${company?.name || 'Workspace'} · ${now.toLocaleString('en', { month: 'long', year: 'numeric' })}`,
-      status: 'pending',
-      deadline: new Date(now.getFullYear(), now.getMonth() + 1, 0),
-      customFields: { billingMonth: month, expectedAmount: company?.monthlyPackage || 0, paidAmount: 0 },
-      createdBy: req.user._id,
-    });
+  if (req.workType.key === 'payment') {
+    // Upsert keyed on billingMonth so concurrent requests can't double-create.
+    await CustomRecord.updateOne(
+      { ...base, 'customFields.billingMonth': month },
+      {
+        $setOnInsert: {
+          title: `${company?.name || 'Workspace'} · ${now.toLocaleString('en', { month: 'long', year: 'numeric' })}`,
+          status: 'pending',
+          deadline: new Date(now.getFullYear(), now.getMonth() + 1, 0),
+customFields: { billingMonth: month, expectedAmount: company?.monthlyPackage || 0, paidAmount: 0 },
+        createdBy: req.user._id,
+      }
+      },
+      { upsert: true }
+    ).catch(err => { if (err?.code !== 11000) throw err; });
   }
   if (req.workType.key !== 'task') return;
   const templates = await CustomRecord.find({
@@ -60,23 +66,29 @@ async function ensureMonthlyRecords(req) {
     $or: [{ 'customFields.recurringSource': { $exists: false } }, { 'customFields.recurringSource': '' }],
   });
   for (const template of templates) {
-    if (monthKey(template.createdAt) === month || (await CustomRecord.exists({ ...base, 'customFields.recurringSource': String(template._id), 'customFields.recurringMonth': month }))) continue;
+    if (monthKey(template.createdAt) === month) continue;
     const day = Math.min(Number((template.customFields && template.customFields.get ? template.customFields.get('repeatDay') : null) || 1), new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate());
     const tf = template.customFields && template.customFields.toObject ? template.customFields.toObject() : {};
-    await CustomRecord.create({
-      ...base,
-      title: template.title,
-      status: req.workType.statuses[0]?.key || 'pending',
-      assignedTo: template.assignedTo,
-      collaborators: template.collaborators || [],
-      secondaryAssignee: template.secondaryAssignee,
-      priority: template.priority,
-      deadline: new Date(now.getFullYear(), now.getMonth(), day),
-      notes: template.notes,
-      customer: template.customer,
-      customFields: { ...Object.fromEntries(Object.entries(tf)), recurringSource: String(template._id), recurringMonth: month },
-      createdBy: req.user._id,
-    });
+    // Upsert per template-month so concurrent GETs can't duplicate instances.
+    await CustomRecord.updateOne(
+      { ...base, 'customFields.recurringSource': String(template._id), 'customFields.recurringMonth': month },
+      {
+        $setOnInsert: {
+          title: template.title,
+          status: req.workType.statuses[0]?.key || 'pending',
+          assignedTo: template.assignedTo,
+          collaborators: template.collaborators || [],
+          secondaryAssignee: template.secondaryAssignee,
+          priority: template.priority,
+          deadline: new Date(now.getFullYear(), now.getMonth(), day),
+          notes: template.notes,
+          customer: template.customer,
+customFields: { ...Object.fromEntries(Object.entries(tf)), recurringSource: String(template._id), recurringMonth: month },
+        createdBy: req.user._id,
+      }
+      },
+      { upsert: true }
+    ).catch(err => { if (err?.code !== 11000) throw err; });
   }
 }
 
@@ -416,32 +428,38 @@ router.put('/:type/:id', resolveWorkType, async (req, res, next) => {
     const previousStatus = item.status;
     const previousOwner = item.assignedTo ? String(item.assignedTo) : null;
 
-    if (body.title !== undefined) item.title = String(body.title).trim();
-    if (body.status !== undefined) {
+    // Enforce field-level work permissions: specialist and custom roles may only
+    // update the fields their role allows, even on direct API calls. Admin and
+    // manager are unrestricted. Unauthorized fields in the body are dropped so
+    // legitimate partial updates from the UI are never blocked.
+    const mayEditField = field => canEditWorkField(req.user, req.workType, field);
+
+    if (body.title !== undefined && mayEditField('title')) item.title = String(body.title).trim();
+    if (body.status !== undefined && mayEditField('status')) {
       item.status = body.status;
       if (previousStatus !== body.status) {
         const definition = req.workType.statuses.find(s => s.key === body.status);
         item.workflowHistory.push({ event: definition?.isTerminalLost ? 'rejected' : definition?.isTerminalWon ? 'completed' : 'status', actor: req.user._id, fromStatus: previousStatus, toStatus: body.status, note: String(body.statusNote || '').trim().slice(0, 500) });
       }
     }
-    if (body.priority !== undefined && priorities.includes(body.priority)) item.priority = body.priority;
-    if (body.deadline !== undefined) item.deadline = body.deadline ? new Date(body.deadline) : null;
-    if (body.startDate !== undefined) item.startDate = body.startDate ? new Date(body.startDate) : null;
-    if (body.deliveredAt !== undefined) item.deliveredAt = body.deliveredAt ? new Date(body.deliveredAt) : null;
-    if (body.notes !== undefined) item.notes = String(body.notes).trim();
-    if (body.customer !== undefined) item.customer = body.customer || null;
-    if (body.assignedTo !== undefined) {
+    if (body.priority !== undefined && mayEditField('priority') && priorities.includes(body.priority)) item.priority = body.priority;
+    if (body.deadline !== undefined && mayEditField('deadline')) item.deadline = body.deadline ? new Date(body.deadline) : null;
+    if (body.startDate !== undefined && mayEditField('startDate')) item.startDate = body.startDate ? new Date(body.startDate) : null;
+    if (body.deliveredAt !== undefined && mayEditField('deliveredAt')) item.deliveredAt = body.deliveredAt ? new Date(body.deliveredAt) : null;
+    if (body.notes !== undefined && mayEditField('notes')) item.notes = String(body.notes).trim();
+    if (body.customer !== undefined && mayEditField('customer')) item.customer = body.customer || null;
+    if (body.assignedTo !== undefined && mayEditField('assignedTo')) {
       const nextOwner = body.assignedTo || null;
       if (String(previousOwner || '') !== String(nextOwner || '')) item.workflowHistory.push({ event: previousOwner ? 'forwarded' : 'assigned', actor: req.user._id, fromUser: previousOwner, toUser: nextOwner, note: String(body.assignmentNote || '').trim().slice(0, 500) });
       item.assignedTo = nextOwner;
     }
-    if (body.collaborators !== undefined) item.collaborators = ids(body.collaborators);
-    if (body.secondaryAssignee !== undefined) item.secondaryAssignee = body.secondaryAssignee || null;
-    if (body.relatedRecords !== undefined) item.relatedRecords = Array.isArray(body.relatedRecords) ? body.relatedRecords : [];
+    if (body.collaborators !== undefined && mayEditField('collaborators')) item.collaborators = ids(body.collaborators);
+    if (body.secondaryAssignee !== undefined && mayEditField('secondaryAssignee')) item.secondaryAssignee = body.secondaryAssignee || null;
+    if (body.relatedRecords !== undefined && mayEditField('relatedRecords')) item.relatedRecords = Array.isArray(body.relatedRecords) ? body.relatedRecords : [];
 
     if (body.customFields && typeof body.customFields === 'object') {
       for (const [k, v] of Object.entries(body.customFields)) {
-        item.customFields.set(k, v);
+        if (mayEditField(k)) item.customFields.set(k, v);
       }
     }
 
@@ -531,6 +549,7 @@ router.post('/:type/:id/status', resolveWorkType, async (req, res, next) => {
 router.post('/:type/:id/delegate', resolveWorkType, async (req, res, next) => {
   try {
     if (!hasWorkPermission(req.user, req.workType, 'update')) return res.status(403).json({ ok: false, error: 'Permission denied.' });
+    if (!canEditWorkField(req.user, req.workType, 'assignedTo')) return res.status(403).json({ ok: false, error: 'Your role does not allow reassigning this work item.' });
     const organization = req.user.organization._id;
     const workspace = String(req.activeCompanyId);
     const item = await CustomRecord.findOne(restrictToAssigned({ _id: req.params.id, organization, workspace, module: req.workType._id }, req.user));
@@ -598,7 +617,9 @@ router.delete('/:type/:id', resolveWorkType, async (req, res, next) => {
       return res.status(404).json({ ok: false, error: 'Record not found.' });
     }
 
-    await CustomRecord.deleteOne({ _id: item._id, organization });
+    // Subtasks are separate documents linked via parentRecord — delete them
+    // together with the parent so they don't become orphaned.
+    await CustomRecord.deleteMany({ organization, $or: [{ _id: item._id }, { parentRecord: item._id }] });
 
     await logAudit(req, {
       action: 'delete',

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { workApi, WorkType, WorkItem } from '../../api/work';
 import { useAuth } from '../../contexts/AuthContext';
 import DatePicker from '../../components/DatePicker';
+import CustomSelect from '../../components/CustomSelect';
 
 export default function WorkCenterPage() {
   const { user, activeCompany } = useAuth();
@@ -141,11 +142,38 @@ export default function WorkCenterPage() {
 
       {showBulk && <form onSubmit={createBulk} className="table-card" style={{ padding: '1rem', marginBottom: '1rem', display: 'grid', gap: '.75rem' }}>
         <strong>Create many tasks</strong>
-        <select required value={bulk.type} onChange={e => setBulk({ ...bulk, type: e.target.value })}><option value="">Choose work area</option>{workTypes.map(type => <option key={type._id} value={type.key}>{type.name}</option>)}</select>
+        <CustomSelect
+          placeholder="Choose work area"
+          value={bulk.type}
+          onChange={val => setBulk({ ...bulk, type: val })}
+          options={[
+            { value: '', label: 'Choose work area' },
+            ...workTypes.map(type => ({ value: type.key, label: type.name }))
+          ]}
+        />
         <textarea required rows={6} value={bulk.titles} onChange={e => setBulk({ ...bulk, titles: e.target.value })} placeholder="One task per line" />
-        <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
-          <select required value={bulk.assignedTo} onChange={e => setBulk({ ...bulk, assignedTo: e.target.value })}><option value="">Assign all to…</option>{users.map(member => <option key={member._id} value={member._id}>{member.name}</option>)}</select>
-          <select value={bulk.priority} onChange={e => setBulk({ ...bulk, priority: e.target.value })}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select>
+        <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <CustomSelect
+            placeholder="Assign all to…"
+            value={bulk.assignedTo}
+            onChange={val => setBulk({ ...bulk, assignedTo: val })}
+            options={[
+              { value: '', label: 'Assign all to…' },
+              ...users.map(member => ({ value: member._id, label: member.name }))
+            ]}
+            style={{ width: '180px' }}
+          />
+          <CustomSelect
+            placeholder="Priority"
+            value={bulk.priority}
+            onChange={val => setBulk({ ...bulk, priority: val })}
+            options={[
+              { value: 'low', label: 'Low priority' },
+              { value: 'medium', label: 'Medium priority' },
+              { value: 'high', label: 'High priority' },
+            ]}
+            style={{ width: '150px' }}
+          />
           <DatePicker
             placeholder="Deadline"
             value={bulk.deadline}
@@ -178,44 +206,48 @@ export default function WorkCenterPage() {
 
       {/* Filter Bar */}
       <div className="filter-bar" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1rem' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', fontWeight: 700 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', fontWeight: 700 }}>
           Queue:
-          <select
+          <CustomSelect
             value={currentView}
-            onChange={e => handleFilterChange('view', e.target.value)}
-          >
-            <option value="open">Open</option>
-            <option value="today">Due today or earlier</option>
-            <option value="overdue">Overdue</option>
-            <option value="completed">Closed</option>
-            <option value="all">All</option>
-            <option value="team">Team workload</option>
-          </select>
-        </label>
+            onChange={val => handleFilterChange('view', val)}
+            options={[
+              { value: 'open', label: 'Open' },
+              { value: 'today', label: 'Due today or earlier' },
+              { value: 'overdue', label: 'Overdue' },
+              { value: 'completed', label: 'Closed' },
+              { value: 'all', label: 'All' },
+              { value: 'team', label: 'Team workload' },
+            ]}
+            style={{ minWidth: '170px' }}
+          />
+        </div>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', fontWeight: 700 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', fontWeight: 700 }}>
           Assignment:
-          <select
+          <CustomSelect
             value={currentOwner}
-            onChange={e => handleFilterChange('owner', e.target.value)}
-          >
-            <option value="all">All accessible work</option>
-            <option value="me">Assigned to me</option>
-          </select>
-        </label>
+            onChange={val => handleFilterChange('owner', val)}
+            options={[
+              { value: 'all', label: 'All accessible work' },
+              { value: 'me', label: 'Assigned to me' },
+            ]}
+            style={{ minWidth: '170px' }}
+          />
+        </div>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', fontWeight: 700 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', fontWeight: 700 }}>
           Work Area:
-          <select
+          <CustomSelect
             value={currentModule}
-            onChange={e => handleFilterChange('module', e.target.value)}
-          >
-            <option value="">All areas</option>
-            {workTypes.map(t => (
-              <option key={t._id} value={t.key}>{t.name}</option>
-            ))}
-          </select>
-        </label>
+            onChange={val => handleFilterChange('module', val)}
+            options={[
+              { value: '', label: 'All areas' },
+              ...workTypes.map(t => ({ value: t.key, label: t.name }))
+            ]}
+            style={{ minWidth: '160px' }}
+          />
+        </div>
 
         {(currentView !== 'open' || currentOwner !== 'all' || currentModule) && (
           <button
@@ -299,9 +331,17 @@ export default function WorkCenterPage() {
                       </span>
                     </td>
                     <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem' }}>
-                      <select aria-label={`Assign ${item.title}`} value={item.assignedTo?._id || ''} onChange={e => assign(item, e.target.value)}>
-                        <option value="">Unassigned</option>{users.map(member => <option key={member._id} value={member._id}>{member.name}</option>)}
-                      </select>
+                      <CustomSelect
+                        variant="compact"
+                        placeholder="Unassigned"
+                        value={item.assignedTo?._id || ''}
+                        onChange={val => void assign(item, val)}
+                        options={[
+                          { value: '', label: 'Unassigned' },
+                          ...users.map(member => ({ value: member._id, label: member.name }))
+                        ]}
+                        buttonStyle={{ minWidth: 120, height: 28, fontSize: '0.76rem' }}
+                      />
                       {chain(item) && <div title="Forwarding history" style={{ fontSize: '.68rem', color: 'var(--muted)', marginTop: 3 }}>{chain(item)}</div>}
                     </td>
                     <td style={{ padding: '0.75rem 1rem' }}>

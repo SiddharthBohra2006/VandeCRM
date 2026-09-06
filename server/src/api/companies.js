@@ -130,7 +130,7 @@ router.get('/:id', async (req, res, next) => {
       CrmStage.find({ organization: orgId, clientCompany: company._id }).sort({ order: 1 }),
       CrmLabel.find({ organization: orgId, clientCompany: company._id, isActive: true }).sort({ name: 1 }),
       Campaign.find({ organization: orgId, clientCompany: company._id, status: 'active' }).sort({ name: 1 }),
-      Attachment.find({ organization: orgId, clientCompany: company._id, customer: null }).populate('uploadedBy').sort({ createdAt: -1 }),
+      Attachment.find({ organization: orgId, clientCompany: company._id, customer: null }).select('-data').populate('uploadedBy').sort({ createdAt: -1 }),
     ]);
 
     const populatedStages = new Set(customers.filter(c => c.stage).map(c => String(c.stage._id)));
@@ -395,8 +395,18 @@ router.post('/:id/attachments', async (req, res, next) => {
       metadata: { attachmentId: attachment._id, category: attachment.category, size: attachment.size }
     });
 
-    const populated = await Attachment.findById(attachment._id).populate('uploadedBy', 'name email role');
-    res.status(201).json({ ok: true, data: populated });
+    res.status(201).json({
+      ok: true,
+      attachment: {
+        _id: attachment._id,
+        originalName: attachment.originalName,
+        category: attachment.category,
+        size: attachment.size,
+        notes: attachment.notes,
+        createdAt: attachment.createdAt,
+        uploadedBy: { _id: req.user._id, name: req.user.name },
+      },
+    });
   } catch (error) {
     next(error);
   }

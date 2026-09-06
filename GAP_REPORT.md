@@ -1,6 +1,6 @@
 # Master Gap & Parity Report: EJS CRM (`D:\VandeAgencyCRM`) → React CRM (`D:\vandecrmreact`)
 
-**Updated:** 6 Sept 2026
+**Updated:** 6 Sept 2026 (fourth independent audit)
 **Auditors:** Antigravity & OpenCode (original build) · OpenCode (independent re-audit)
 **Scope:** Exhaustive side-by-side feature, UI, and styling comparison across all pages and components.
 
@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary & Current Health
 
-- **Build Health (re-verified 6 Sept 2026):** `npx tsc --noEmit` → **0 errors (Exit 0)** | `npm run build` → **Production bundle built cleanly (Exit 0)** | `node --check` across all 76 server files → **0 failures (Exit 0)** | Full server boot → starts, connects to MongoDB, and listens successfully.
+- **Build Health (re-verified 6 Sept 2026):** `npx tsc --noEmit` → **0 errors (Exit 0)** | `npm run build` → **Production bundle built cleanly (Exit 0)** | `node --check` across all 76 server files → **0 failures (Exit 0)** | Full server boot → JWT guard passes, connects to MongoDB, and listens successfully.
 - **Visual Parity:** App design system (`app.css`, `auth.css`, `lead-detail.css`, `search.css`) active with theme variables (`--gold`, `--teal`, `--panel`, `--bg`, `--text`) dynamically applied on `<html>`.
 - **Trustworthiness Note:** An independent re-audit (5 Sept 2026) found this report's earlier "100% Complete" claims were **not uniformly reliable** — a large parallel implementation existed but was **dead code**, and at least one specific parity claim was false in the shipping code. Those issues have been **fixed** (see §4b) and are now verifiable against the source.
 
@@ -135,6 +135,31 @@ Any audit that opened these files reported on code that does nothing in producti
 
 ---
 
+## 4b. Fourth independent audit (6 Sept 2026) — findings and resolutions
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| 26 | **High** | Field-level work permissions were dead code. `config/roles.js` defined `canEditWorkField` (per-role/per-field ACL for specialists & custom roles) but it was **called nowhere**; `PUT /api/work/:type/:id` applied every body field unconditionally, so a video editor could reassign/reprioritize/re-date work items (or change any field) via direct API calls, bypassing what the UI hides. | `canEditWorkField` is now wired into `PUT /api/work/:type/:id` — every field assignment (title, priority, deadline, startDate, deliveredAt, notes, customer, assignedTo, collaborators, secondaryAssignee, relatedRecords, and custom fields) is gated through it; disallowed fields are silently dropped so legitimate UI partial updates still work. `POST /:type/:id/delegate` and `POST /:type/:id/status` also enforce `assignedTo`/`status` gating. Defensive guard added: `editableFieldKeys` must be an array before use. |
+| 27 | **High** | Company attachments leaked full binary data on every page load. `companies.js` `Attachment.find(...)` never did `.select('-data')` and the upload returned the populated doc (`data`), unlike the equivalent lead-attachment code in `customers.js` which strips it. | `companies.js` attachment list query now `.select('-data')`, and the upload response returns metadata only (matches the lead pattern). Download route still streams the full binary on demand. |
+| 28 | **High** | Deleting/merging a lead orphaned Work Center items and emails. `customers.js` deleted/repointed `Activity` and `Attachment` on lead delete/merge, but **not** `CustomRecord` or `EmailMessage` — work and email tied to the merged/deleted lead silently became unreachable. | Lead delete now also `CustomRecord.deleteMany` + `EmailMessage.deleteMany`; merge repoints both (`customer` → `primary._id`). `EmailMessage` model import added. |
+| 29 | **Medium** | Rate limiters shared one global per-IP counter. `rateLimiter.js` keyed everything by IP alone, so all 9 limiters (login, CSV import/export, mail send, report build/export, …) stomped on the same bucket — one teammate's bulk export could lock the whole office out of login. | Each `getRateLimiter()` instance now gets its own scoped bucket key (`scope:ip`), auto-assigned a unique name per instance. Login, mail, import/export, and report limiters no longer interfere. |
+| 30 | **Medium** | Deleting a work item orphaned its subtasks. Subtasks are separate `CustomRecord` docs linked via `parentRecord`; `DELETE /:type/:id` removed only the parent. | Delete now removes the parent **and** all records with `parentRecord: item._id` in one `deleteMany`. |
+| 31 | **Medium** | `ensureMonthlyRecords` had a check-then-create race. Two concurrent GETs to the work center could both pass the `exists()` check and double-create the monthly billing record (or a recurring monthly instance). | `ensureMonthlyRecords` now uses atomic `updateOne` **upserts** keyed on `billingMonth` / `recurringSource+recurringMonth` with `$setOnInsert`; duplicate-key errors (11000) from a concurrent winner are swallowed. Partial unique indexes added on `CustomRecord` to enforce it at the DB layer. |
+| 32 | **Low** | Attachment size caps differed for no reason: leads 3 MB vs companies 5 MB. | Unified to 5 MB for both. |
+| 33 | **Low** | `.env.example` shipped `ALLOW_PUBLIC_SIGNUP=true` with no email verification — open tenant creation out of the box. | Default flipped to `false` (locked down); `.env` matched. Existing deployments must opt-in to public signup. |
+| 34 | **Low** | No `Content-Security-Policy` header. | `middleware/security.js` now sets a strict API-scoped CSP (`default-src 'none'`, `frame-ancestors 'none'`, …) on `/api/*` responses. Deliberately NOT applied to the SPA static build (which needs its own script/style origins) — scoped via `req.path.startsWith('/api/')`. |
+
+### Dev-environment fix (6 Sept 2026)
+- `npm run dev` crashed after the fail-closed JWT guard landed because no env was configured. A gitignored **`.env`** (repo root, with real random dev secrets) now exists so the server boots locally. **Note:** existing local DB integration/SMTP credentials were encrypted under an old key and will fail decryption until re-entered via the UI (they re-encrypt under the new `CREDENTIALS_ENCRYPTION_KEY`).
+
+### Verification (6 Sept 2026 — fourth audit)
+1. `cd client && npx tsc --noEmit` → **0 errors**.
+2. `cd client && npm run build` → **Clean production build** (5s).
+3. `node --check` over all 76 `server/src` files → **0 failures**.
+4. Full server boot → JWT guard passes, connects to MongoDB, listens on the API port.
+
+---
+
 ## 5. Known Gaps (accepted, not yet implemented)
 - Reminder delivery is **email + in-app only** — no SMS channel yet.
 - Outbound webhook SSRF checks happen at dispatch; storing a URL doesn't re-validate at save time (harmless: dispatch is the security boundary).
@@ -144,6 +169,7 @@ Any audit that opened these files reported on code that does nothing in producti
 - `User.email` is globally unique across all organizations in the schema. Per-tenant email isolation hasn't been implemented (low priority for single-org deployments).
 - Lead search uses indexed-scoped `$regex` rather than the `$text` index; fine at current scale, becomes slower as a workspace's lead count grows.
 - No automated test suite (see §6 — manual verification protocol is the current safety net).
+- After switching to a fresh `CREDENTIALS_ENCRYPTION_KEY`, any previously stored integration/SMTP credentials in an existing local DB can no longer be decrypted until re-entered through the UI (they re-encrypt automatically). This is a one-time ops migration for non-fresh databases only.
 
 ---
 

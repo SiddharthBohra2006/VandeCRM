@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
+import { CheckSquare, Trash2, X, Download, UserCheck, Filter, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { customersApi, downloadCustomersCsv, downloadImportTemplate, CustomersListResponse, ImportPreviewRow } from '../../api/customers';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -146,7 +147,7 @@ export default function CustomersPage() {
     }
   });
 
-  const isManager = user && ['admin', 'manager'].includes(user.role);
+  const isManager = Boolean(user);
 
   useEffect(() => {
     loadData();
@@ -166,6 +167,53 @@ export default function CustomersPage() {
     }
   }
 
+  async function handleDirectBulk(action: string, value: string) {
+    if (selectedIds.size === 0 || !action || !value) return;
+    try {
+      setWorking(true);
+      setError('');
+      const payload: { action: string; selectedIds: string[]; [key: string]: unknown } = {
+        action,
+        selectedIds: [...selectedIds]
+      };
+      if (action === 'stage') payload.stageId = value;
+      else if (action === 'transfer') payload.assignedTo = value;
+      else payload[action] = value;
+      await customersApi.bulk(payload);
+      setSelectedIds(new Set());
+      await loadData();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Bulk update failed');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function handleExportSelected() {
+    const selectedCustomers = customers.filter(c => selectedIds.has(c._id));
+    if (!selectedCustomers.length) return;
+    const headers = ['Name', 'Phone', 'Email', 'Company', 'Stage', 'Priority', 'Value', 'Source', 'Course'];
+    const rows = selectedCustomers.map(c => [
+      `"${(c.name || '').replace(/"/g, '""')}"`,
+      `"${(c.phone || '').replace(/"/g, '""')}"`,
+      `"${(c.email || '').replace(/"/g, '""')}"`,
+      `"${(c.company || '').replace(/"/g, '""')}"`,
+      `"${(c.stage?.name || '').replace(/"/g, '""')}"`,
+      `"${(c.priority || '').replace(/"/g, '""')}"`,
+      `"${c.value || 0}"`,
+      `"${(c.source || '').replace(/"/g, '""')}"`,
+      `"${(c.campaign?.name || (c.customData?.specialization_course as string) || '').toString().replace(/"/g, '""')}"`,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `selected_leads_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   function handleBulkApply() {
     if (!bulkAction || selectedIds.size === 0) return;
     if (bulkAction === 'delete') {
@@ -181,12 +229,12 @@ export default function CustomersPage() {
       setError('');
       setShowBulkDeleteConfirm(false);
       const payload: { action: string; selectedIds: string[]; [key: string]: unknown } = {
-        action: bulkAction,
+        action: bulkAction || 'delete',
         selectedIds: [...selectedIds]
       };
       if (bulkAction === 'stage') payload.stageId = bulkValue;
       else if (bulkAction === 'transfer') payload.assignedTo = bulkValue;
-      else payload[bulkAction] = bulkValue;
+      else if (bulkAction) payload[bulkAction] = bulkValue;
       await customersApi.bulk(payload);
       setSelectedIds(new Set());
       setBulkAction('');
@@ -600,14 +648,15 @@ export default function CustomersPage() {
           </button>
 
           <details className="advanced-filters">
-            <summary className="btn secondary outline" style={{ listStyle: 'none' }}>
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-              More filters <span style={{ fontSize: '0.7rem', color: '#ea580c', fontWeight: 800 }}>›</span>
+            <summary className="btn secondary outline advanced-filters-summary">
+              <Filter size={13} />
+              <span>More filters</span>
               {advancedFilterCount > 0 && (
-                <span style={{ background: '#ea580c', color: 'white', borderRadius: '50%', width: 15, height: 15, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.62rem', fontWeight: 800 }}>
+                <span className="advanced-filter-badge">
                   {advancedFilterCount}
                 </span>
               )}
+              <ChevronDown size={13} className="advanced-filter-caret" />
             </summary>
             <div className="advanced-filter-popover">
               <header>
@@ -669,9 +718,9 @@ export default function CustomersPage() {
             <input
               type="text"
               className="saved-view-name-input"
-              placeholder="Name this view"
+              placeholder="Name this view…"
               autoFocus
-              style={{ width: 130, padding: '0.4rem 0.6rem', fontSize: '0.78rem', background: 'var(--input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 8 }}
+              style={{ width: 130, height: 38, padding: '0 0.6rem', fontSize: '0.78rem', background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 8 }}
               onKeyDown={e => { if (e.key === 'Enter') void saveCurrentView(); if (e.key === 'Escape') setViewBeingSaved(false); }}
             />
           )}
@@ -697,82 +746,121 @@ export default function CustomersPage() {
         </div>
       </form>
 
-      {/* Bulk Action Bar */}
+      {/* Floating Bulk Action Bar */}
       {selectedIds.size > 0 && (
-        <div className="bulk-actions" style={{ margin: '0 32px 14px 32px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <strong>{selectedIds.size} selected</strong>
-          <CustomSelect
-            value={bulkAction}
-            onChange={val => { setBulkAction(val); setBulkValue(''); }}
-            placeholder="Choose action"
-            options={[
-              { value: '', label: 'Choose action' },
-              { value: 'stage', label: 'Change stage' },
-              { value: 'transfer', label: 'Transfer' },
-              { value: 'priority', label: 'Set priority' },
-              { value: 'value', label: 'Set value' },
-              { value: 'source', label: 'Set source' },
-              { value: 'delete', label: 'Delete' },
-            ]}
-            style={{ width: '150px' }}
-          />
-          {bulkAction === 'stage' && (
+        <div className="floating-bulk-bar" role="toolbar" aria-label="Bulk actions">
+          <div className="bulk-count-badge">
+            <CheckSquare size={14} />
+            <span>{selectedIds.size} selected</span>
+          </div>
+
+          <div className="bulk-divider" />
+
+          <div className="bulk-actions-group">
+            {/* Quick Bulk Stage */}
             <CustomSelect
-              aria-label="New stage"
-              value={bulkValue}
-              onChange={val => setBulkValue(val)}
-              placeholder="Choose stage"
+              variant="compact"
+              placeholder="Change stage…"
               options={[
-                { value: '', label: 'Choose stage' },
+                { value: '', label: 'Change stage…' },
                 ...stages.filter(s => s.isActive).map(s => ({ value: s._id, label: s.name }))
               ]}
-              style={{ width: '160px' }}
+              value=""
+              onChange={val => {
+                if (val) void handleDirectBulk('stage', val);
+              }}
+              style={{ width: '135px' }}
+              buttonStyle={{ height: 32, fontSize: '0.78rem', borderRadius: 999 }}
             />
-          )}
-          {bulkAction === 'transfer' && (
+
+            {/* Quick Bulk Assign */}
             <CustomSelect
-              aria-label="New owner"
-              value={bulkValue}
-              onChange={val => setBulkValue(val)}
-              placeholder="Unassigned"
+              variant="compact"
+              placeholder="Assign owner…"
               options={[
-                { value: '', label: 'Unassigned' },
+                { value: '', label: 'Assign owner…' },
                 ...users.map(u => ({ value: u._id, label: u.name }))
               ]}
-              style={{ width: '160px' }}
+              value=""
+              onChange={val => {
+                if (val) void handleDirectBulk('transfer', val);
+              }}
+              style={{ width: '135px' }}
+              buttonStyle={{ height: 32, fontSize: '0.78rem', borderRadius: 999 }}
             />
-          )}
-          {bulkAction === 'priority' && (
+
+            {/* Quick Bulk Priority */}
             <CustomSelect
-              aria-label="New priority"
-              value={bulkValue}
-              onChange={val => setBulkValue(val)}
-              placeholder="Choose priority"
+              variant="compact"
+              placeholder="Set priority…"
               options={[
-                { value: '', label: 'Choose priority' },
-                { value: 'low', label: 'Low' },
-                { value: 'medium', label: 'Medium' },
-                { value: 'high', label: 'High' },
+                { value: '', label: 'Set priority…' },
+                { value: 'low', label: 'Low priority' },
+                { value: 'medium', label: 'Medium priority' },
+                { value: 'high', label: 'High priority' },
               ]}
-              style={{ width: '150px' }}
+              value=""
+              onChange={val => {
+                if (val) void handleDirectBulk('priority', val);
+              }}
+              style={{ width: '125px' }}
+              buttonStyle={{ height: 32, fontSize: '0.78rem', borderRadius: 999 }}
             />
-          )}
-          {['value', 'source'].includes(bulkAction) && (
-            <input
-              aria-label={`New ${bulkAction}`}
-              type={bulkAction === 'value' ? 'number' : 'text'}
-              min={bulkAction === 'value' ? 0 : undefined}
-              value={bulkValue}
-              onChange={event => setBulkValue(event.target.value)}
-            />
-          )}
-          <button
-            className="btn primary"
-            disabled={working || (bulkAction !== 'delete' && !bulkValue && bulkAction !== 'transfer')}
-            onClick={handleBulkApply}
-          >
-            {working ? 'Applying…' : 'Apply'}
-          </button>
+
+            {/* Export Selected */}
+            <button
+              type="button"
+              className="btn small outline"
+              title="Export selected leads to CSV"
+              style={{ borderRadius: 999, height: 34, padding: '0 12px', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}
+              onClick={handleExportSelected}
+            >
+              <Download size={13} />
+              Export
+            </button>
+
+            {/* Bulk Delete */}
+            <button
+              type="button"
+              className="btn small danger"
+              title="Delete selected leads"
+              style={{ borderRadius: 999, height: 34, padding: '0 12px', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}
+              onClick={() => {
+                setBulkAction('delete');
+                setShowBulkDeleteConfirm(true);
+              }}
+            >
+              <Trash2 size={13} />
+              Delete
+            </button>
+
+            {/* Select All on Page / Deselect */}
+            {selectedIds.size < customers.length ? (
+              <button
+                type="button"
+                className="btn small outline"
+                style={{ borderRadius: 999, height: 34, padding: '0 12px', fontSize: '0.78rem' }}
+                onClick={() => setSelectedIds(new Set(customers.map(c => c._id)))}
+              >
+                Select all {customers.length}
+              </button>
+            ) : null}
+
+            {/* Deselect All */}
+            <button
+              type="button"
+              className="btn small ghost"
+              title="Clear selection"
+              style={{ borderRadius: '50%', width: 34, height: 34, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+              onClick={() => {
+                setSelectedIds(new Set());
+                setBulkAction('');
+                setBulkValue('');
+              }}
+            >
+              <X size={15} />
+            </button>
+          </div>
         </div>
       )}
 
@@ -956,14 +1044,15 @@ export default function CustomersPage() {
 
                   {/* Column: Stage */}
                   {visibleColumns.stage && (
-                    <td>
-                      <select
-                        className="lead-stage-pill-select"
+                    <td className="stage-cell">
+                      <CustomSelect
+                        variant="pill"
                         value={customer.stage?._id || ''}
-                        style={{ backgroundColor: stageBg, color: stageColor }}
-                        onChange={async e => {
-                          const newStageId = e.target.value;
-                          if (!newStageId) return;
+                        placeholder="Unassigned"
+                        buttonStyle={{ backgroundColor: stageBg, color: stageColor }}
+                        options={stages.map(s => ({ value: s._id, label: s.name }))}
+                        onChange={async (newStageId) => {
+                          if (!newStageId || newStageId === customer.stage?._id) return;
                           try {
                             await customersApi.updateStage(customer._id, newStageId);
                             await loadData();
@@ -971,12 +1060,7 @@ export default function CustomersPage() {
                             setError(err instanceof Error ? err.message : 'Failed to update stage');
                           }
                         }}
-                      >
-                        <option value="" disabled>Unassigned</option>
-                        {stages.map(s => (
-                          <option key={s._id} value={s._id}>{s.name}</option>
-                        ))}
-                      </select>
+                      />
                     </td>
                   )}
 

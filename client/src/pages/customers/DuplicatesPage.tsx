@@ -1,8 +1,9 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { customersApi } from '../../api/customers';
 import Icon from '../../components/Icons';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import CustomSelect from '../../components/CustomSelect';
 
 interface DuplicateCustomer {
   _id: string;
@@ -203,40 +204,32 @@ export default function DuplicatesPage() {
                 >
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
                     Keep Primary Lead
-                    <select
-                      required
+                    <CustomSelect
                       value={currentSel.primaryId}
-                      onChange={e => setMergeSelections({
+                      onChange={val => setMergeSelections({
                         ...mergeSelections,
-                        [group.key]: { ...currentSel, primaryId: e.target.value },
+                        [group.key]: { ...currentSel, primaryId: val },
                       })}
-                      style={{ padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)' }}
-                    >
-                      {group.customers.map((c, idx) => (
-                        <option key={c._id} value={c._id}>
-                          {c.name} ({c.email || c.phone || `Lead #${idx + 1}`})
-                        </option>
-                      ))}
-                    </select>
+                      options={group.customers.map((c, idx) => ({
+                        value: c._id,
+                        label: `${c.name} (${c.email || c.phone || `Lead #${idx + 1}`})`
+                      }))}
+                    />
                   </label>
 
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
                     Merge This Duplicate Into Primary
-                    <select
-                      required
+                    <CustomSelect
                       value={currentSel.duplicateId}
-                      onChange={e => setMergeSelections({
+                      onChange={val => setMergeSelections({
                         ...mergeSelections,
-                        [group.key]: { ...currentSel, duplicateId: e.target.value },
+                        [group.key]: { ...currentSel, duplicateId: val },
                       })}
-                      style={{ padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)' }}
-                    >
-                      {group.customers.map((c, idx) => (
-                        <option key={c._id} value={c._id}>
-                          {c.name} ({c.email || c.phone || `Lead #${idx + 1}`})
-                        </option>
-                      ))}
-                    </select>
+                      options={group.customers.map((c, idx) => ({
+                        value: c._id,
+                        label: `${c.name} (${c.email || c.phone || `Lead #${idx + 1}`})`
+                      }))}
+                    />
                   </label>
 
                   <button

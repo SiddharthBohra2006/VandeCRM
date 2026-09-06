@@ -4,6 +4,7 @@ import { workApi, WorkType, WorkItem, WorkTypeField } from '../../api/work';
 import { useAuth } from '../../contexts/AuthContext';
 import { parseCsv, importFileToCsv } from '../../utils/importCsv';
 import DatePicker from '../../components/DatePicker';
+import CustomSelect from '../../components/CustomSelect';
 import WorkTypeBuilder from '../settings/WorkTypeBuilder';
 import { Settings as SettingsIcon } from 'lucide-react';
 
@@ -392,31 +393,52 @@ function setParam(key: string, value: string) {
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
               Linked Client / Lead
-              <select value={form.customer} onChange={e => setForm({ ...form, customer: e.target.value || null })}>
-                <option value="">No client linked</option>
-                {customers.map(c => <option key={c._id} value={c._id}>{c.name} {c.company ? `(${c.company})` : ''}</option>)}
-              </select>
+              <CustomSelect
+                value={form.customer || ''}
+                placeholder="No client linked"
+                searchable
+                options={[
+                  { value: '', label: 'No client linked' },
+                  ...customers.map(c => ({ value: c._id, label: `${c.name}${c.company ? ` (${c.company})` : ''}` }))
+                ]}
+                onChange={val => setForm({ ...form, customer: val || null })}
+              />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
               Status
-              <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
-                {(workType?.statuses || []).map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-              </select>
+              <CustomSelect
+                value={form.status || ''}
+                placeholder="Select status"
+                options={(workType?.statuses || []).map(s => ({ value: s.key, label: s.label }))}
+                onChange={val => setForm({ ...form, status: val })}
+              />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
               Priority
-              <select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>
-                <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-              </select>
+              <CustomSelect
+                value={form.priority || 'medium'}
+                options={[
+                  { value: 'low', label: 'Low' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'high', label: 'High' }
+                ]}
+                onChange={val => setForm({ ...form, priority: val })}
+              />
             </label>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
               Owner
-              <select value={form.assignedTo} onChange={e => setForm({ ...form, assignedTo: e.target.value || null })}>
-                <option value="">Unassigned</option>
-                {users.map(u => <option key={u._id} value={u._id}>{u.name}</option>)}
-              </select>
+              <CustomSelect
+                value={form.assignedTo || ''}
+                placeholder="Unassigned"
+                searchable
+                options={[
+                  { value: '', label: 'Unassigned' },
+                  ...users.map(u => ({ value: u._id, label: u.name }))
+                ]}
+                onChange={val => setForm({ ...form, assignedTo: val || null })}
+              />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
               Deadline
@@ -433,10 +455,15 @@ function setParam(key: string, value: string) {
                 <label key={field.key} style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
                   {field.label} {field.required ? '*' : ''}
                   {field.type === 'select' ? (
-                    <select value={form.customFields?.[field.key] || ''} onChange={e => setForm({ ...form, customFields: { ...form.customFields, [field.key]: e.target.value } })}>
-                      <option value="">Select...</option>
-                      {(field.options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                    </select>
+                    <CustomSelect
+                      value={form.customFields?.[field.key] || ''}
+                      placeholder="Select..."
+                      options={[
+                        { value: '', label: 'Select...' },
+                        ...(field.options || []).map(opt => ({ value: opt, label: opt }))
+                      ]}
+                      onChange={val => setForm({ ...form, customFields: { ...form.customFields, [field.key]: val } })}
+                    />
                   ) : field.type === 'checkbox' ? (
                     <input type="checkbox" checked={!!form.customFields?.[field.key]} onChange={e => setForm({ ...form, customFields: { ...form.customFields, [field.key]: e.target.checked } })} />
                   ) : field.type === 'date' ? (
@@ -455,36 +482,64 @@ function setParam(key: string, value: string) {
             Notes & Brief
             <textarea rows={3} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
           </label>
-          <button className="btn primary" type="submit" disabled={creating}>{creating ? 'Creating...' : 'Create Item'}</button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
+            <button type="button" className="btn small" onClick={() => setShowCreate(false)}>Cancel</button>
+            <button type="submit" className="btn primary small" disabled={creating}>{creating ? 'Creating...' : `Create ${workType?.name || 'Item'}`}</button>
+          </div>
         </form>
       )}
 
-{/* Filter Bar (list/board views) */}
+      {/* Filter Bar (list/board views) */}
       {activeView !== 'overview' && (
         <div className="work-filters" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1rem' }}>
           {(workType?.presentation?.filterFields || ['status', 'assignedTo', 'priority']).map(filterKey => {
             if (filterKey === 'status') {
               return (
-                <select key={filterKey} value={currentStatus} onChange={e => handleFilterChange('status', e.target.value)} style={{ minWidth: '150px' }}>
-                  <option value="">All statuses</option>
-                  {(workType?.statuses || []).map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                </select>
+                <CustomSelect
+                  key={filterKey}
+                  value={currentStatus}
+                  placeholder="All statuses"
+                  options={[
+                    { value: '', label: 'All statuses' },
+                    ...(workType?.statuses || []).map(s => ({ value: s.key, label: s.label }))
+                  ]}
+                  onChange={val => handleFilterChange('status', val)}
+                  style={{ minWidth: '150px' }}
+                />
               );
             }
             if (filterKey === 'priority') {
               return (
-                <select key={filterKey} value={currentPriority} onChange={e => handleFilterChange('priority', e.target.value)} style={{ minWidth: '130px' }}>
-                  <option value="">All priorities</option>
-                  <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-                </select>
+                <CustomSelect
+                  key={filterKey}
+                  value={currentPriority}
+                  placeholder="All priorities"
+                  options={[
+                    { value: '', label: 'All priorities' },
+                    { value: 'low', label: 'Low' },
+                    { value: 'medium', label: 'Medium' },
+                    { value: 'high', label: 'High' }
+                  ]}
+                  onChange={val => handleFilterChange('priority', val)}
+                  style={{ minWidth: '130px' }}
+                />
               );
             }
             if (filterKey === 'assignedTo' || filterKey === 'secondaryAssignee') {
+              const paramKey = filterKey === 'assignedTo' ? 'assignedTo' : 'secondaryAssignee';
+              const labelPrefix = filterKey === 'assignedTo' ? 'owners' : 'secondary assignees';
               return (
-                <select key={filterKey} value={searchParams.get(filterKey === 'assignedTo' ? 'assignedTo' : 'secondaryAssignee') || ''} onChange={e => handleFilterChange(filterKey === 'assignedTo' ? 'assignedTo' : 'secondaryAssignee', e.target.value)} style={{ minWidth: '150px' }}>
-                  <option value="">All {filterKey === 'assignedTo' ? 'owners' : 'secondary assignees'}</option>
-                  {users.map(u => <option key={u._id} value={u._id}>{u.name}</option>)}
-                </select>
+                <CustomSelect
+                  key={filterKey}
+                  value={searchParams.get(paramKey) || ''}
+                  placeholder={`All ${labelPrefix}`}
+                  options={[
+                    { value: '', label: `All ${labelPrefix}` },
+                    ...users.map(u => ({ value: u._id, label: u.name }))
+                  ]}
+                  onChange={val => handleFilterChange(paramKey, val)}
+                  style={{ minWidth: '150px' }}
+                />
               );
             }
             if (filterKey.startsWith('custom:')) {
@@ -495,19 +550,33 @@ function setParam(key: string, value: string) {
               if (customField.type === 'select' || customField.type === 'status') {
                 const options = Array.isArray(customField.options) ? customField.options : [];
                 return (
-                  <select key={filterKey} value={current} onChange={e => handleFilterChange(qp, e.target.value)} style={{ minWidth: '150px' }}>
-                    <option value="">All {customField.label}</option>
-                    {options.map((opt: any) => <option key={String(opt)} value={String(opt)}>{String(opt)}</option>)}
-                  </select>
+                  <CustomSelect
+                    key={filterKey}
+                    value={current}
+                    placeholder={`All ${customField.label}`}
+                    options={[
+                      { value: '', label: `All ${customField.label}` },
+                      ...options.map((opt: any) => ({ value: String(opt), label: String(opt) }))
+                    ]}
+                    onChange={val => handleFilterChange(qp, val)}
+                    style={{ minWidth: '150px' }}
+                  />
                 );
               }
               if (customField.type === 'checkbox') {
                 return (
-                  <select key={filterKey} value={current} onChange={e => handleFilterChange(qp, e.target.value)} style={{ minWidth: '130px' }}>
-                    <option value="">All {customField.label}</option>
-                    <option value="true">Yes</option>
-                    <option value="false">No</option>
-                  </select>
+                  <CustomSelect
+                    key={filterKey}
+                    value={current}
+                    placeholder={`All ${customField.label}`}
+                    options={[
+                      { value: '', label: `All ${customField.label}` },
+                      { value: 'true', label: 'Yes' },
+                      { value: 'false', label: 'No' }
+                    ]}
+                    onChange={val => handleFilterChange(qp, val)}
+                    style={{ minWidth: '130px' }}
+                  />
                 );
               }
               return (

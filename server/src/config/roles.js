@@ -77,7 +77,7 @@ const canEditWorkField = (user, workType, field) => {
   if (field === 'status') return true;
   if (user.role === 'admin' || user.role === 'manager') return true;
   const dynamic = customWorkPermission(user, workType);
-  if (dynamic) return dynamic.editableFieldKeys.includes(field);
+  if (dynamic) return Array.isArray(dynamic.editableFieldKeys) && dynamic.editableFieldKeys.includes(field);
   const configured = user.customRole?.fieldPermissions;
   if (configured) {
     const key = workTypeKey(workType);
@@ -90,7 +90,8 @@ const canEditWorkField = (user, workType, field) => {
     website_developer: ['status', 'pageCount', 'notes', 'designLink', 'stagingLink', 'deliveryLink'],
     content_manager: ['status', 'contentFormat', 'platform', 'contentPillar', 'hook', 'caption', 'cta', ...WORK_FIELD_GROUPS.content.links]
   };
-  return !defaults[user.role] || defaults[user.role].includes(field);
+  const allowed = defaults[user.role];
+  return !allowed || allowed.includes(field);
 };
 
 const canAccessLeadField = (user, field, action = 'view') => {

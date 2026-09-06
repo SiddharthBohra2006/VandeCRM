@@ -2,6 +2,7 @@ import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { customersApi, CustomersListResponse } from '../../api/customers';
 import { useAuth } from '../../contexts/AuthContext';
+import CustomSelect from '../../components/CustomSelect';
 import { CustomerInput, CustomField } from '../../types';
 
 type FormState = Required<Pick<CustomerInput, 'name' | 'company' | 'email' | 'phone' | 'source' | 'value' | 'priority' | 'stage' | 'assignedTo' | 'campaign' | 'notes'>> & {
@@ -132,12 +133,51 @@ export default function CustomerFormPage() {
         <div className="form-grid">
           <label>{isClientScope ? crmTerms.recordSingular : crmTerms.leadSingular} name *<input required name="name" placeholder="e.g. Rahul Sharma" value={form.name} onChange={change} /></label>
           <label>{isClientScope ? crmTerms.recordSingular : crmTerms.leadSingular} source<input name="source" placeholder="e.g. Instagram, Referral, Website" value={form.source} onChange={change} /></label>
-          <label>Campaign<select name="campaign" value={form.campaign} onChange={change}><option value="">No campaign / Organic</option>{options.campaigns.map(campaign => <option value={campaign._id} key={campaign._id}>{campaign.name}</option>)}</select></label>
-          <label>Stage *<select required name="stage" value={form.stage} onChange={change}><option value="">Select stage</option>{displayStages.map(stage => <option value={stage._id} key={stage._id}>{stage.name}</option>)}</select></label>
+          <label>
+            Campaign
+            <div style={{ marginTop: '0.35rem' }}>
+              <CustomSelect
+                placeholder="No campaign / Organic"
+                value={form.campaign}
+                onChange={val => setForm(prev => ({ ...prev, campaign: val }))}
+                options={[
+                  { value: '', label: 'No campaign / Organic' },
+                  ...(options?.campaigns || []).map(campaign => ({ value: campaign._id, label: campaign.name }))
+                ]}
+              />
+            </div>
+          </label>
+          <label>
+            Stage *
+            <div style={{ marginTop: '0.35rem' }}>
+              <CustomSelect
+                placeholder="Select stage"
+                value={form.stage}
+                onChange={val => setForm(prev => ({ ...prev, stage: val }))}
+                options={[
+                  { value: '', label: 'Select stage' },
+                  ...displayStages.map(stage => ({ value: stage._id, label: stage.name }))
+                ]}
+              />
+            </div>
+          </label>
           <label>Phone<input name="phone" placeholder="+91 98765 43210" value={form.phone} onChange={change} /></label>
           <label>Email<input type="email" name="email" placeholder="name@company.com" value={form.email} onChange={change} /></label>
           <label>Company / Brand<input name="company" placeholder="e.g. Acme Media" value={form.company} onChange={change} /></label>
-          <label>Assigned owner<select name="assignedTo" value={form.assignedTo} onChange={change}><option value="">Assign to me</option>{options.users.map(user => <option value={user._id} key={user._id}>{user.name}</option>)}</select></label>
+          <label>
+            Assigned owner
+            <div style={{ marginTop: '0.35rem' }}>
+              <CustomSelect
+                placeholder="Assign to me"
+                value={form.assignedTo}
+                onChange={val => setForm(prev => ({ ...prev, assignedTo: val }))}
+                options={[
+                  { value: '', label: 'Assign to me' },
+                  ...(options?.users || []).map(user => ({ value: user._id, label: user.name }))
+                ]}
+              />
+            </div>
+          </label>
         </div>
 
         {/* First Call / Conversation Summary Note */}
@@ -162,11 +202,25 @@ export default function CustomerFormPage() {
           <div style={{ marginTop: '1rem', display: 'grid', gap: '1rem' }}>
             <div className="form-grid">
               <label>Estimated deal value (₹)<input type="number" min="0" name="value" placeholder="0" value={form.value || ''} onChange={change} /></label>
-              <label>Priority<select name="priority" value={form.priority} onChange={change}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+              <label>
+                Priority
+                <div style={{ marginTop: '0.35rem' }}>
+                  <CustomSelect
+                    placeholder="Choose priority"
+                    value={form.priority}
+                    onChange={val => setForm(prev => ({ ...prev, priority: (val as 'low' | 'medium' | 'high') || 'medium' }))}
+                    options={[
+                      { value: 'low', label: 'Low' },
+                      { value: 'medium', label: 'Medium' },
+                      { value: 'high', label: 'High' },
+                    ]}
+                  />
+                </div>
+              </label>
               <label>Lead qualification score (0-100)<input type="number" min="0" max="100" name="leadScore" value={form.leadScore} onChange={change} /></label>
             </div>
 
-            {options.labels.length > 0 && (
+            {options && options.labels && options.labels.length > 0 && (
               <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
                 <legend style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--sub)', marginBottom: '6px' }}>Labels / Tags</legend>
                 <div className="check-grid">
@@ -180,13 +234,28 @@ export default function CustomerFormPage() {
               </fieldset>
             )}
 
-            {options.fields.length > 0 && (
+            {options && options.fields && options.fields.length > 0 && (
               <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
                 <legend style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--sub)', marginBottom: '6px' }}>Custom CRM Fields</legend>
                 <div className="form-grid">
                   {options.fields.map(field => {
                     const value = form.customData[field.key];
-                    if (field.type === 'select') return <label key={field._id}>{field.label}<select required={field.required} value={String(value || '')} onChange={event => customField(field, event.target.value)}><option value="">Select</option>{field.options.map(option => <option key={option}>{option}</option>)}</select></label>;
+                    if (field.type === 'select') return (
+                      <label key={field._id}>
+                        {field.label}
+                        <div style={{ marginTop: '0.35rem' }}>
+                          <CustomSelect
+                            placeholder="Select"
+                            value={String(value || '')}
+                            onChange={val => customField(field, val)}
+                            options={[
+                              { value: '', label: 'Select' },
+                              ...field.options.map(option => ({ value: option, label: option }))
+                            ]}
+                          />
+                        </div>
+                      </label>
+                    );
                     if (field.type === 'checkbox') return <label className="inline-check" key={field._id}><input type="checkbox" checked={Boolean(value)} onChange={event => customField(field, event.target.checked)} />{field.label}</label>;
                     return <label key={field._id}>{field.label}<input type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'} required={field.required} value={value == null ? '' : String(value)} onChange={event => customField(field, event.target.value)} /></label>;
                   })}

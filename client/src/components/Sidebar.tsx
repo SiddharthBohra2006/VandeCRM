@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation } from 'react-router-dom';
 import { User, Company, WorkType, CrmTerms } from '../api/auth';
 import { api } from '../api/client';
@@ -30,6 +31,7 @@ type NavItem = {
   managerOnly?: boolean;
   mainOnly?: boolean;
   reportOnly?: boolean;
+  color?: string;
 };
 
 const navItems: NavItem[] = [
@@ -93,10 +95,6 @@ function hasPermission(user: User, permission: string): boolean {
 function hasWorkPermission(user: User, workType: WorkType, action: string): boolean {
   if (!user) return false;
   if (user.role === 'admin' || user.role === 'manager') return true;
-  const wp = (user.customRole?.workTypePermissions || []).find(item =>
-    String(item.workTypeId) === String(workType._id) || item.workTypeId === workType.key
-  );
-  if (user.customRole?.workTypePermissions?.length) return (wp?.actions || []).includes(action);
   const legacyModule = WORK_TYPE_MODULES[workType.key];
   if (legacyModule && (user.hiddenModules || []).includes(legacyModule)) return false;
   if (user.customRole) return Boolean(legacyModule && (user.customRole.permissions || []).includes(`${legacyModule}.${action}`));
@@ -130,15 +128,26 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
 
   const accessibleWorkTypes = workTypes.filter(wt => canAccessWorkType(user, wt));
 
-  const visibleNavItems = isClient ? [] : navItems.filter(item => {
-    if (item.permission && !hasPermission(user, item.permission)) return false;
-    if (item.adminOnly && !['admin', 'manager'].includes(user.role)) return false;
-    if (item.mainOnly && !(user.role === 'admin' && activeCompany?.isMain)) return false;
-    if ((item.navKey === 'nav-task-center' || item.navKey === 'nav-team-chat') && accessibleWorkTypes.length === 0) return false;
-    if (hiddenSet.has(item.navKey)) return false;
-    return true;
-  });
+  // Build candidate items list (all items user is permitted to see)
+  const candidateNavItems: NavItem[] = isClient ? [] : [
+    ...navItems.filter(item => {
+      if (item.permission && !hasPermission(user, item.permission)) return false;
+      if (item.adminOnly && !['admin', 'manager'].includes(user.role)) return false;
+      if (item.mainOnly && !(user.role === 'admin' && activeCompany?.isMain)) return false;
+      if ((item.navKey === 'nav-task-center' || item.navKey === 'nav-team-chat') && accessibleWorkTypes.length === 0) return false;
+      return true;
+    }),
+    ...accessibleWorkTypes.map(wt => ({
+      path: `/work/${wt.key}`,
+      label: wt.name,
+      icon: wt.icon || 'clipboard-list',
+      navKey: `nav-work-${wt.key}`,
+      color: wt.color,
+    }))
+  ];
 
+  // Visible nav items (excluding hidden)
+  const visibleNavItems = candidateNavItems.filter(item => !hiddenSet.has(item.navKey));
   const orderedNavItems = applyOrder(visibleNavItems, navOrder, item => item.navKey);
 
   // Workspace switcher: click outside to close
@@ -199,7 +208,7 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
     const dragging = navContainerRef.current?.querySelector('.dragging') as HTMLElement | null;
     if (!dragging || !navContainerRef.current) return;
     const afterElement = getDragAfterElement(navContainerRef.current, e.clientY);
-    if (afterElement == null) {
+    if (!afterElement) {
       navContainerRef.current.appendChild(dragging);
     } else {
       navContainerRef.current.insertBefore(dragging, afterElement);
@@ -214,13 +223,11 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
             <button
               type="button"
               className="crm-switcher-summary"
-              aria-label="Switch CRM workspace"
+              onClick={() => setSwitcherOpen(!switcherOpen)}
               aria-expanded={switcherOpen}
-              onClick={() => setSwitcherOpen(prev => !prev)}
+              aria-label={`Switch CRM. Current workspace: ${activeCompany ? activeCompany.name : 'none'}`}
             >
-              <span className="crm-current-avatar">
-                {activeCompany ? initials(activeCompany.name) : '+'}
-              </span>
+              <span className="crm-current-avatar">{activeCompany ? initials(activeCompany.name) : '+'}</span>
               <span className="brand-text">
                 <strong>{activeCompany ? activeCompany.name : 'Choose CRM'}</strong>
                 <small>CRM Workspace</small>
@@ -243,16 +250,11 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
                         <button
                           key={company._id}
                           type="button"
+                          role="menuitem"
                           className={`crm-workspace-item ${selected ? 'active' : ''}`}
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            try {
-                              await onSwitchCompany(company._id);
-                            } catch (err) {
-                              console.error('Failed to switch workspace:', err);
-                            } finally {
-                              setSwitcherOpen(false);
-                            }
+                          onClick={async () => {
+                            setSwitcherOpen(false);
+                            if (!selected) await onSwitchCompany(company._id);
                           }}
                         >
                           <span className="crm-item-avatar">{initials(company.name)}</span>
@@ -278,38 +280,41 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
         ) : (
           <Link to="/client-dashboard" className="brand">
             <span className="crm-current-avatar">{brandInitials}</span>
-            <span className="brand-text">
-              <strong>{brandName}</strong>
-              <small>CRM</small>
-            </span>
+            <span className="brand-text"><strong>{brandName}</strong><small>CRM</small></span>
           </Link>
         )}
 
+        {/* Desktop collapse button */}
         <button
+          id="desktopSidebarCollapseBtn"
           className="sidebar-toggle-btn desktop-only-toggle"
-          onClick={onToggle}
           aria-label="Toggle Sidebar"
-          title={isOpen ? "Collapse sidebar" : "Expand sidebar"}
+          title="Collapse sidebar"
+          type="button"
+          onClick={onToggle}
         >
-          <Icon name={isOpen ? "panel-left-close" : "panel-left-open"} size={16} />
+          <Icon name="panel-left-close" size={18} />
         </button>
 
+        {/* Mobile close button */}
         <button
+          id="mobileSidebarCloseBtn"
           className="sidebar-toggle-btn mobile-only-toggle"
-          onClick={onCloseMobile}
           aria-label="Close Menu"
-          title="Close menu"
+          type="button"
+          onClick={onCloseMobile}
         >
-          <Icon name="x" size={16} />
+          <Icon name="x" size={18} />
         </button>
       </div>
 
       <nav className="sidebar-nav" ref={navContainerRef} onDragOver={onNavDragOver}>
         {isClient ? (
           <Link
-            key="client-dashboard"
             to="/client-dashboard"
             data-nav-id="nav-client-dashboard"
+            draggable
+            title="Reporting Dashboard"
             className={`nav-item ${resolvedPath === '/client-dashboard' ? 'active' : ''}`}
           >
             <Icon name="layout-dashboard" size={18} />
@@ -317,45 +322,38 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
           </Link>
         ) : (
           <>
-        {orderedNavItems.map(item => {
-          const isClientsPath = item.path === '/clients';
-          const isCustomersPath = item.path === '/customers';
-          const isFromClients = location.search.includes('from=clients') || location.pathname.startsWith('/clients');
+            {orderedNavItems.map(item => {
+              const isActive = item.path === '/'
+                ? resolvedPath === '/'
+                : resolvedPath === item.path || resolvedPath.startsWith(item.path + '/');
 
-          let isActive = false;
-          if (item.path === '/') {
-            isActive = resolvedPath === '/';
-          } else if (isClientsPath) {
-            isActive = resolvedPath.startsWith('/clients') || (resolvedPath.startsWith('/customers') && isFromClients);
-          } else if (isCustomersPath) {
-            isActive = resolvedPath.startsWith('/customers') && !isFromClients;
-          } else if (item.path === '/work') {
-            isActive = resolvedPath === '/work' || (resolvedPath.startsWith('/work/') && !resolvedPath.startsWith('/work/threads'));
-          } else if (item.path === '/work/threads') {
-            isActive = resolvedPath.startsWith('/work/threads');
-          } else {
-            isActive = resolvedPath.startsWith(item.path);
-          }
-
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              data-nav-id={item.navKey}
-              draggable
-              className={`nav-item ${isActive ? 'active' : ''}`}
-              onDragStart={onNavDragStart(item.navKey)}
-              onDragEnd={onNavDragEnd}
-            >
-              <Icon name={item.icon} size={18} />
-              <span>
-                {item.path === '/clients'
-                  ? (crmTerms.recordPlural && crmTerms.recordPlural.toLowerCase() !== crmTerms.leadPlural.toLowerCase() ? crmTerms.recordPlural : 'Clients')
-                  : (item.labelKey && crmTerms[item.labelKey] ? crmTerms[item.labelKey] : item.label)}
-              </span>
-            </Link>
-          );
-        })}
+              const isWorkModule = item.navKey.startsWith('nav-work-');
+              return (
+                <Link
+                  key={item.navKey}
+                  to={item.path}
+                  data-nav-id={item.navKey}
+                  draggable
+                  onDragStart={onNavDragStart(item.navKey)}
+                  onDragEnd={onNavDragEnd}
+                  title={item.label}
+                  className={`nav-item ${isActive ? 'active' : ''}`}
+                  style={isWorkModule && item.color ? ({ '--module-color': item.color } as React.CSSProperties) : undefined}
+                >
+                  <Icon
+                    name={item.icon}
+                    size={18}
+                    className={isWorkModule ? 'nav-item-module-icon' : undefined}
+                    style={isWorkModule && item.color ? { color: item.color } : undefined}
+                  />
+                  <span>
+                    {item.path === '/clients'
+                      ? (crmTerms.recordPlural && crmTerms.recordPlural.toLowerCase() !== crmTerms.leadPlural.toLowerCase() ? crmTerms.recordPlural : 'Clients')
+                      : (item.labelKey && crmTerms[item.labelKey] ? crmTerms[item.labelKey] : item.label)}
+                  </span>
+                </Link>
+              );
+            })}
           </>
         )}
       </nav>
@@ -363,7 +361,15 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
       <div className="sidebar-footer">
         {!isClient && (
           <div className="sidebar-footer-tools">
-            <button className="sidebar-tool-btn" type="button" title="Customize sidebar" onClick={() => { setPrefsHidden(new Set(user.sidebarHiddenItems || [])); setPrefsOpen(true); }}>
+            <button
+              className="sidebar-tool-btn"
+              type="button"
+              title="Customize sidebar"
+              onClick={() => {
+                setPrefsHidden(new Set(user.sidebarHiddenItems || []));
+                setPrefsOpen(true);
+              }}
+            >
               <Icon name="sliders-horizontal" size={16} />
               <span>Customize</span>
             </button>
@@ -400,13 +406,15 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
             try {
               await api.post<{ ok: true }>('/dashboard/preferences/sidebar', { hiddenItems: [...prefsHidden] });
               handlePrefsSave();
-            } catch {
+            } catch (err) {
+              console.error('Failed to save sidebar preferences', err);
+            } finally {
               setSavingPrefs(false);
             }
           }}
           onCancel={() => setPrefsOpen(false)}
           saving={savingPrefs}
-          navItems={orderedNavItems}
+          navItems={candidateNavItems}
           crmTerms={crmTerms}
         />
       )}
@@ -446,7 +454,7 @@ function getDragAfterElement(container: HTMLElement, y: number): HTMLElement | n
   ).element;
 }
 
-// ---- Sidebar Preferences Drawer ----
+// ---- Sidebar Preferences Drawer (Rendered via React Portal) ----
 
 interface PrefsDrawerProps {
   hidden: Set<string>;
@@ -459,58 +467,150 @@ interface PrefsDrawerProps {
 }
 
 function SidebarPrefsDrawer({ hidden, onToggle, onSave, onCancel, saving, navItems, crmTerms }: PrefsDrawerProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-
   function getLabel(item: NavItem): string {
-    if (item.labelKey && crmTerms[item.labelKey]) return crmTerms[item.labelKey];
+    if (item.labelKey && crmTerms[item.labelKey]) return crmTerms[item.labelKey] as string;
     return item.label;
   }
 
+  // Close on Escape key
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog && !dialog.open) dialog.showModal();
-    return () => { if (dialog?.open) dialog.close(); };
-  }, []);
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onCancel();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onCancel]);
 
-  return (
-    <dialog className="sidebar-preferences-drawer" ref={dialogRef} onClose={onCancel}>
-      <form method="dialog" onSubmit={(e) => { e.preventDefault(); void onSave(); }}>
-        <header>
-          <div>
-            <span className="eyebrow">Navigation</span>
-            <h2>Customize sidebar</h2>
-            <p>Show only the tools you use. Permissions are not affected.</p>
+  return createPortal(
+    <div
+      className="sidebar-preferences-overlay"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100000,
+        background: 'rgba(0, 0, 0, 0.65)',
+        backdropFilter: 'blur(3px)',
+        display: 'flex',
+        justifyContent: 'flex-end',
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+    >
+      <div
+        className="sidebar-preferences-drawer open"
+        style={{
+          width: '420px',
+          maxWidth: '100vw',
+          height: '100vh',
+          background: 'var(--panel, #0f172a)',
+          borderLeft: '1px solid var(--border)',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '1.5rem',
+          boxShadow: '-10px 0 40px rgba(0,0,0,0.4)',
+          animation: 'slideInFromRight 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <form
+          onSubmit={(e) => { e.preventDefault(); void onSave(); }}
+          style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '1.25rem' }}
+        >
+          <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border)', paddingBottom: '0.85rem' }}>
+            <div>
+              <span className="eyebrow" style={{ fontSize: '0.65rem', letterSpacing: '0.08em', color: 'var(--gold)' }}>Navigation</span>
+              <h2 style={{ margin: '0.2rem 0 0.2rem', fontSize: '1.25rem', fontWeight: 800 }}>Customize sidebar</h2>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--muted)' }}>Show only the tools you use. Permissions are not affected.</p>
+            </div>
+            <button
+              className="modal-close"
+              type="button"
+              onClick={onCancel}
+              aria-label="Close"
+              style={{ background: 'none', border: 'none', fontSize: '1.5rem', color: 'var(--muted)', cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}
+            >
+              &times;
+            </button>
+          </header>
+
+          <div
+            className="sidebar-preference-list"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem',
+              overflowY: 'auto',
+              flexGrow: 1,
+              paddingRight: '0.35rem',
+            }}
+          >
+            {navItems.map(item => {
+              const key = item.navKey;
+              const isChecked = !hidden.has(key);
+              return (
+                <label
+                  key={key}
+                  className="sidebar-preference-row"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.75rem 0.9rem',
+                    border: '1px solid var(--border)',
+                    borderRadius: '10px',
+                    background: isChecked ? 'color-mix(in srgb, var(--gold) 4%, var(--panel))' : 'var(--bg-soft)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <span
+                    className="sidebar-preference-icon"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      background: isChecked ? 'color-mix(in srgb, var(--gold) 12%, var(--panel))' : 'var(--bg-soft)',
+                      color: isChecked ? 'var(--gold)' : 'var(--muted)',
+                      border: '1px solid var(--border)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Icon name={item.icon} size={16} style={item.color ? { color: item.color } : undefined} />
+                  </span>
+                  <span style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minWidth: 0 }}>
+                    <strong style={{ fontSize: '0.88rem', color: isChecked ? 'var(--text)' : 'var(--muted)', fontWeight: 700 }}>
+                      {getLabel(item)}
+                    </strong>
+                    <small style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
+                      {isChecked ? 'Visible in sidebar' : 'Hidden from sidebar'}
+                    </small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => onToggle(key)}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--gold)' }}
+                  />
+                </label>
+              );
+            })}
           </div>
-          <button className="modal-close" type="button" onClick={onCancel} aria-label="Close">&times;</button>
-        </header>
-        <div className="sidebar-preference-list">
-          {navItems.map(item => {
-            const key = item.navKey;
-            return (
-              <label key={key} className="sidebar-preference-row">
-                <span className="sidebar-preference-icon">
-                  <Icon name={item.icon} size={16} />
-                </span>
-                <span>
-                  <strong>{getLabel(item)}</strong>
-                  <small>Visible in your sidebar</small>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={!hidden.has(key)}
-                  onChange={() => onToggle(key)}
-                />
-              </label>
-            );
-          })}
-        </div>
-        <footer>
-          <button className="btn" type="button" onClick={onCancel}>Cancel</button>
-          <button className="btn primary" type="submit" disabled={saving}>
-            {saving ? 'Saving…' : 'Save navigation'}
-          </button>
-        </footer>
-      </form>
-    </dialog>
+
+          <footer style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid var(--border)', paddingTop: '0.85rem' }}>
+            <button className="btn" type="button" onClick={onCancel} style={{ padding: '8px 16px', borderRadius: '8px' }}>
+              Cancel
+            </button>
+            <button className="btn primary" type="submit" disabled={saving} style={{ padding: '8px 20px', borderRadius: '8px' }}>
+              {saving ? 'Saving…' : 'Save navigation'}
+            </button>
+          </footer>
+        </form>
+      </div>
+    </div>,
+    document.body
   );
 }

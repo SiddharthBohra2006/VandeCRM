@@ -62,7 +62,6 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
 ];
 
-
 export function applyThemePreset(preset: ThemePreset) {
   const root = document.documentElement;
   root.setAttribute('data-theme', preset.type);
@@ -104,32 +103,154 @@ export function getActiveThemePreset(): ThemePreset {
   return THEME_PRESETS[0];
 }
 
+// ─── Cinematic Awakening Engine ───────────────────────────────────────────────
 
-function spawnThemeShockwave(x: number, y: number, color: string, endRadius: number, duration: number) {
-  try {
-    const shockwave = document.createElement('div');
-    shockwave.className = 'theme-shockwave-wavefront';
-    shockwave.style.left = `${x}px`;
-    shockwave.style.top = `${y}px`;
-    shockwave.style.setProperty('--theme-glow-color', color);
-    shockwave.style.setProperty('--theme-max-radius', `${endRadius}px`);
-    shockwave.style.setProperty('--theme-duration', `${duration}ms`);
-    document.body.appendChild(shockwave);
-
-    const burst = document.createElement('div');
-    burst.className = 'theme-click-burst';
-    burst.style.left = `${x}px`;
-    burst.style.top = `${y}px`;
-    burst.style.setProperty('--theme-glow-color', color);
-    document.body.appendChild(burst);
-
-    setTimeout(() => {
-      shockwave.remove();
-      burst.remove();
-    }, duration + 150);
-  } catch {
-    // Ignore DOM overlay errors
+/** Get or create a fixed, zero-overflow viewport container for all theme animations */
+function getFxContainer(): HTMLElement {
+  let container = document.getElementById('theme-fx-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'theme-fx-container';
+    container.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(container);
   }
+  return container;
+}
+
+/** Spawn a DOM node inside the FX container, auto-remove after duration */
+function spawnEl(tag: string, className: string, styles: Record<string, string>, duration: number): HTMLElement {
+  const container = getFxContainer();
+  const el = document.createElement(tag);
+  el.className = className;
+  Object.entries(styles).forEach(([k, v]) => el.style.setProperty(k, v));
+  container.appendChild(el);
+  setTimeout(() => el.remove(), duration);
+  return el;
+}
+
+/** Fire scattered firefly particles from the click origin */
+function spawnFireflies(x: number, y: number, color: string) {
+  const count = 14;
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2 + Math.random() * 0.4;
+    const dist  = 55 + Math.random() * 90;
+    const size  = 3 + Math.random() * 5;
+    const dur   = 700 + Math.random() * 400;
+    const delay = Math.random() * 120;
+
+    spawnEl('div', 'theme-firefly', {
+      left:                `${x}px`,
+      top:                 `${y}px`,
+      '--theme-glow-color': color,
+      '--ff-size':         `${size}px`,
+      '--ff-dx':           `${Math.cos(angle) * dist}px`,
+      '--ff-dy':           `${Math.sin(angle) * dist}px`,
+      '--ff-duration':     `${dur}ms`,
+      '--ff-delay':        `${delay}ms`,
+    }, dur + delay + 50);
+  }
+}
+
+/** The supernova flash at the exact click point */
+function spawnSupernova(x: number, y: number, color: string) {
+  spawnEl('div', 'theme-supernova', {
+    left:                `${x}px`,
+    top:                 `${y}px`,
+    width:               '80px',
+    height:              '80px',
+    '--theme-glow-color': color,
+  }, 500);
+}
+
+/** Dual concentric aurora rings that expand outward */
+function spawnAuroraRings(x: number, y: number, color: string, endRadius: number) {
+  const size   = 60;
+  const scale  = (endRadius / (size / 2)) * 1.1;
+  const dur    = 750;
+
+  ['theme-aurora-ring', 'theme-aurora-ring-2'].forEach(cls => {
+    spawnEl('div', cls, {
+      left:                `${x}px`,
+      top:                 `${y}px`,
+      width:               `${size}px`,
+      height:              `${size}px`,
+      '--theme-glow-color': color,
+      '--aurora-scale':    `${scale}`,
+      '--aurora-duration': `${dur}ms`,
+    }, dur + 200);
+  });
+}
+
+/**
+ * Sweeping Wavefront Lens:
+ * Expands inside the overflow-clipped container in exact lockstep with the circular reveal.
+ * Its glowing rim and backdrop-filter sweep across all typography, words, and cards,
+ * creating a living radiant wave across the written content with ZERO scrollbar overflow.
+ */
+function spawnWavefrontLens(x: number, y: number, color: string, endRadius: number, duration: number) {
+  const container = getFxContainer();
+  const easing = 'cubic-bezier(0.16, 1, 0.3, 1)';
+
+  // 1. Radiant luminous lens with backdrop-filter that illuminates text
+  const lens = document.createElement('div');
+  lens.className = 'theme-wavefront-lens';
+  lens.style.left = `${x}px`;
+  lens.style.top = `${y}px`;
+  lens.style.setProperty('--theme-glow-color', color);
+  container.appendChild(lens);
+
+  lens.animate([
+    {
+      width: '0px',
+      height: '0px',
+      opacity: 0.95,
+      borderWidth: '3.5px',
+    },
+    {
+      width: `${endRadius * 2}px`,
+      height: `${endRadius * 2}px`,
+      opacity: 0,
+      borderWidth: '0.5px',
+    }
+  ], {
+    duration,
+    easing,
+    fill: 'forwards'
+  });
+
+  // 2. Soft color energy wave halo
+  const glow = document.createElement('div');
+  glow.className = 'theme-wavefront-glow';
+  glow.style.left = `${x}px`;
+  glow.style.top = `${y}px`;
+  glow.style.setProperty('--theme-glow-color', color);
+  container.appendChild(glow);
+
+  glow.animate([
+    {
+      width: '0px',
+      height: '0px',
+      opacity: 0.9,
+    },
+    {
+      width: `${endRadius * 2.15}px`,
+      height: `${endRadius * 2.15}px`,
+      opacity: 0,
+    }
+  ], {
+    duration: duration + 100,
+    easing,
+    fill: 'forwards'
+  });
+
+  setTimeout(() => {
+    lens.remove();
+    glow.remove();
+    // Clean up container if empty
+    if (container && container.childNodes.length === 0) {
+      container.remove();
+    }
+  }, duration + 200);
 }
 
 export function changeThemeWithAnimation(
@@ -137,58 +258,64 @@ export function changeThemeWithAnimation(
   event?: React.MouseEvent | MouseEvent | { clientX: number; clientY: number }
 ) {
   const root = document.documentElement;
-  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const x = event && 'clientX' in event && event.clientX > 0 ? event.clientX : window.innerWidth / 2;
   const y = event && 'clientY' in event && event.clientY > 0 ? event.clientY : 40;
   const endRadius = Math.hypot(
     Math.max(x, window.innerWidth - x),
     Math.max(y, window.innerHeight - y)
   );
-  const duration = 620;
-  const accentColor = preset.gold || '#f59e0b';
+  const REVEAL_DUR = 680;
+  const color = preset.gold;
 
-  if (!prefersReducedMotion) {
-    spawnThemeShockwave(x, y, accentColor, endRadius, duration);
+  if (prefersReduced) {
+    applyThemePreset(preset);
+    return;
   }
 
-  // Modern View Transitions Circular Reveal Animation (Chrome 111+, Edge 111+, Safari 18+)
-  if (!prefersReducedMotion && 'startViewTransition' in document && typeof (document as any).startViewTransition === 'function') {
-    try {
-      const transition = (document as any).startViewTransition(() => {
-        applyThemePreset(preset);
-      });
+  // ── Phase 1: Supernova + Fireflies burst from click origin ──
+  spawnSupernova(x, y, color);
+  spawnFireflies(x, y, color);
 
-      transition.ready.then(() => {
+  // ── Phase 2: Dual Aurora rings expand ──
+  spawnAuroraRings(x, y, color, endRadius);
+
+  // ── Phase 3: Luminous Wavefront Lens sweeps across all text & UI elements ──
+  spawnWavefrontLens(x, y, color, endRadius, REVEAL_DUR);
+
+  // ── Phase 4: Circular reveal via View Transitions API ──
+  if ('startViewTransition' in document && typeof (document as any).startViewTransition === 'function') {
+    try {
+      const vt = (document as any).startViewTransition(() => applyThemePreset(preset));
+
+      vt.ready.then(() => {
         root.animate(
           {
             clipPath: [
               `circle(0px at ${x}px ${y}px)`,
-              `circle(${endRadius}px at ${x}px ${y}px)`
+              `circle(${endRadius}px at ${x}px ${y}px)`,
             ]
           },
           {
-            duration,
+            duration: REVEAL_DUR,
             easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-            pseudoElement: '::view-transition-new(root)'
+            pseudoElement: '::view-transition-new(root)',
           }
         );
-      }).catch(() => {
-        applyThemePreset(preset);
-      });
+      }).catch(() => applyThemePreset(preset));
       return;
     } catch {
-      // Fallback if view transition is rejected or already in progress
+      // fall through to fallback
     }
   }
 
-  // Fallback smooth transition class for older browsers
+  // ── Fallback: smooth CSS variable cross-fade ──
   root.classList.add('theme-transitioning');
   applyThemePreset(preset);
-  setTimeout(() => {
-    root.classList.remove('theme-transitioning');
-  }, duration);
+  setTimeout(() => root.classList.remove('theme-transitioning'), REVEAL_DUR);
 }
 
+/** Legacy ripple overlay (kept for backward compat) */
 export function applyThemeRipple(x: number, y: number, bg: string) {
   const ripple = document.createElement('div');
   ripple.id = 'theme-ripple-overlay';
@@ -198,8 +325,5 @@ export function applyThemeRipple(x: number, y: number, bg: string) {
   document.body.appendChild(ripple);
   ripple.offsetWidth;
   ripple.classList.add('expanding');
-  setTimeout(() => {
-    ripple.remove();
-  }, 900);
+  setTimeout(() => ripple.remove(), 900);
 }
-

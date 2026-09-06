@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
+import { CheckSquare, Trash2, X, Download, Filter, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { clientsApi, ClientsListResponse } from '../../api/clients';
 import { customersApi, downloadCustomersCsv } from '../../api/customers';
@@ -217,6 +218,52 @@ export default function ClientsPage() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not delete view');
     }
+  }
+
+  async function handleDirectBulk(action: string, value: string) {
+    if (selectedIds.size === 0 || !action || !value) return;
+    try {
+      setApplyingBulk(true);
+      setError('');
+      const payload: { action: string; selectedIds: string[]; [key: string]: unknown } = {
+        action,
+        selectedIds: [...selectedIds]
+      };
+      if (action === 'stage') payload.stageId = value;
+      else if (action === 'transfer') payload.assignedTo = value;
+      else payload[action] = value;
+      await customersApi.bulk(payload);
+      setSelectedIds(new Set());
+      await loadData();
+    } catch (err: any) {
+      setError(err.message || 'Bulk action failed');
+    } finally {
+      setApplyingBulk(false);
+    }
+  }
+
+  function handleExportSelected() {
+    const selectedClients = clients.filter(c => selectedIds.has(c._id));
+    if (!selectedClients.length) return;
+    const headers = ['Name', 'Phone', 'Email', 'Company', 'Status', 'Priority', 'Value', 'Source'];
+    const rows = selectedClients.map(c => [
+      `"${(c.name || '').replace(/"/g, '""')}"`,
+      `"${(c.phone || '').replace(/"/g, '""')}"`,
+      `"${(c.email || '').replace(/"/g, '""')}"`,
+      `"${(c.company || '').replace(/"/g, '""')}"`,
+      `"${(c.stage?.name || '').replace(/"/g, '""')}"`,
+      `"${(c.priority || '').replace(/"/g, '""')}"`,
+      `"${c.value || 0}"`,
+      `"${(c.source || '').replace(/"/g, '""')}"`,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `selected_clients_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   async function handleBulkAction(confirmed = false) {
@@ -450,14 +497,15 @@ export default function ClientsPage() {
           </button>
 
           <details className="advanced-filters">
-            <summary className="btn secondary outline" style={{ listStyle: 'none' }}>
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-              More filters <span style={{ fontSize: '0.7rem', color: '#ea580c', fontWeight: 800 }}>›</span>
+            <summary className="btn secondary outline advanced-filters-summary">
+              <Filter size={13} />
+              <span>More filters</span>
               {advancedFilterCount > 0 && (
-                <span style={{ background: '#ea580c', color: 'white', borderRadius: '50%', width: 15, height: 15, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.62rem', fontWeight: 800 }}>
+                <span className="advanced-filter-badge">
                   {advancedFilterCount}
                 </span>
               )}
+              <ChevronDown size={13} className="advanced-filter-caret" />
             </summary>
             <div className="advanced-filter-popover">
               <header>
@@ -519,9 +567,9 @@ export default function ClientsPage() {
             <input
               type="text"
               className="saved-view-name-input"
-              placeholder="Name this view"
+              placeholder="Name this view…"
               autoFocus
-              style={{ width: 130, padding: '0.4rem 0.6rem', fontSize: '0.78rem', background: 'var(--input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 8 }}
+              style={{ width: 130, height: 38, padding: '0 0.6rem', fontSize: '0.78rem', background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 8 }}
               onKeyDown={e => { if (e.key === 'Enter') void saveCurrentView(); if (e.key === 'Escape') setViewBeingSaved(false); }}
             />
           )}
@@ -547,90 +595,121 @@ export default function ClientsPage() {
         </div>
       </form>
 
-      {/* Bulk Action Bar */}
+      {/* Floating Bulk Action Bar */}
       {selectedIds.size > 0 && (
-        <div className="bulk-actions" style={{ margin: '0 32px 14px 32px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <strong>{selectedIds.size} selected</strong>
-          <CustomSelect
-            value={bulkAction}
-            onChange={val => { setBulkAction(val); setBulkValue(''); }}
-            placeholder="Choose action"
-            options={[
-              { value: '', label: 'Choose action' },
-              { value: 'stage', label: 'Change status' },
-              { value: 'transfer', label: 'Transfer' },
-              { value: 'priority', label: 'Set priority' },
-              { value: 'value', label: 'Set value' },
-              { value: 'source', label: 'Set source' },
-              { value: 'delete', label: 'Delete' },
-            ]}
-            style={{ width: '150px' }}
-          />
-          {bulkAction === 'stage' && (
+        <div className="floating-bulk-bar" role="toolbar" aria-label="Bulk actions">
+          <div className="bulk-count-badge">
+            <CheckSquare size={14} />
+            <span>{selectedIds.size} selected</span>
+          </div>
+
+          <div className="bulk-divider" />
+
+          <div className="bulk-actions-group">
+            {/* Quick Bulk Status */}
             <CustomSelect
-              aria-label="New status"
-              value={bulkValue}
-              onChange={val => setBulkValue(val)}
-              placeholder="Choose status"
+              variant="compact"
+              placeholder="Change status…"
               options={[
-                { value: '', label: 'Choose status' },
+                { value: '', label: 'Change status…' },
                 ...stages.filter(s => s.isActive).map(s => ({ value: s._id, label: s.name }))
               ]}
-              style={{ width: '160px' }}
+              value=""
+              onChange={val => {
+                if (val) void handleDirectBulk('stage', val);
+              }}
+              style={{ width: '135px' }}
+              buttonStyle={{ height: 32, fontSize: '0.78rem', borderRadius: 999 }}
             />
-          )}
-          {bulkAction === 'transfer' && (
+
+            {/* Quick Bulk Assign */}
             <CustomSelect
-              aria-label="New owner"
-              value={bulkValue}
-              onChange={val => setBulkValue(val)}
-              placeholder="Unassigned"
+              variant="compact"
+              placeholder="Assign owner…"
               options={[
-                { value: '', label: 'Unassigned' },
+                { value: '', label: 'Assign owner…' },
                 ...users.map(u => ({ value: u._id, label: u.name }))
               ]}
-              style={{ width: '160px' }}
+              value=""
+              onChange={val => {
+                if (val) void handleDirectBulk('transfer', val);
+              }}
+              style={{ width: '135px' }}
+              buttonStyle={{ height: 32, fontSize: '0.78rem', borderRadius: 999 }}
             />
-          )}
-          {bulkAction === 'priority' && (
+
+            {/* Quick Bulk Priority */}
             <CustomSelect
-              aria-label="New priority"
-              value={bulkValue}
-              onChange={val => setBulkValue(val)}
-              placeholder="Choose priority"
+              variant="compact"
+              placeholder="Set priority…"
               options={[
-                { value: '', label: 'Choose priority' },
-                { value: 'low', label: 'Low' },
-                { value: 'medium', label: 'Medium' },
-                { value: 'high', label: 'High' },
+                { value: '', label: 'Set priority…' },
+                { value: 'low', label: 'Low priority' },
+                { value: 'medium', label: 'Medium priority' },
+                { value: 'high', label: 'High priority' },
               ]}
-              style={{ width: '150px' }}
+              value=""
+              onChange={val => {
+                if (val) void handleDirectBulk('priority', val);
+              }}
+              style={{ width: '125px' }}
+              buttonStyle={{ height: 32, fontSize: '0.78rem', borderRadius: 999 }}
             />
-          )}
-          {['value', 'source'].includes(bulkAction) && (
-            <input
-              aria-label={`New ${bulkAction}`}
-              placeholder={bulkAction === 'value' ? 'New deal value' : 'New source'}
-              type={bulkAction === 'value' ? 'number' : 'text'}
-              value={bulkValue}
-              onChange={event => setBulkValue(event.target.value)}
-            />
-          )}
-          <button
-            className="btn small primary"
-            type="button"
-            disabled={!bulkAction || applyingBulk}
-            onClick={() => void handleBulkAction()}
-          >
-            {applyingBulk ? 'Applying…' : 'Apply'}
-          </button>
-          <button
-            className="btn small"
-            type="button"
-            onClick={() => { setSelectedIds(new Set()); setBulkAction(''); setBulkValue(''); }}
-          >
-            Clear selection
-          </button>
+
+            {/* Export Selected */}
+            <button
+              type="button"
+              className="btn small outline"
+              title="Export selected clients to CSV"
+              style={{ borderRadius: 999, height: 34, padding: '0 12px', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}
+              onClick={handleExportSelected}
+            >
+              <Download size={13} />
+              Export
+            </button>
+
+            {/* Bulk Delete */}
+            <button
+              type="button"
+              className="btn small danger"
+              title="Delete selected clients"
+              style={{ borderRadius: 999, height: 34, padding: '0 12px', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}
+              onClick={() => {
+                setBulkAction('delete');
+                setConfirmBulkDelete(true);
+              }}
+            >
+              <Trash2 size={13} />
+              Delete
+            </button>
+
+            {/* Select All on Page / Deselect */}
+            {selectedIds.size < clients.length ? (
+              <button
+                type="button"
+                className="btn small outline"
+                style={{ borderRadius: 999, height: 34, padding: '0 12px', fontSize: '0.78rem' }}
+                onClick={() => setSelectedIds(new Set(clients.map(c => c._id)))}
+              >
+                Select all {clients.length}
+              </button>
+            ) : null}
+
+            {/* Deselect All */}
+            <button
+              type="button"
+              className="btn small ghost"
+              title="Clear selection"
+              style={{ borderRadius: '50%', width: 34, height: 34, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+              onClick={() => {
+                setSelectedIds(new Set());
+                setBulkAction('');
+                setBulkValue('');
+              }}
+            >
+              <X size={15} />
+            </button>
+          </div>
         </div>
       )}
 

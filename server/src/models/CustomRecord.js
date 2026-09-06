@@ -34,6 +34,17 @@ const customRecordSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 customRecordSchema.index({ organization: 1, workspace: 1, module: 1, status: 1, updatedAt: -1 });
+// Guard against the check-then-create race in ensureMonthlyRecords: at most one
+// billing record per workspace per month, and one recurring instance per
+// template per month.
+customRecordSchema.index(
+  { organization: 1, workspace: 1, module: 1, 'customFields.billingMonth': 1 },
+  { unique: true, partialFilterExpression: { 'customFields.billingMonth': { $type: 'string' } } }
+);
+customRecordSchema.index(
+  { organization: 1, workspace: 1, module: 1, 'customFields.recurringSource': 1, 'customFields.recurringMonth': 1 },
+  { unique: true, partialFilterExpression: { 'customFields.recurringSource': { $type: 'string' } } }
+);
 customRecordSchema.virtual('clientCompany', { ref: 'ClientCompany', localField: 'workspace', foreignField: '_id', justOne: true });
 customRecordSchema.virtual('workType', { ref: 'WorkType', localField: 'module', foreignField: '_id', justOne: true });
 customRecordSchema.set('toObject', { virtuals: true });
