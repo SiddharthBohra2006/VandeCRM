@@ -30,11 +30,18 @@ router.get('/', async (req, res, next) => {
 
   try {
     const organization = req.user.organization._id;
-    const workspace = req.activeCompanyId ? String(req.activeCompanyId) : null;
     const assigned = isRestrictedUser(req.user);
+    const activeCompanyId = req.activeCompanyId ? String(req.activeCompanyId) : null;
 
-    const modules = workspace
-      ? (await WorkType.find({ organization, clientCompany: workspace }).select('name key statuses').lean().maxTimeMS(1500)).filter(module =>
+    // Retrieve user's accessible client companies
+    const filter = { organization, status: { $ne: 'inactive' } };
+    if (!['admin', 'manager'].includes(req.user.role)) filter.assignedUsers = req.user._id;
+    const accessibleCompanies = await ClientCompany.find(filter).select('_id name').lean().maxTimeMS(1500);
+    const accessibleCompanyIds = accessibleCompanies.length ? accessibleCompanies.map(c => c._id) : (activeCompanyId ? [activeCompanyId] : []);
+    const companyMap = new Map(accessibleCompanies.map(c => [String(c._id), c.name]));
+
+    const modules = accessibleCompanyIds.length
+      ? (await WorkType.find({ organization, clientCompany: { $in: accessibleCompanyIds }, isActive: true }).select('name key statuses clientCompany').lean().maxTimeMS(1500)).filter(module =>
           hasWorkPermission(req.user, module, 'view')
         )
       : [];
@@ -44,11 +51,11 @@ router.get('/', async (req, res, next) => {
     const groups = [];
     const warnings = [];
     const base = { organization };
-    const customerScope = { ...base, ...(workspace ? { clientCompany: workspace } : {}), ...(assigned ? { assignedTo: req.user._id } : {}) };
+    const customerScope = { ...base, ...(accessibleCompanyIds.length ? { clientCompany: { $in: accessibleCompanyIds } } : {}), ...(assigned ? { assignedTo: req.user._id } : {}) };
     const workScope = {
       ...base,
-      ...(workspace ? { workspace } : {}),
-      module: { $in: moduleIds },
+      ...(accessibleCompanyIds.length ? { workspace: { $in: accessibleCompanyIds } } : {}),
+      ...(moduleIds.length ? { module: { $in: moduleIds } } : {}),
       ...(assigned ? { $or: [{ assignedTo: req.user._id }, { collaborators: req.user._id }, { secondaryAssignee: req.user._id }] } : {}),
     };
 
@@ -74,7 +81,7 @@ router.get('/', async (req, res, next) => {
             const rows = await execute();
             groups.push({ id, label, items: rows.slice(0, PAGE_SIZE), hasMore: rows.length > PAGE_SIZE });
           } catch (error) {
-            console.error(`Search ${id} failed:`, error.code || error.name);
+            console.error(`Search ${id} failed:`, error.message || error.code || error.name);
             warnings.push(`${label} search is temporarily unavailable.`);
           }
         })()
@@ -85,7 +92,7 @@ router.get('/', async (req, res, next) => {
       const text = matchText(fields);
       return Model.find({ ...scope, ...text, ...dated(scheduled) })
         .select(select)
-        .sort({ updatedAt: -1, _id: -1 })
+        .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
         .skip((options.page - 1) * PAGE_SIZE)
         .limit(PAGE_SIZE + 1)
         .lean()
@@ -108,21 +115,19 @@ router.get('/', async (req, res, next) => {
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
     const [myFollowUps, openTasks, todayMeetings, unreadMessages] = await Promise.all([
-      workspace && hasPermission(req.user, 'businesses.view')
+      accessibleCompanyIds.length && hasPermission(req.user, 'businesses.view')
         ? Customer.countDocuments({ ...customerScope, nextFollowUpAt: { $exists: true, $ne: null, $lte: endOfToday } })
             .maxTimeMS(1000)
             .catch(() => 0)
         : 0,
-      workspace
+      accessibleCompanyIds.length
         ? CustomRecord.countDocuments({ ...workScope, status: { $nin: ['completed', 'won', 'delivered', 'archived'] } })
             .maxTimeMS(1000)
             .catch(() => 0)
         : 0,
-      workspace && hasPermission(req.user, 'businesses.view')
-        ? Activity.countDocuments({ organization, user: req.user._id, createdAt: { $gte: startOfToday, $lte: endOfToday } })
-            .maxTimeMS(1000)
-            .catch(() => 0)
-        : 0,
+      Activity.countDocuments({ organization, user: req.user._id, createdAt: { $gte: startOfToday, $lte: endOfToday } })
+        .maxTimeMS(1000)
+        .catch(() => 0),
       Notification.countDocuments({ organization, user: req.user._id, read: false })
         .maxTimeMS(1000)
         .catch(() => 0),
@@ -130,8 +135,8 @@ router.get('/', async (req, res, next) => {
 
     const stats = { myFollowUps, openTasks, todayMeetings, unreadMessages };
 
-    if (workspace) {
-      const won = await CrmStage.find({ organization, clientCompany: workspace, isWon: true }).select('_id').lean().maxTimeMS(1500);
+    if (accessibleCompanyIds.length || !assigned) {
+      const won = await CrmStage.find({ organization, ...(accessibleCompanyIds.length ? { clientCompany: { $in: accessibleCompanyIds } } : {}), isWon: true }).select('_id').lean().maxTimeMS(1500);
       const wonIds = won.map(stage => stage._id);
 
       for (const type of ['leads', 'clients']) {
@@ -139,34 +144,51 @@ router.get('/', async (req, res, next) => {
           const items = await find(
             Customer,
             { ...customerScope, stage: { [type === 'clients' ? '$in' : '$nin']: wonIds } },
-            ['name', 'company', 'email', 'phone', 'notes', 'source', 'campaign'],
-            'name company email phone stage notes nextFollowUpAt updatedAt createdAt',
+            ['name', 'company', 'email', 'phone', 'notes', 'source'],
+            'name company email phone stage notes clientCompany nextFollowUpAt updatedAt createdAt',
             'nextFollowUpAt'
           );
-          return items.map(item =>
-            row(
+          return items.map(item => {
+            const compName = accessibleCompanies.length > 1 ? companyMap.get(String(item.clientCompany)) : null;
+            const subtitle = [item.company, item.email, item.phone, compName].filter(Boolean).join(' · ');
+            return row(
               item,
               item.name,
-              [item.company, item.email, item.phone].filter(Boolean).join(' · '),
+              subtitle,
               `/customers/${item._id}`,
               type === 'leads' ? 'Lead' : 'Client',
               options.dateField === 'scheduled' ? item.nextFollowUpAt : null,
               type === 'leads' ? 'Lead' : 'Client'
-            )
-          );
+            );
+          });
         });
       }
 
-      queue('work', 'Work & Tasks', moduleIds.length > 0, async () => {
-        const items = await find(CustomRecord, workScope, ['title', 'notes', 'status'], 'title notes module status deadline updatedAt createdAt', 'deadline');
+      queue('work', 'Work & Tasks', moduleIds.length > 0 || !assigned, async () => {
+        const matchedModuleIds = options.q ? modules.filter(m => m.name.toLowerCase().includes(options.q.toLowerCase()) || m.key.toLowerCase().includes(options.q.toLowerCase())).map(m => m._id) : [];
+        const textFilter = matchText(['title', 'notes', 'status']);
+        const queryFilter = matchedModuleIds.length
+          ? { ...workScope, $or: [textFilter, { module: { $in: matchedModuleIds } }], ...dated('deadline') }
+          : { ...workScope, ...textFilter, ...dated('deadline') };
+
+        const items = await CustomRecord.find(queryFilter)
+          .select('title notes module workspace status deadline updatedAt createdAt')
+          .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
+          .skip((options.page - 1) * PAGE_SIZE)
+          .limit(PAGE_SIZE + 1)
+          .lean()
+          .maxTimeMS(1500);
+
         return items.map(item => {
           const module = moduleMap.get(String(item.module));
+          const compName = accessibleCompanies.length > 1 ? companyMap.get(String(item.workspace)) : null;
           const statusObj = module?.statuses?.find(status => status.key === item.status);
           const statusLabel = statusObj?.label || item.status || 'Active';
+          const subParts = [module?.name || 'Task', compName, statusLabel, item.notes].filter(Boolean);
           return row(
             item,
             item.title,
-            `${module?.name || 'Task'} · ${statusLabel}${item.notes ? ' · ' + item.notes : ''}`,
+            subParts.join(' · '),
             `/work/${module?.key || 'tasks'}/${item._id}`,
             'Work',
             options.dateField === 'scheduled' ? item.deadline : null,
@@ -179,7 +201,7 @@ router.get('/', async (req, res, next) => {
         const text = matchText(['note', 'type']);
         const items = await Activity.aggregate([
           { $match: { organization, ...text, ...dated('nextFollowUpAt') } },
-          { $lookup: { from: Customer.collection.name, localField: 'customer', foreignField: '_id', pipeline: [{ $match: customerScope }, { $project: { name: 1, company: 1 } }], as: 'parent' } },
+          { $lookup: { from: Customer.collection.name, localField: 'customer', foreignField: '_id', pipeline: [{ $match: customerScope }, { $project: { name: 1, company: 1, clientCompany: 1 } }], as: 'parent' } },
           { $match: { 'parent.0': { $exists: true } } },
           { $sort: { createdAt: -1, _id: -1 } },
           { $skip: (options.page - 1) * PAGE_SIZE },
@@ -188,10 +210,12 @@ router.get('/', async (req, res, next) => {
         ]).option({ maxTimeMS: 1500 });
         return items.map(item => {
           const typeLabel = (item.type || 'note').replace(/_/g, ' ');
+          const compName = accessibleCompanies.length > 1 ? companyMap.get(String(item.parent[0]?.clientCompany)) : null;
+          const subtitle = [item.note || 'No notes logged', compName].filter(Boolean).join(' · ');
           return row(
             item,
             `${item.parent[0].name} · ${typeLabel}`,
-            item.note || 'No notes logged',
+            subtitle,
             `/customers/${item.customer}`,
             'Meeting & Activity',
             options.dateField === 'scheduled' ? item.nextFollowUpAt : item.createdAt,
@@ -202,7 +226,10 @@ router.get('/', async (req, res, next) => {
 
       queue('history', 'Work History', hasPermission(req.user, 'audit.view'), async () => {
         const text = matchText(['message', 'entityName', 'action']);
-        const items = await AuditLog.find({ organization, ...text, ...dated(null) })
+        // Restricted users (custom role scope 'assigned') never see the org-wide
+        // trail — scope history to their own actions.
+        const historyScope = isRestrictedUser(req.user) ? { ...base, user: req.user._id } : base;
+        const items = await AuditLog.find({ ...historyScope, ...text, ...dated(null) })
           .populate('user', 'name email')
           .sort({ createdAt: -1, _id: -1 })
           .skip((options.page - 1) * PAGE_SIZE)
@@ -225,18 +252,22 @@ router.get('/', async (req, res, next) => {
         });
       });
 
-      queue('team', 'Team Members', hasPermission(req.user, 'team.view'), async () => {
+      queue('team', 'Team Members', hasPermission(req.user, 'team.view') && !isRestrictedUser(req.user), async () => {
         const items = await find(User, base, ['name', 'email', 'role', 'phone'], 'name email role phone updatedAt createdAt', null);
         return items.map(item => row(item, item.name, `${item.email} · Role: ${item.role}`, '/team', 'Team', null, item.role));
       });
 
       queue('campaigns', 'Campaigns', hasPermission(req.user, 'ads.view'), async () => {
-        const items = await find(Campaign, { ...base, clientCompany: workspace }, ['name', 'platform', 'status'], 'name platform status budget updatedAt createdAt', null);
-        return items.map(item => row(item, item.name, `${item.platform || 'Ads'} · ${item.status || 'Active'}`, `/campaigns/${item._id}`, 'Campaign', null, item.status));
+        const items = await find(Campaign, { ...base, ...(accessibleCompanyIds.length ? { clientCompany: { $in: accessibleCompanyIds } } : {}) }, ['name', 'platform', 'status'], 'name platform status budget clientCompany updatedAt createdAt', null);
+        return items.map(item => {
+          const compName = accessibleCompanies.length > 1 ? companyMap.get(String(item.clientCompany)) : null;
+          const subtitle = [item.platform || 'Ads', item.status || 'Active', compName].filter(Boolean).join(' · ');
+          return row(item, item.name, subtitle, `/campaigns/${item._id}`, 'Campaign', null, item.status);
+        });
       });
 
       queue('workspaces', 'Workspaces', hasPermission(req.user, 'businesses.view'), async () => {
-        const items = await find(ClientCompany, { ...base, ...(assigned ? { assignedUsers: req.user._id } : {}) }, ['name', 'website', 'industry', 'description'], 'name website industry updatedAt createdAt', null);
+        const items = await find(ClientCompany, { ...base, ...(accessibleCompanyIds.length ? { _id: { $in: accessibleCompanyIds } } : {}), ...(assigned ? { assignedUsers: req.user._id } : {}) }, ['name', 'website', 'industry', 'description'], 'name website industry updatedAt createdAt', null);
         return items.map(item => row(item, item.name, item.website || item.industry || 'Company Workspace', `/companies/${item._id}`, 'Workspace', null, 'Workspace'));
       });
 

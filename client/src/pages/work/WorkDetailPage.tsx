@@ -287,6 +287,9 @@ export default function WorkDetailPage() {
 
   const resolvedIcon = moduleIconMap[workType.icon] || moduleIconMap[type] || workType.icon || 'clipboard-list';
 
+  const fieldLabels = (workType.presentation?.fieldLabels || {}) as Record<string, string>;
+  const labelOf = (key: string, fallback: string) => fieldLabels[key] || fallback;
+
   return (
     <div className="page-container">
       {/* Top Breadcrumb Navigation */}
@@ -369,7 +372,7 @@ export default function WorkDetailPage() {
 
                 <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
                   <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Task title *</label>
+                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('title', 'Task title')} *</label>
                     <input
                       type="text"
                       required
@@ -380,7 +383,7 @@ export default function WorkDetailPage() {
                   </div>
 
                   <div className="form-group">
-                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Status</label>
+                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('status', 'Status')}</label>
                     <select
                       value={editForm.status || ''}
                       onChange={e => setEditForm({ ...editForm, status: e.target.value })}
@@ -393,7 +396,7 @@ export default function WorkDetailPage() {
                   </div>
 
                   <div className="form-group">
-                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Priority</label>
+                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('priority', 'Priority')}</label>
                     <select
                       value={editForm.priority || 'medium'}
                       onChange={e => setEditForm({ ...editForm, priority: e.target.value })}
@@ -406,7 +409,7 @@ export default function WorkDetailPage() {
                   </div>
 
                   <div className="form-group">
-                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Owner / Assignee</label>
+                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('assignedTo', 'Owner / Assignee')}</label>
                     <select
                       value={editForm.assignedTo || ''}
                       onChange={e => setEditForm({ ...editForm, assignedTo: e.target.value })}
@@ -420,7 +423,7 @@ export default function WorkDetailPage() {
                   </div>
 
                   <div className="form-group">
-                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Secondary Assignee</label>
+                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('secondaryAssignee', 'Secondary Assignee')}</label>
                     <select
                       value={editForm.secondaryAssignee || ''}
                       onChange={e => setEditForm({ ...editForm, secondaryAssignee: e.target.value })}
@@ -434,7 +437,7 @@ export default function WorkDetailPage() {
                   </div>
 
                   <div className="form-group">
-                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Client / Lead</label>
+                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('customer', 'Client / Lead')}</label>
                     <select
                       value={editForm.customer || ''}
                       onChange={e => setEditForm({ ...editForm, customer: e.target.value })}
@@ -448,7 +451,7 @@ export default function WorkDetailPage() {
                   </div>
 
                   <div className="form-group">
-                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Start Date</label>
+                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('startDate', 'Start Date')}</label>
                     <DatePicker
                       value={editForm.startDate || ''}
                       onChange={val => setEditForm({ ...editForm, startDate: val })}
@@ -457,7 +460,7 @@ export default function WorkDetailPage() {
                   </div>
 
                   <div className="form-group">
-                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Deadline</label>
+                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('deadline', 'Deadline')}</label>
                     <DatePicker
                       value={editForm.deadline || ''}
                       onChange={val => setEditForm({ ...editForm, deadline: val })}
@@ -466,7 +469,7 @@ export default function WorkDetailPage() {
                   </div>
 
                   <div className="form-group">
-                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Delivered Date</label>
+                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('deliveredAt', 'Delivered Date')}</label>
                     <DatePicker
                       value={editForm.deliveredAt || ''}
                       onChange={val => setEditForm({ ...editForm, deliveredAt: val })}
@@ -475,7 +478,7 @@ export default function WorkDetailPage() {
                   </div>
 
                   <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Collaborators</label>
+                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('collaborators', 'Collaborators')}</label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '8px', background: 'var(--panel-muted)', borderRadius: 8, border: '1px solid var(--border)' }}>
                       {users.map(u => {
                         const isSelected = (editForm.collaborators || []).includes(u._id);
@@ -524,7 +527,7 @@ export default function WorkDetailPage() {
                   </div>
 
                   <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>Notes & Deliverables</label>
+                    <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('notes', 'Notes & Deliverables')}</label>
                     <textarea
                       rows={5}
                       value={editForm.notes || ''}
@@ -536,7 +539,7 @@ export default function WorkDetailPage() {
                   {/* Custom Fields Edit */}
                   {(workType.fields || []).filter(f => !['title', 'customer', 'assignedTo', 'collaborators', 'secondaryAssignee', 'status', 'priority', 'deadline', 'startDate', 'deliveredAt', 'notes'].includes(f.key)).map(f => (
                     <div className="form-group" key={f.key}>
-                      <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{f.label}</label>
+                      <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('custom:' + f.key, f.label)}</label>
                       <input
                         type={f.type === 'url' ? 'url' : f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
                         value={editForm.customFields?.[f.key] || ''}
@@ -577,11 +580,11 @@ export default function WorkDetailPage() {
                 </header>
                 <div className="edit-brief-grid">
                   <div>
-                    <small style={{ color: 'var(--muted)', fontSize: '0.7rem', fontWeight: 800, display: 'block', marginBottom: '4px' }}>Task Title</small>
+                    <small style={{ color: 'var(--muted)', fontSize: '0.7rem', fontWeight: 800, display: 'block', marginBottom: '4px' }}>{labelOf('title', 'Task Title')}</small>
                     <strong style={{ fontSize: '1.05rem' }}>{item.title}</strong>
                   </div>
                   <div>
-                    <small style={{ color: 'var(--muted)', fontSize: '0.7rem', fontWeight: 800, display: 'block', marginBottom: '4px' }}>Business / Client</small>
+                    <small style={{ color: 'var(--muted)', fontSize: '0.7rem', fontWeight: 800, display: 'block', marginBottom: '4px' }}>{labelOf('customer', 'Business / Client')}</small>
                     {customerId ? (
                       <Link to={`/customers/${customerId}`} style={{ color: 'var(--gold)', fontWeight: 850, textDecoration: 'none' }}>
                         {customerName}
@@ -592,7 +595,7 @@ export default function WorkDetailPage() {
                   </div>
                   {item.notes && (
                     <div className="full-span" style={{ marginTop: '6px' }}>
-                      <small style={{ color: 'var(--muted)', fontSize: '0.7rem', fontWeight: 800, display: 'block', marginBottom: '4px' }}>Notes & Deliverables</small>
+                      <small style={{ color: 'var(--muted)', fontSize: '0.7rem', fontWeight: 800, display: 'block', marginBottom: '4px' }}>{labelOf('notes', 'Notes & Deliverables')}</small>
                       <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: 1.5, color: 'var(--text)', background: 'var(--panel-muted)', padding: '12px 14px', borderRadius: 8, border: '1px solid var(--border)', whiteSpace: 'pre-wrap' }}>
                         {item.notes}
                       </p>
@@ -612,24 +615,24 @@ export default function WorkDetailPage() {
                 </header>
                 <div className="assignment-overview-grid">
                   <div>
-                    <small style={{ color: 'var(--muted)', fontSize: '0.68rem', fontWeight: 800, display: 'block', marginBottom: '3px' }}>Owner</small>
+                    <small style={{ color: 'var(--muted)', fontSize: '0.68rem', fontWeight: 800, display: 'block', marginBottom: '3px' }}>{labelOf('assignedTo', 'Owner')}</small>
                     <strong>{item.assignedTo?.name || 'Unassigned'}</strong>
                   </div>
                   <div>
-                    <small style={{ color: 'var(--muted)', fontSize: '0.68rem', fontWeight: 800, display: 'block', marginBottom: '3px' }}>Secondary assignee</small>
+                    <small style={{ color: 'var(--muted)', fontSize: '0.68rem', fontWeight: 800, display: 'block', marginBottom: '3px' }}>{labelOf('secondaryAssignee', 'Secondary assignee')}</small>
                     <strong>{item.secondaryAssignee?.name || 'None'}</strong>
                   </div>
                   <div>
-                    <small style={{ color: 'var(--muted)', fontSize: '0.68rem', fontWeight: 800, display: 'block', marginBottom: '3px' }}>Start date</small>
+                    <small style={{ color: 'var(--muted)', fontSize: '0.68rem', fontWeight: 800, display: 'block', marginBottom: '3px' }}>{labelOf('startDate', 'Start date')}</small>
                     <strong>{formatDate(item.startDate)}</strong>
                   </div>
                   <div>
-                    <small style={{ color: 'var(--muted)', fontSize: '0.68rem', fontWeight: 800, display: 'block', marginBottom: '3px' }}>Delivered date</small>
+                    <small style={{ color: 'var(--muted)', fontSize: '0.68rem', fontWeight: 800, display: 'block', marginBottom: '3px' }}>{labelOf('deliveredAt', 'Delivered date')}</small>
                     <strong>{formatDate(item.deliveredAt)}</strong>
                   </div>
                   {item.collaborators && item.collaborators.length > 0 && (
                     <div className="full-span">
-                      <small style={{ color: 'var(--muted)', fontSize: '0.68rem', fontWeight: 800, display: 'block', marginBottom: '4px' }}>Collaborators</small>
+                      <small style={{ color: 'var(--muted)', fontSize: '0.68rem', fontWeight: 800, display: 'block', marginBottom: '4px' }}>{labelOf('collaborators', 'Collaborators')}</small>
                       <div className="collaborator-pill-grid">
                         {item.collaborators.map(person => (
                           <span className="check-pill" key={person._id} style={{ pointerEvents: 'none' }}>
@@ -828,7 +831,7 @@ export default function WorkDetailPage() {
                       <a href={rawValue(f.key)} target="_blank" rel="noopener noreferrer" key={f.key} style={{ textDecoration: 'none' }}>
                         <Icon name="globe" size={16} />
                         <span>
-                          <small>{f.label}</small>
+                          <small>{labelOf('custom:' + f.key, f.label)}</small>
                           <strong>Open link</strong>
                         </span>
                       </a>
@@ -851,7 +854,7 @@ export default function WorkDetailPage() {
                     {extraFields.map(f => (
                       <div key={f.key}>
                         <small style={{ color: 'var(--muted)', fontSize: '0.68rem', fontWeight: 800, display: 'block', marginBottom: '3px' }}>
-                          {f.label}
+                          {labelOf('custom:' + f.key, f.label)}
                         </small>
                         <strong>{textValue(rawValue(f.key), f)}</strong>
                       </div>
@@ -868,19 +871,19 @@ export default function WorkDetailPage() {
           <div className="work-card-panel summary-card-panel">
             <h3>Task summary</h3>
             <div className="summary-field-row">
-              <span className="summary-label">Status</span>
+              <span className="summary-label">{labelOf('status', 'Status')}</span>
               <span className={`stage-badge ${isComplete ? 'done' : 'in-progress'}`} style={{ fontSize: '0.75rem', padding: '3px 10px' }}>
                 {statusDefinition?.label || item.status}
               </span>
             </div>
             <div className="summary-field-row">
-              <span className="summary-label">Priority</span>
+              <span className="summary-label">{labelOf('priority', 'Priority')}</span>
               <strong style={{ fontSize: '0.78rem' }}>
                 {item.priority === 'high' ? '⚑ Important' : item.priority === 'medium' ? '⚑ Normal' : '⚑ Low'}
               </strong>
             </div>
             <div className="summary-field-row">
-              <span className="summary-label">Deadline</span>
+              <span className="summary-label">{labelOf('deadline', 'Deadline')}</span>
               <strong style={{ fontSize: '0.78rem' }}>📅 {formatDate(item.deadline)}</strong>
             </div>
             <hr className="summary-divider" />

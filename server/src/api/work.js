@@ -1,8 +1,8 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const { requireApiAuth } = require('./middleware/auth');
-const { hasWorkPermission, isRestrictedUser, canEditWorkField } = require('../config/roles');
-const { isClosed, isComplete } = require('../utils/workCompletion');
+const { hasPermission, hasWorkPermission, isRestrictedUser, canEditWorkField } = require('../config/roles');
+const { isClosed, isComplete, completionError } = require('../utils/workCompletion');
 const { assignableWorkUsers } = require('../utils/workAssignments');
 const { logAudit } = require('../utils/audit');
 const { runRecordAutomation } = require('../services/automation');
@@ -36,6 +36,88 @@ const restrictToAssigned = (filter, user) => {
   }
   return filter;
 };
+
+// Work types in this workspace the viewer may access, excluding the current one.
+async function viewableRelatedModuleIds(organization, workspace, excludeWorkType, user) {
+  const types = await WorkType.find({ organization, clientCompany: workspace, isActive: true }).select('_id key').lean();
+  return types
+    .filter(type => String(type._id) !== String(excludeWorkType._id) && hasWorkPermission(user, type, 'view'))
+    .map(type => type._id);
+}
+
+const relatedItemsQuery = async (organization, workspace, excludeWorkType, user) => {
+  const moduleIds = await viewableRelatedModuleIds(organization, workspace, excludeWorkType, user);
+  if (!moduleIds.length) return [];
+  return CustomRecord.find({ organization, workspace, module: { $in: moduleIds } })
+    .select('title module workType')
+    .populate('workType')
+    .limit(50)
+    .lean();
+};
+
+const customersQuery = (user, organization, workspace, select) =>
+  hasPermission(user, 'businesses.view')
+    ? Customer.find({ organization, clientCompany: workspace }).select(select).sort({ name: 1 }).lean()
+    : [];
+
+const RETURNED_FOR_REVISION = /revision|rework|changes.?requested|needs.?changes/i;
+
+// revisionCount is a plain number customField (video/design pipelines). Bump it
+// once each time a record ENTERS a status tagged as a revision/rework step,
+// regardless of where that status sits in the pipeline order. Index-based
+// "went backward" checks can't see review -> revision because the default
+// pipelines order them review(3) ... revision(4) — forward by index.
+function bumpRevisionIfReturnedToWork(item, workType, previousStatus) {
+  if (!workType.fields?.some(field => field.key === 'revisionCount')) return false;
+  if (String(previousStatus || '') === String(item.status || '')) return false;
+  const definition = workType.statuses.find(status => status.key === item.status);
+  if (!definition || (!RETURNED_FOR_REVISION.test(definition.key) && !RETURNED_FOR_REVISION.test(definition.label))) return false;
+  const current = Number(item.customFields?.get?.('revisionCount') || 0);
+  item.customFields.set('revisionCount', Number.isFinite(current) ? current + 1 : 1);
+  return true;
+}
+
+// Status/owner change with no caller mutation of the notification: notify the
+// affected assignee unless they made the change themselves. Only the two
+// generic write routes (PUT and quick status) go through this helper; create,
+// bulk-create, delegate and subtask routes keep their specific notifications.
+async function notifyWorkChanges({ organization, actor, item, workType, previousOwner, previousStatus }) {
+  const notifications = [];
+  const currentOwner = item.assignedTo ? String(item.assignedTo) : null;
+  const ownerChanged = String(previousOwner || '') !== String(currentOwner || '');
+  const statusChanged = String(previousStatus || '') !== String(item.status || '');
+  const toOwner = currentOwner && currentOwner !== String(actor._id) ? currentOwner : null;
+  if (toOwner && (ownerChanged || statusChanged)) {
+    const definition = workType.statuses.find(status => status.key === item.status);
+    const statusLabel = definition?.label || item.status;
+    if (ownerChanged && statusChanged) {
+      notifications.push({
+        organization,
+        user: toOwner,
+        title: previousOwner ? 'Task reassigned to you' : 'New task assigned to you',
+        message: `${actor.name} ${previousOwner ? 'reassigned' : 'assigned'} "${item.title}" to you and moved it to "${statusLabel}".`,
+        link: `/work/${workType.key}/${item._id}`,
+      });
+    } else if (ownerChanged) {
+      notifications.push({
+        organization,
+        user: toOwner,
+        title: previousOwner ? 'Task reassigned to you' : 'New task assigned to you',
+        message: `${actor.name} ${previousOwner ? 'reassigned' : 'assigned'} "${item.title}" to you.`,
+        link: `/work/${workType.key}/${item._id}`,
+      });
+    } else {
+      notifications.push({
+        organization,
+        user: toOwner,
+        title: 'Status updated',
+        message: `${actor.name} updated "${item.title}" to "${statusLabel}".`,
+        link: `/work/${workType.key}/${item._id}`,
+      });
+    }
+  }
+  if (notifications.length) await Notification.create(notifications);
+}
 
 async function ensureMonthlyRecords(req) {
   const now = new Date();
@@ -240,12 +322,8 @@ router.get('/:type', resolveWorkType, async (req, res, next) => {
         .lean(),
       CustomRecord.countDocuments(filter),
       assignableWorkUsers(organization, activeWorkspace, req.workType),
-      Customer.find({ organization, clientCompany: activeWorkspace }).select('name company email phone').sort({ name: 1 }).lean(),
-      CustomRecord.find({ organization, workspace: activeWorkspace, module: { $ne: req.workType._id } })
-        .select('title module workType')
-        .populate('workType')
-        .limit(50)
-        .lean(),
+      customersQuery(req.user, organization, activeWorkspace, 'name company email phone'),
+      relatedItemsQuery(organization, activeWorkspace, req.workType, req.user),
     ]);
 
     res.json({
@@ -308,12 +386,8 @@ router.get('/:type/:id', resolveWorkType, async (req, res, next) => {
         .limit(30)
         .lean(),
       assignableWorkUsers(organization, activeWorkspace, req.workType),
-      Customer.find({ organization, clientCompany: activeWorkspace }).select('name company email').sort({ name: 1 }).lean(),
-      CustomRecord.find({ organization, workspace: activeWorkspace, module: { $ne: req.workType._id } })
-        .select('title module workType')
-        .populate('workType')
-        .limit(50)
-        .lean(),
+      customersQuery(req.user, organization, activeWorkspace, 'name company email'),
+      relatedItemsQuery(organization, activeWorkspace, req.workType, req.user),
     ]);
 
     const combinedSubtasks = (childSubtasks && childSubtasks.length > 0) ? childSubtasks : (item.subtasks || []);
@@ -467,6 +541,12 @@ router.put('/:type/:id', resolveWorkType, async (req, res, next) => {
       item.deliveredAt = new Date();
     }
 
+    if (body.status !== undefined && previousStatus !== body.status) {
+      const proofRequired = completionError(item, req.workType);
+      if (proofRequired) return res.status(400).json({ ok: false, error: proofRequired });
+    }
+    bumpRevisionIfReturnedToWork(item, req.workType, previousStatus);
+
     await item.save();
 
     if (String(previousStatus || '') !== String(item.status || '')) {
@@ -475,6 +555,8 @@ router.put('/:type/:id', resolveWorkType, async (req, res, next) => {
     if (String(previousOwner || '') !== String(item.assignedTo || '')) {
       await runRecordAutomation({ record: item, workType: req.workType, trigger: 'owner_changed', previousOwner });
     }
+
+    await notifyWorkChanges({ organization, actor: req.user, item, workType: req.workType, previousOwner, previousStatus });
 
     await logAudit(req, {
       action: 'update',
@@ -518,6 +600,7 @@ router.post('/:type/:id/status', resolveWorkType, async (req, res, next) => {
 
     if (!req.workType.statuses.some(s => s.key === status)) return res.status(400).json({ ok: false, error: 'Invalid status.' });
     const previousStatus = item.status;
+    const previousOwner = item.assignedTo ? String(item.assignedTo) : null;
     item.status = status;
     if (previousStatus !== status) {
       const definition = req.workType.statuses.find(s => s.key === status);
@@ -526,11 +609,18 @@ router.post('/:type/:id/status', resolveWorkType, async (req, res, next) => {
     if (req.workType.statuses.some(s => s.key === item.status && s.isTerminalWon) && !item.deliveredAt) {
       item.deliveredAt = new Date();
     }
+    if (String(previousStatus || '') !== String(item.status || '')) {
+      const proofRequired = completionError(item, req.workType);
+      if (proofRequired) return res.status(400).json({ ok: false, error: proofRequired });
+      bumpRevisionIfReturnedToWork(item, req.workType, previousStatus);
+    }
     await item.save();
 
     if (String(previousStatus || '') !== String(item.status || '')) {
       await runRecordAutomation({ record: item, workType: req.workType, trigger: 'status_changed', previousStatus });
     }
+
+    await notifyWorkChanges({ organization, actor: req.user, item, workType: req.workType, previousOwner, previousStatus });
 
     await logAudit(req, {
       action: 'status_change',

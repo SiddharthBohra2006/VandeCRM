@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-route
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AppLayout from './layouts/AppLayout';
 import AuthLayout from './layouts/AuthLayout';
+import { hasPermission } from './utils/permissions';
 import LoginPage from './pages/auth/LoginPage';
 import SignupPage from './pages/auth/SignupPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
@@ -131,6 +132,22 @@ function ManagerRoute({ children }: { children: JSX.Element }) {
   return children;
 }
 
+// Route guard that mirrors the server permission engine, so URL/bookmark
+// access to a page is blocked even when the sidebar link is hidden.
+function PermissionRoute({ permission, children }: { permission: string; children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user) return null;
+  if (!hasPermission(user, permission)) return <Navigate to="/403" replace />;
+  return <>{children}</>;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user) return null;
+  if (user.role !== 'admin') return <Navigate to="/403" replace />;
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -146,41 +163,41 @@ export default function App() {
           <Route element={<ProtectedRoute><SessionExpiredModal /><AppLayout /></ProtectedRoute>}>
             <Route path="/" element={<HomeRedirect />} />
             <Route path="/pipeline" element={<Navigate to="/?section=pipeline" replace />} />
-            <Route path="/customers" element={<CustomersPage />} />
-            <Route path="/customers/new" element={<CustomerFormPage />} />
-            <Route path="/customers/duplicates" element={<DuplicatesPage />} />
-            <Route path="/customers/import" element={<CustomerImportPage />} />
-            <Route path="/customers/import/preview" element={<CustomerImportPreviewPage />} />
-            <Route path="/customers/import/results" element={<CustomerImportResultsPage />} />
-            <Route path="/customers/:id" element={<CustomerDetailPage />} />
-            <Route path="/customers/:id/edit" element={<CustomerFormPage />} />
-            <Route path="/clients" element={<ClientsPage />} />
-            <Route path="/clients/new" element={<CustomerFormPage />} />
-            <Route path="/clients/:id" element={<CustomerDetailPage />} />
-            <Route path="/clients/:id/edit" element={<CustomerFormPage />} />
+            <Route path="/customers" element={<PermissionRoute permission="businesses.view"><CustomersPage /></PermissionRoute>} />
+            <Route path="/customers/new" element={<PermissionRoute permission="businesses.view"><CustomerFormPage /></PermissionRoute>} />
+            <Route path="/customers/duplicates" element={<PermissionRoute permission="businesses.view"><DuplicatesPage /></PermissionRoute>} />
+            <Route path="/customers/import" element={<PermissionRoute permission="businesses.view"><CustomerImportPage /></PermissionRoute>} />
+            <Route path="/customers/import/preview" element={<PermissionRoute permission="businesses.view"><CustomerImportPreviewPage /></PermissionRoute>} />
+            <Route path="/customers/import/results" element={<PermissionRoute permission="businesses.view"><CustomerImportResultsPage /></PermissionRoute>} />
+            <Route path="/customers/:id" element={<PermissionRoute permission="businesses.view"><CustomerDetailPage /></PermissionRoute>} />
+            <Route path="/customers/:id/edit" element={<PermissionRoute permission="businesses.view"><CustomerFormPage /></PermissionRoute>} />
+            <Route path="/clients" element={<PermissionRoute permission="businesses.view"><ClientsPage /></PermissionRoute>} />
+            <Route path="/clients/new" element={<PermissionRoute permission="businesses.view"><CustomerFormPage /></PermissionRoute>} />
+            <Route path="/clients/:id" element={<PermissionRoute permission="businesses.view"><CustomerDetailPage /></PermissionRoute>} />
+            <Route path="/clients/:id/edit" element={<PermissionRoute permission="businesses.view"><CustomerFormPage /></PermissionRoute>} />
             <Route path="/client-dashboard" element={<ClientDashboardPage />} />
-            <Route path="/campaigns" element={<CampaignsPage />} />
-            <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
+            <Route path="/campaigns" element={<PermissionRoute permission="ads.view"><CampaignsPage /></PermissionRoute>} />
+            <Route path="/campaigns/:id" element={<PermissionRoute permission="ads.view"><CampaignDetailPage /></PermissionRoute>} />
             <Route path="/work" element={<WorkCenterPage />} />
             <Route path="/work/threads" element={<WorkThreadsPage />} />
             <Route path="/work/:type" element={<WorkListPage />} />
             <Route path="/work/:type/import/preview" element={<WorkImportPreviewPage />} />
             <Route path="/work/:type/:id" element={<WorkDetailPage />} />
-            <Route path="/team" element={<TeamPage />} />
-            <Route path="/settings/setup" element={<SetupPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/companies" element={<CompaniesPage />} />
-            <Route path="/companies/:id" element={<CompanyDetailPage />} />
-            <Route path="/follow-ups" element={<FollowUpsPage />} />
-            <Route path="/mail" element={<MailPage />} />
+            <Route path="/team" element={<PermissionRoute permission="team.view"><TeamPage /></PermissionRoute>} />
+            <Route path="/settings/setup" element={<AdminRoute><SetupPage /></AdminRoute>} />
+            <Route path="/settings" element={<PermissionRoute permission="settings.view"><SettingsPage /></PermissionRoute>} />
+            <Route path="/companies" element={<PermissionRoute permission="businesses.view"><CompaniesPage /></PermissionRoute>} />
+            <Route path="/companies/:id" element={<PermissionRoute permission="businesses.view"><CompanyDetailPage /></PermissionRoute>} />
+            <Route path="/follow-ups" element={<PermissionRoute permission="tasks.view"><FollowUpsPage /></PermissionRoute>} />
+            <Route path="/mail" element={<PermissionRoute permission="mail.view"><MailPage /></PermissionRoute>} />
             <Route path="/integrations" element={<ManagerRoute><IntegrationsPage /></ManagerRoute>} />
-            <Route path="/audit" element={<AuditPage />} />
+            <Route path="/audit" element={<PermissionRoute permission="audit.view"><AuditPage /></PermissionRoute>} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/portfolio" element={<PortfolioPage />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/reports" element={<ReportsIndexPage />} />
-            <Route path="/reports/module-builder" element={<ModuleReportBuilderPage />} />
-            <Route path="/reports/:reportKey" element={<ReportTablePage />} />
+            <Route path="/analytics" element={<PermissionRoute permission="reports.view"><AnalyticsPage /></PermissionRoute>} />
+            <Route path="/reports" element={<PermissionRoute permission="reports.view"><ReportsIndexPage /></PermissionRoute>} />
+            <Route path="/reports/module-builder" element={<PermissionRoute permission="reports.view"><ModuleReportBuilderPage /></PermissionRoute>} />
+            <Route path="/reports/:reportKey" element={<PermissionRoute permission="reports.view"><ReportTablePage /></PermissionRoute>} />
             <Route path="/403" element={<ForbiddenPage />} />
             <Route path="/500" element={<ServerErrorPage />} />
             <Route path="*" element={<NotFoundPage />} />

@@ -5,6 +5,7 @@ import { User, Company, WorkType, CrmTerms } from '../api/auth';
 import { api } from '../api/client';
 import Icon from './Icons';
 import { useAuth } from '../contexts/AuthContext';
+import { hasPermission, canAccessWorkType } from '../utils/permissions';
 
 interface SidebarProps {
   user: User;
@@ -69,42 +70,6 @@ function loadNavOrder(): string[] {
 
 function saveNavOrder(order: string[]) {
   localStorage.setItem(NAV_ORDER_KEY, JSON.stringify(order));
-}
-
-const SPECIALIST_MODULES: Record<string, string> = {
-  video_editor: 'videos', graphic_designer: 'designs', website_developer: 'websites',
-  content_manager: 'content', ads_manager: 'ads',
-};
-const WORK_TYPE_MODULES: Record<string, string> = {
-  task: 'tasks', video: 'videos', design: 'designs', website: 'websites', content: 'content',
-};
-
-function hasPermission(user: User, permission: string): boolean {
-  if (!user) return false;
-  if (user.role === 'admin') return true;
-  const [module, action] = permission.split('.');
-  if (module === 'tasks') return hasPermission(user, `businesses.${action}`);
-  if (Array.isArray(user.hiddenModules) && user.hiddenModules.includes(module)) return false;
-  if (user.customRole) return (user.customRole.permissions || []).includes(permission);
-  if (user.role === 'manager') return module !== 'team' || action === 'view';
-  if (user.role === 'agent') return ['businesses', 'tasks'].includes(module) && ['view', 'create', 'update'].includes(action);
-  const specialistModule = SPECIALIST_MODULES[user.role];
-  return module === specialistModule && ['view', 'update'].includes(action);
-}
-
-function hasWorkPermission(user: User, workType: WorkType, action: string): boolean {
-  if (!user) return false;
-  if (user.role === 'admin' || user.role === 'manager') return true;
-  const legacyModule = WORK_TYPE_MODULES[workType.key];
-  if (legacyModule && (user.hiddenModules || []).includes(legacyModule)) return false;
-  if (user.customRole) return Boolean(legacyModule && (user.customRole.permissions || []).includes(`${legacyModule}.${action}`));
-  if (user.role === 'agent') return ['view', 'create', 'update'].includes(action);
-  const specialistType = { video_editor: 'video', graphic_designer: 'design', website_developer: 'website', content_manager: 'content' }[user.role];
-  return specialistType === workType.key && ['view', 'update'].includes(action);
-}
-
-function canAccessWorkType(user: User, workType: WorkType): boolean {
-  return hasWorkPermission(user, workType, 'view');
 }
 
 export default function Sidebar({ user, activeCompany, companies, workTypes, crmTerms, isOpen, onToggle, onSwitchCompany, currentPath, mobileOpen, onCloseMobile }: SidebarProps) {
@@ -323,9 +288,19 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
         ) : (
           <>
             {orderedNavItems.map(item => {
-              const isActive = item.path === '/'
-                ? resolvedPath === '/'
-                : resolvedPath === item.path || resolvedPath.startsWith(item.path + '/');
+              const searchParams = new URLSearchParams(location.search);
+              const isFromClients = searchParams.get('from') === 'clients' || resolvedPath.startsWith('/clients');
+
+              let isActive = false;
+              if (item.path === '/') {
+                isActive = resolvedPath === '/';
+              } else if (item.path === '/clients') {
+                isActive = resolvedPath === '/clients' || resolvedPath.startsWith('/clients/') || (resolvedPath.startsWith('/customers/') && isFromClients);
+              } else if (item.path === '/customers') {
+                isActive = (resolvedPath === '/customers' || resolvedPath.startsWith('/customers/')) && !isFromClients;
+              } else {
+                isActive = resolvedPath === item.path || resolvedPath.startsWith(item.path + '/');
+              }
 
               const isWorkModule = item.navKey.startsWith('nav-work-');
               return (
