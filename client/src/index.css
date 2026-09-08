@@ -794,7 +794,7 @@ select option:checked {
 
 /* ---- CSV Import / Export (React) ---- */
 .csv-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
-.csv-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); backdrop-filter: blur(4px); display: flex; align-items: flex-start; justify-content: center; z-index: 100; padding: 2.5rem 1rem 1rem; overflow-y: auto; }
+.csv-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); backdrop-filter: blur(4px); display: flex; align-items: flex-start; justify-content: center; z-index: 100050; padding: 2.5rem 1rem 1rem; overflow-y: auto; }
 .csv-modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 720px; padding: 1.5rem; box-shadow: var(--shadow-lg); }
 .csv-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .75rem; border-bottom: 1px solid var(--border); padding-bottom: .6rem; }
 .csv-modal-header h3 { margin: 0; font-size: 1.05rem; color: var(--text); }

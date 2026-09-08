@@ -10938,7 +10938,6 @@ button.movement-preview-trigger { padding: 0; border: 0; background: none; text-
   background: var(--input) !important;
   border: 1px solid var(--border) !important;
   color: var(--text) !important;
-  position: relative !important;
   cursor: pointer !important;
   transition: all 0.15s ease !important;
 }
@@ -13254,6 +13253,19 @@ html, body {
   color: var(--muted);
   flex-wrap: wrap;
   gap: 0.75rem;
+}
+
+/* Modal overlays must always sit above page toolbars */
+.leads-toolbar {
+  z-index: 20 !important;
+}
+
+.csv-modal-overlay,
+.modal-overlay,
+.column-picker-overlay,
+.filter-modal-overlay,
+.custom-filter-modal-overlay {
+  z-index: 100050 !important;
 }
 
 
