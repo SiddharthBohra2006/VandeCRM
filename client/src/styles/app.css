@@ -2668,32 +2668,7 @@ body {
   color: var(--gold);
 }
 
-.sidebar.collapsed:not(:hover) .sidebar-logo {
-  height: 60px;
-  padding: 0 !important;
-  justify-content: center !important;
-  align-items: center;
-}
-
-.sidebar.collapsed:not(:hover) .sidebar-logo .crm-switcher {
-  display: none !important;
-}
-
-.sidebar.collapsed:not(:hover) .sidebar-logo > .desktop-only-toggle {
-  width: 36px;
-  height: 36px;
-  margin: auto;
-  padding: 0;
-  border-radius: 6px;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-}
-
-.sidebar.collapsed:not(:hover) .sidebar-logo > .desktop-only-toggle svg {
-  width: 18px;
-  height: 18px;
-}
+/* Collapsed logo rules handled in unified collapsed section */
 
 .sidebar-nav {
   flex: 1;
@@ -9110,6 +9085,108 @@ html.dark-theme .leads-table-card thead { background: var(--panel-muted); }
 
 .sidebar.collapsed:hover .nav-group-toggle-btn {
   display: flex !important;
+}
+
+/* Collapsed Sidebar Logo, Workspace Switcher, and Toggle */
+.sidebar.collapsed:not(:hover) .sidebar-logo {
+  height: 60px !important;
+  padding: 0 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+}
+
+.sidebar.collapsed:not(:hover) .sidebar-logo .crm-switcher {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 38px !important;
+  height: 38px !important;
+  margin: 0 auto !important;
+  position: relative !important;
+  flex: 0 0 38px !important;
+}
+
+.sidebar.collapsed:not(:hover) .crm-switcher summary,
+.sidebar.collapsed:not(:hover) .crm-switcher-summary {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 38px !important;
+  height: 38px !important;
+  padding: 0 !important;
+  margin: 0 auto !important;
+  gap: 0 !important;
+  border-radius: 8px !important;
+}
+
+.sidebar.collapsed:not(:hover) .crm-current-avatar {
+  width: 34px !important;
+  height: 34px !important;
+  margin: 0 auto !important;
+}
+
+.sidebar.collapsed:not(:hover) .crm-switcher .brand-text,
+.sidebar.collapsed:not(:hover) .crm-switcher-chevron,
+.sidebar.collapsed:not(:hover) .sidebar-logo .brand .brand-text,
+.sidebar.collapsed:not(:hover) .sidebar-logo > .desktop-only-toggle {
+  display: none !important;
+  position: absolute !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.sidebar.collapsed .crm-switcher-popover {
+  position: absolute !important;
+  top: 0 !important;
+  left: calc(100% + 12px) !important;
+  width: 240px !important;
+  z-index: 100000 !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45) !important;
+}
+
+.sidebar.collapsed:hover .sidebar-logo {
+  padding: 0.75rem 1rem !important;
+  justify-content: space-between !important;
+}
+
+.sidebar.collapsed:hover .sidebar-logo .crm-switcher {
+  display: flex !important;
+  width: auto !important;
+  flex: 1 !important;
+  margin: 0 !important;
+}
+
+.sidebar.collapsed:hover .crm-switcher summary,
+.sidebar.collapsed:hover .crm-switcher-summary {
+  width: 100% !important;
+  height: auto !important;
+  padding: 4px 6px !important;
+  gap: 8px !important;
+  justify-content: flex-start !important;
+}
+
+.sidebar.collapsed:hover .crm-switcher .brand-text {
+  display: flex !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.sidebar.collapsed:hover .crm-switcher-chevron {
+  display: block !important;
+  opacity: 0.6 !important;
+}
+
+.sidebar.collapsed:hover .sidebar-logo > .desktop-only-toggle {
+  display: flex !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.sidebar.collapsed:hover .crm-switcher-popover {
+  top: calc(100% + 8px) !important;
+  left: 0 !important;
 }
 
 .sidebar.collapsed {
