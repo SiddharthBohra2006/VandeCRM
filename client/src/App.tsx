@@ -193,7 +193,7 @@ export default function App() {
             <Route path="/integrations" element={<ManagerRoute><IntegrationsPage /></ManagerRoute>} />
             <Route path="/audit" element={<PermissionRoute permission="audit.view"><AuditPage /></PermissionRoute>} />
             <Route path="/search" element={<SearchPage />} />
-            <Route path="/portfolio" element={<PortfolioPage />} />
+            <Route path="/portfolio" element={<Navigate to="/companies" replace />} />
             <Route path="/analytics" element={<PermissionRoute permission="reports.view"><AnalyticsPage /></PermissionRoute>} />
             <Route path="/reports" element={<PermissionRoute permission="reports.view"><ReportsIndexPage /></PermissionRoute>} />
             <Route path="/reports/module-builder" element={<PermissionRoute permission="reports.view"><ModuleReportBuilderPage /></PermissionRoute>} />

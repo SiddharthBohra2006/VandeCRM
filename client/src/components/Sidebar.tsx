@@ -37,7 +37,6 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { path: '/portfolio', label: 'All CRMs', icon: 'layout-grid', navKey: 'nav-portfolio', adminOnly: true, mainOnly: true },
   { path: '/', label: 'Dashboard', icon: 'layout-dashboard', navKey: 'nav-pipeline' },
   { path: '/customers', labelKey: 'leadPlural', label: 'Leads', icon: 'users', navKey: 'nav-database', permission: 'businesses.view' },
   { path: '/clients', labelKey: 'recordPlural', label: 'Clients', icon: 'building-2', navKey: 'nav-clients', permission: 'businesses.view' },
