@@ -289,10 +289,10 @@ export default function CustomerDetailPage() {
       setUploadFiles([]);
       setUploadNotes('');
       if (uploadedCount > 0) {
-        setSuccess(skipped > 0 ? `${uploadedCount} file(s) uploaded. ${skipped} skipped (3 MB limit).` : `${uploadedCount} file(s) uploaded successfully.`);
+        setSuccess(skipped > 0 ? `${uploadedCount} file(s) uploaded. ${skipped} skipped (5 MB limit).` : `${uploadedCount} file(s) uploaded successfully.`);
         await load(id);
       } else {
-        setError(skipped > 0 ? 'None uploaded. Files must be 3 MB or smaller.' : 'Upload failed.');
+        setError(skipped > 0 ? 'None uploaded. Files must be 5 MB or smaller.' : 'Upload failed.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');

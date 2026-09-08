@@ -57,6 +57,18 @@ function buildRenderContext(req, customer) {
 router.get('/', async (req, res, next) => {
   try {
     const organization = req.user.organization._id;
+    let messageFilter = { organization };
+    if (isRestrictedUser(req.user)) {
+      const allowedCustomerIds = await Customer.find(getCustomerFilter(req)).distinct('_id');
+      messageFilter = {
+        organization,
+        $or: [
+          { sentBy: req.user._id },
+          { customer: { $in: allowedCustomerIds } },
+        ],
+      };
+    }
+
     const [account, templates, customers, messages] = await Promise.all([
       EmailAccount.findOne({ organization, isActive: true }).sort({ updatedAt: -1 }).lean(),
       EmailTemplate.find({ organization, isActive: true }).sort({ category: 1, name: 1 }).lean(),
@@ -65,7 +77,7 @@ router.get('/', async (req, res, next) => {
         .sort({ updatedAt: -1 })
         .limit(150)
         .lean(),
-      EmailMessage.find({ organization })
+      EmailMessage.find(messageFilter)
         .populate('customer sentBy template')
         .sort({ sentAt: -1 })
         .limit(30)
@@ -105,7 +117,7 @@ router.post('/send', mailSendLimiter, apiPermission('mail.create'), async (req, 
     const organization = req.user.organization._id;
     const { customerId, templateId, subject: rawSubject, body: rawBody } = req.body;
 
-    const customer = await Customer.findOne({ _id: customerId, organization });
+    const customer = await Customer.findOne(getCustomerFilter(req, { _id: customerId }));
     if (!customer || !customer.email) {
       return res.status(400).json({ ok: false, error: 'Recipient customer with a valid email is required.' });
     }

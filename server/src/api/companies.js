@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const { requireApiAuth, generateToken } = require('./middleware/auth');
-const { hasPermission } = require('../config/roles');
+const { hasPermission, isRestrictedUser } = require('../config/roles');
 const ClientCompany = require('../models/ClientCompany');
 const User = require('../models/User');
 const Customer = require('../models/Customer');
@@ -21,8 +21,9 @@ const apiPermission = require('./middleware/permission');
 router.use(apiPermission('businesses.view'));
 
 function canAccessCompany(user, company) {
-  if (user && ['admin', 'manager'].includes(user.role)) return true;
-  if (user && company.assignedUsers) {
+  if (!user) return false;
+  if (!isRestrictedUser(user)) return true;
+  if (company && company.assignedUsers) {
     return company.assignedUsers.some(u => String(u._id || u) === String(user._id));
   }
   return false;
@@ -77,7 +78,7 @@ router.get('/', async (req, res, next) => {
   try {
     const orgId = req.user.organization._id;
     const filter = { organization: orgId };
-    if (!['admin', 'manager'].includes(req.user.role)) {
+    if (isRestrictedUser(req.user)) {
       filter.assignedUsers = req.user._id;
     }
 
@@ -127,7 +128,11 @@ router.get('/:id', async (req, res, next) => {
 
     const [users, customers, allStages, labels, campaigns, attachments] = await Promise.all([
       User.find({ organization: orgId, isActive: { $ne: false } }).sort({ name: 1 }),
-      Customer.find({ clientCompany: company._id, organization: orgId }).populate('stage labels assignedTo campaign').sort({ updatedAt: -1 }),
+      Customer.find({
+        clientCompany: company._id,
+        organization: orgId,
+        ...(isRestrictedUser(req.user) ? { assignedTo: req.user._id } : {}),
+      }).populate('stage labels assignedTo campaign').sort({ updatedAt: -1 }),
       CrmStage.find({ organization: orgId, clientCompany: company._id }).sort({ order: 1 }),
       CrmLabel.find({ organization: orgId, clientCompany: company._id, isActive: true }).sort({ name: 1 }),
       Campaign.find({ organization: orgId, clientCompany: company._id, status: 'active' }).sort({ name: 1 }),
