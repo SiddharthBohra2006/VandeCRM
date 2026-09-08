@@ -219,10 +219,14 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
     };
   }, [switcherOpen]);
 
-  // Workspace switcher: auto-close when sidebar collapses
+  // Workspace switcher: close only when sidebar transitions from expanded to collapsed
+  const prevIsOpenRef = useRef(isOpen);
   useEffect(() => {
-    if (!isOpen && switcherOpen) setSwitcherOpen(false);
-  }, [isOpen, switcherOpen]);
+    if (prevIsOpenRef.current && !isOpen) {
+      setSwitcherOpen(false);
+    }
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen]);
 
   function handlePrefsSave() {
     setPrefsOpen(false);

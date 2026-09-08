@@ -6495,7 +6495,6 @@ html.dark-theme body {
 
 /* Quiet collapsed rail and compact dashboard. */
 .sidebar.collapsed:not(:hover) .sidebar-logo { height: 60px; padding: 0 !important; align-items: center; }
-.sidebar.collapsed:not(:hover) .sidebar-logo .crm-switcher { display:none !important; }
 .sidebar.collapsed:not(:hover) .sidebar-logo > .desktop-only-toggle {
   width:36px;
   height:36px;
@@ -9137,10 +9136,11 @@ html.dark-theme .leads-table-card thead { background: var(--panel-muted); }
   pointer-events: none !important;
 }
 
-.sidebar.collapsed .crm-switcher-popover {
-  position: absolute !important;
-  top: 0 !important;
-  left: calc(100% + 12px) !important;
+.sidebar.collapsed .crm-switcher-popover,
+.sidebar.collapsed:not(:hover) .crm-switcher-popover {
+  position: fixed !important;
+  top: 12px !important;
+  left: 68px !important;
   width: 240px !important;
   z-index: 100000 !important;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45) !important;
