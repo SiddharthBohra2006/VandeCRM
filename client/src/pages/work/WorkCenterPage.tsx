@@ -30,81 +30,11 @@ export default function WorkCenterPage() {
   // Calendar View State
   const [calendarDate, setCalendarDate] = useState(new Date());
 
-  const calendarDays = useMemo(() => {
-    const year = calendarDate.getFullYear();
-    const month = calendarDate.getMonth();
-    const firstDayIndex = new Date(year, month, 1).getDay(); // 0 = Sun
-    const totalDays = new Date(year, month + 1, 0).getDate();
-    const prevMonthDays = new Date(year, month, 0).getDate();
-
-    const days: Array<{
-      dayNumber: number;
-      date: Date;
-      isCurrentMonth: boolean;
-      isToday: boolean;
-      items: WorkItem[];
-    }> = [];
-
-    const now = new Date();
-
-    // Previous month padding days
-    for (let i = firstDayIndex - 1; i >= 0; i--) {
-      const d = new Date(year, month - 1, prevMonthDays - i);
-      days.push({
-        dayNumber: prevMonthDays - i,
-        date: d,
-        isCurrentMonth: false,
-        isToday: false,
-        items: filteredItems.filter(item => {
-          if (!item.deadline) return false;
-          const id = new Date(item.deadline);
-          return id.getFullYear() === d.getFullYear() && id.getMonth() === d.getMonth() && id.getDate() === d.getDate();
-        }),
-      });
-    }
-
-    // Current month days
-    for (let i = 1; i <= totalDays; i++) {
-      const d = new Date(year, month, i);
-      const isToday = d.toDateString() === now.toDateString();
-      days.push({
-        dayNumber: i,
-        date: d,
-        isCurrentMonth: true,
-        isToday,
-        items: filteredItems.filter(item => {
-          if (!item.deadline) return false;
-          const id = new Date(item.deadline);
-          return id.getFullYear() === year && id.getMonth() === month && id.getDate() === i;
-        }),
-      });
-    }
-
-    // Next month padding to fill grid
-    const remaining = (7 - (days.length % 7)) % 7;
-    for (let i = 1; i <= remaining; i++) {
-      const d = new Date(year, month + 1, i);
-      days.push({
-        dayNumber: i,
-        date: d,
-        isCurrentMonth: false,
-        isToday: false,
-        items: filteredItems.filter(item => {
-          if (!item.deadline) return false;
-          const id = new Date(item.deadline);
-          return id.getFullYear() === d.getFullYear() && id.getMonth() === d.getMonth() && id.getDate() === d.getDate();
-        }),
-      });
-    }
-
-    return days;
-  }, [calendarDate, filteredItems]);
-
   // URL State
   const currentTab = searchParams.get('tab') || 'all';
   const currentModule = searchParams.get('module') || '';
   const currentStatus = searchParams.get('status') || 'open';
-  const currentAssignee = searchParams.get('assignee') || (currentTab === 'my-work' ? 'me' : 'all');
+  const currentAssignee = searchParams.get('assignee') || searchParams.get('person') || (currentTab === 'my-work' ? 'me' : 'all');
   const currentPriority = searchParams.get('priority') || 'all';
   const currentDue = searchParams.get('due') || 'all';
   const currentSort = searchParams.get('sort') || 'due';
@@ -362,6 +292,77 @@ export default function WorkCenterPage() {
     const start = (page - 1) * pageSize;
     return filteredItems.slice(start, start + pageSize);
   }, [filteredItems, page, pageSize]);
+
+  // Calendar days calculation (uses filteredItems safely after declaration)
+  const calendarDays = useMemo(() => {
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const firstDayIndex = new Date(year, month, 1).getDay(); // 0 = Sun
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const prevMonthDays = new Date(year, month, 0).getDate();
+
+    const days: Array<{
+      dayNumber: number;
+      date: Date;
+      isCurrentMonth: boolean;
+      isToday: boolean;
+      items: WorkItem[];
+    }> = [];
+
+    const now = new Date();
+
+    // Previous month padding days
+    for (let i = firstDayIndex - 1; i >= 0; i--) {
+      const d = new Date(year, month - 1, prevMonthDays - i);
+      days.push({
+        dayNumber: prevMonthDays - i,
+        date: d,
+        isCurrentMonth: false,
+        isToday: false,
+        items: filteredItems.filter(item => {
+          if (!item.deadline) return false;
+          const id = new Date(item.deadline);
+          return id.getFullYear() === d.getFullYear() && id.getMonth() === d.getMonth() && id.getDate() === d.getDate();
+        }),
+      });
+    }
+
+    // Current month days
+    for (let i = 1; i <= totalDays; i++) {
+      const d = new Date(year, month, i);
+      const isToday = d.toDateString() === now.toDateString();
+      days.push({
+        dayNumber: i,
+        date: d,
+        isCurrentMonth: true,
+        isToday,
+        items: filteredItems.filter(item => {
+          if (!item.deadline) return false;
+          const id = new Date(item.deadline);
+          return id.getFullYear() === year && id.getMonth() === month && id.getDate() === i;
+        }),
+      });
+    }
+
+    // Next month padding to fill grid
+    const remaining = (7 - (days.length % 7)) % 7;
+    for (let i = 1; i <= remaining; i++) {
+      const d = new Date(year, month + 1, i);
+      days.push({
+        dayNumber: i,
+        date: d,
+        isCurrentMonth: false,
+        isToday: false,
+        items: filteredItems.filter(item => {
+          if (!item.deadline) return false;
+          const id = new Date(item.deadline);
+          return id.getFullYear() === d.getFullYear() && id.getMonth() === d.getMonth() && id.getDate() === d.getDate();
+        }),
+      });
+    }
+
+    return days;
+  }, [calendarDate, filteredItems]);
 
   // Row selection helpers
   function toggleSelectAll() {
