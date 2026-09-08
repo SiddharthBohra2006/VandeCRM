@@ -5101,9 +5101,9 @@ dialog#addWorkDialog > form,
   width: 38px !important;
   height: 38px !important;
   border-radius: 9px !important;
-  background: #fff7ed !important;
-  color: #ea580c !important;
-  border: 1px solid #ffedd5 !important;
+  background: color-mix(in srgb, var(--gold) 12%, var(--panel, #ffffff)) !important;
+  color: var(--gold) !important;
+  border: 1px solid color-mix(in srgb, var(--gold) 25%, transparent) !important;
 }
 
 .modal-brand-icon svg { width: 20px !important; height: 20px !important; }
@@ -5121,9 +5121,9 @@ dialog#addWorkDialog > form,
   align-items: center !important;
   padding: 2px 8px !important;
   border-radius: 4px !important;
-  background: #fff7ed !important;
-  color: #ea580c !important;
-  border: 1px solid #ffedd5 !important;
+  background: color-mix(in srgb, var(--gold) 12%, var(--panel, #ffffff)) !important;
+  color: var(--gold) !important;
+  border: 1px solid color-mix(in srgb, var(--gold) 25%, transparent) !important;
   font-size: 0.65rem !important;
   font-weight: 850 !important;
   letter-spacing: 0.06em !important;
@@ -11750,7 +11750,7 @@ html, body {
 }
 
 .work-eyebrow {
-  color: #ea580c !important;
+  color: var(--gold) !important;
   font-size: 0.72rem !important;
   font-weight: 850 !important;
   letter-spacing: 0.08em !important;
@@ -11784,7 +11784,7 @@ html, body {
 }
 
 .btn-new-work {
-  background: #ea580c !important;
+  background: var(--gold) !important;
   color: #ffffff !important;
   border: none !important;
   border-radius: 8px !important;
@@ -11795,12 +11795,13 @@ html, body {
   align-items: center !important;
   gap: 6px !important;
   cursor: pointer !important;
-  box-shadow: 0 2px 6px rgba(234, 88, 12, 0.25) !important;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--gold) 25%, transparent) !important;
   transition: background 0.15s ease, transform 0.1s ease !important;
 }
 
 .btn-new-work:hover {
-  background: #c2410c !important;
+  background: var(--gold-hover, var(--gold)) !important;
+  filter: brightness(0.92);
 }
 
 .btn-new-work:active {
@@ -11838,7 +11839,7 @@ html, body {
 
 .new-work-popover-item:hover {
   background: var(--hover);
-  color: #ea580c;
+  color: var(--gold);
 }
 
 .btn-work-secondary {
@@ -11859,7 +11860,7 @@ html, body {
 
 .btn-work-secondary:hover {
   background: var(--hover) !important;
-  border-color: color-mix(in srgb, var(--border) 80%, #ea580c) !important;
+  border-color: color-mix(in srgb, var(--border) 80%, var(--gold)) !important;
 }
 
 /* View Tabs Bar */
@@ -11899,7 +11900,7 @@ html, body {
 }
 
 .work-view-tab.active {
-  color: #ea580c !important;
+  color: var(--gold) !important;
   font-weight: 700 !important;
   background: transparent !important;
 }
@@ -11911,7 +11912,7 @@ html, body {
   left: 0;
   right: 0;
   height: 2.5px;
-  background: #ea580c;
+  background: var(--gold);
   border-radius: 2px 2px 0 0;
 }
 
@@ -11989,7 +11990,7 @@ html, body {
 
 .work-calendar-nav-btn:hover {
   background: var(--hover) !important;
-  border-color: #ea580c !important;
+  border-color: var(--gold) !important;
 }
 
 .work-calendar-today-btn {
@@ -12007,7 +12008,7 @@ html, body {
 
 .work-calendar-today-btn:hover {
   background: var(--hover) !important;
-  border-color: #ea580c !important;
+  border-color: var(--gold) !important;
 }
 
 .work-calendar-title {
@@ -12064,7 +12065,7 @@ html, body {
 }
 
 .work-calendar-cell.today {
-  background: color-mix(in srgb, #ea580c 7%, var(--panel, #ffffff));
+  background: color-mix(in srgb, var(--gold) 7%, var(--panel, #ffffff));
 }
 
 .work-calendar-cell-head {
@@ -12081,7 +12082,7 @@ html, body {
 }
 
 .work-calendar-day-number.today-pill {
-  background: #ea580c;
+  background: var(--gold);
   color: #ffffff;
   width: 22px;
   height: 22px;
@@ -12108,7 +12109,7 @@ html, body {
 .work-calendar-chip {
   background: var(--bg-soft, #f1f5f9);
   border: 1px solid var(--border);
-  border-left: 3px solid #ea580c;
+  border-left: 3px solid var(--gold);
   border-radius: 6px;
   padding: 3px 6px;
   font-size: 0.72rem;
@@ -12126,7 +12127,7 @@ html, body {
 .work-calendar-chip:hover {
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-  border-color: #ea580c;
+  border-color: var(--gold);
 }
 
 .work-calendar-chip-dot {
@@ -12171,13 +12172,13 @@ html, body {
 
 .work-area-pill:hover {
   background: var(--hover, #ffffff) !important;
-  border-color: #ea580c !important;
+  border-color: var(--gold) !important;
 }
 
 .work-area-pill.active {
-  background: #ea580c !important;
+  background: var(--gold) !important;
   color: #ffffff !important;
-  border-color: #ea580c !important;
+  border-color: var(--gold) !important;
   font-weight: 650 !important;
 }
 
@@ -12255,7 +12256,7 @@ html, body {
 }
 
 .work-filter-item .app-select-button:hover {
-  border-color: #ea580c !important;
+  border-color: var(--gold) !important;
 }
 
 .work-search-box {
@@ -12288,8 +12289,8 @@ html, body {
 }
 
 .work-search-input:focus {
-  border-color: #ea580c;
-  box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.15);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 15%, transparent);
 }
 
 /* KPI Quick Stats Row */
@@ -12388,7 +12389,7 @@ html, body {
 }
 
 .work-table tbody tr.selected td {
-  background: color-mix(in srgb, #ea580c 4%, var(--panel, #ffffff));
+  background: color-mix(in srgb, var(--gold) 4%, var(--panel, #ffffff));
 }
 
 .work-checkbox {
@@ -12397,7 +12398,7 @@ html, body {
   border-radius: 4px;
   border: 1px solid var(--border);
   cursor: pointer;
-  accent-color: #ea580c;
+  accent-color: var(--gold);
 }
 
 .work-item-title-wrap {
@@ -12415,7 +12416,7 @@ html, body {
 }
 
 .work-item-title:hover {
-  color: #ea580c;
+  color: var(--gold);
   text-decoration: underline;
 }
 
@@ -12467,14 +12468,14 @@ html, body {
 }
 
 .work-owner-pill:hover {
-  border-color: #ea580c;
+  border-color: var(--gold);
 }
 
 .work-owner-avatar {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #ea580c;
+  background: var(--gold);
   color: #ffffff;
   display: flex;
   align-items: center;
@@ -12530,7 +12531,7 @@ html, body {
 }
 
 .work-priority-badge.medium {
-  color: #ea580c;
+  color: var(--gold);
 }
 
 .work-priority-badge.low {
@@ -12562,7 +12563,7 @@ html, body {
 }
 
 .work-due-relative.soon {
-  color: #ea580c;
+  color: var(--gold);
 }
 
 .work-due-relative.normal {
@@ -12630,8 +12631,8 @@ html, body {
 }
 
 .work-page-btn:hover:not(:disabled) {
-  border-color: #ea580c !important;
-  color: #ea580c !important;
+  border-color: var(--gold) !important;
+  color: var(--gold) !important;
 }
 
 .work-page-btn:disabled {
@@ -12640,9 +12641,9 @@ html, body {
 }
 
 .work-page-btn.active {
-  background: #ea580c !important;
+  background: var(--gold) !important;
   color: #ffffff !important;
-  border-color: #ea580c !important;
+  border-color: var(--gold) !important;
 }
 
 /* Responsive */
