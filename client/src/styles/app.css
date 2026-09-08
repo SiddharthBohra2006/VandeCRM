@@ -11778,7 +11778,226 @@ html, body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.work-area-pills-list::-webkit-scrollbar {
+  height: 3px;
+}
+
+.work-area-pills-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+/* ==========================================================================
+   WORK CALENDAR VIEW STYLES
+   ========================================================================== */
+
+.work-calendar-card {
+  background: var(--panel, #ffffff);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  margin-bottom: 1.5rem;
+}
+
+.work-calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
   flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.work-calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.work-calendar-nav-btn {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--border) !important;
+  background: var(--panel, #ffffff) !important;
+  color: var(--text) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  padding: 0 !important;
+}
+
+.work-calendar-nav-btn:hover {
+  background: var(--hover) !important;
+  border-color: #ea580c !important;
+}
+
+.work-calendar-today-btn {
+  padding: 0 12px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--border) !important;
+  background: var(--panel, #ffffff) !important;
+  color: var(--text) !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.work-calendar-today-btn:hover {
+  background: var(--hover) !important;
+  border-color: #ea580c !important;
+}
+
+.work-calendar-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0 0 0 0.5rem;
+}
+
+.work-calendar-legend {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.work-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.work-calendar-day-head {
+  background: var(--bg-soft, #f8fafc);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-align: center;
+  padding: 8px 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.work-calendar-cell {
+  background: var(--panel, #ffffff);
+  min-height: 110px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: background 0.12s ease;
+}
+
+.work-calendar-cell:hover {
+  background: var(--hover, #f8fafc);
+}
+
+.work-calendar-cell.outside {
+  background: color-mix(in srgb, var(--panel, #ffffff) 65%, var(--bg-soft, #000));
+  opacity: 0.55;
+}
+
+.work-calendar-cell.today {
+  background: color-mix(in srgb, #ea580c 7%, var(--panel, #ffffff));
+}
+
+.work-calendar-cell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.work-calendar-day-number {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.work-calendar-day-number.today-pill {
+  background: #ea580c;
+  color: #ffffff;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+}
+
+.work-calendar-cell-count {
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.work-calendar-cell-events {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.work-calendar-chip {
+  background: var(--bg-soft, #f1f5f9);
+  border: 1px solid var(--border);
+  border-left: 3px solid #ea580c;
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 0.72rem;
+  color: var(--text);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.12s ease;
+}
+
+.work-calendar-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  border-color: #ea580c;
+}
+
+.work-calendar-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.work-calendar-chip-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.work-calendar-more {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 1px 4px;
+  cursor: pointer;
 }
 
 .work-area-pill {

@@ -27,6 +27,79 @@ export default function WorkCenterPage() {
   const pageSize = 12;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Calendar View State
+  const [calendarDate, setCalendarDate] = useState(new Date());
+
+  const calendarDays = useMemo(() => {
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const firstDayIndex = new Date(year, month, 1).getDay(); // 0 = Sun
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const prevMonthDays = new Date(year, month, 0).getDate();
+
+    const days: Array<{
+      dayNumber: number;
+      date: Date;
+      isCurrentMonth: boolean;
+      isToday: boolean;
+      items: WorkItem[];
+    }> = [];
+
+    const now = new Date();
+
+    // Previous month padding days
+    for (let i = firstDayIndex - 1; i >= 0; i--) {
+      const d = new Date(year, month - 1, prevMonthDays - i);
+      days.push({
+        dayNumber: prevMonthDays - i,
+        date: d,
+        isCurrentMonth: false,
+        isToday: false,
+        items: filteredItems.filter(item => {
+          if (!item.deadline) return false;
+          const id = new Date(item.deadline);
+          return id.getFullYear() === d.getFullYear() && id.getMonth() === d.getMonth() && id.getDate() === d.getDate();
+        }),
+      });
+    }
+
+    // Current month days
+    for (let i = 1; i <= totalDays; i++) {
+      const d = new Date(year, month, i);
+      const isToday = d.toDateString() === now.toDateString();
+      days.push({
+        dayNumber: i,
+        date: d,
+        isCurrentMonth: true,
+        isToday,
+        items: filteredItems.filter(item => {
+          if (!item.deadline) return false;
+          const id = new Date(item.deadline);
+          return id.getFullYear() === year && id.getMonth() === month && id.getDate() === i;
+        }),
+      });
+    }
+
+    // Next month padding to fill grid
+    const remaining = (7 - (days.length % 7)) % 7;
+    for (let i = 1; i <= remaining; i++) {
+      const d = new Date(year, month + 1, i);
+      days.push({
+        dayNumber: i,
+        date: d,
+        isCurrentMonth: false,
+        isToday: false,
+        items: filteredItems.filter(item => {
+          if (!item.deadline) return false;
+          const id = new Date(item.deadline);
+          return id.getFullYear() === d.getFullYear() && id.getMonth() === d.getMonth() && id.getDate() === d.getDate();
+        }),
+      });
+    }
+
+    return days;
+  }, [calendarDate, filteredItems]);
+
   // URL State
   const currentTab = searchParams.get('tab') || 'all';
   const currentModule = searchParams.get('module') || '';
@@ -645,247 +718,334 @@ export default function WorkCenterPage() {
         </div>
       </div>
 
-      {/* 5. Work Items Table */}
-      <div className="work-table-card">
-        <table className="work-table">
-          <thead>
-            <tr>
-              <th style={{ width: 44, textAlign: 'center' }}>
-                <input
-                  type="checkbox"
-                  className="work-checkbox"
-                  checked={paginatedItems.length > 0 && selectedIds.size === paginatedItems.length}
-                  onChange={toggleSelectAll}
-                  aria-label="Select all work items"
-                />
-              </th>
-              <th>WORK ↕</th>
-              <th>AREA ↕</th>
-              <th>OWNER ↕</th>
-              <th>STATUS ↕</th>
-              <th>PRIORITY ↕</th>
-              <th>DUE ↕</th>
-              <th style={{ width: 48, textAlign: 'right' }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedItems.length === 0 ? (
-              <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '3.5rem 1rem', color: 'var(--muted)' }}>
-                  <Icon name="clipboard-list" size={32} style={{ margin: '0 auto 10px', display: 'block', opacity: 0.5 }} />
-                  <strong>No work items found</strong>
-                  <p style={{ margin: '4px 0 0', fontSize: '0.78rem' }}>Try adjusting your filters or search terms.</p>
-                </td>
-              </tr>
-            ) : (
-              paginatedItems.map(item => {
-                const typeKey = item.workType?.key || 'task';
-                const wt = item.workType || workTypes.find(t => t.key === typeKey || t._id === item.module);
-                const statusObj = wt?.statuses?.find(s => s.key === item.status);
-                const statusColor = getStatusColor(item.status, wt);
-                const isSelected = selectedIds.has(item._id);
-                const dueInfo = formatRelativeDue(item.deadline);
-                const isStatusAllowed = canChangeWorkStatus(user, wt, item.status);
+      {/* 5. Work Items Table OR Calendar View */}
+      {currentTab === 'calendar' ? (
+        <div className="work-calendar-card">
+          <div className="work-calendar-header">
+            <div className="work-calendar-nav">
+              <button
+                type="button"
+                className="work-calendar-nav-btn"
+                onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))}
+                aria-label="Previous month"
+              >
+                <Icon name="chevron-left" size={16} />
+              </button>
+              <button
+                type="button"
+                className="work-calendar-today-btn"
+                onClick={() => setCalendarDate(new Date())}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                className="work-calendar-nav-btn"
+                onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))}
+                aria-label="Next month"
+              >
+                <Icon name="chevron-right" size={16} />
+              </button>
+              <h2 className="work-calendar-title">
+                {calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+              </h2>
+            </div>
+            <div className="work-calendar-legend">
+              <span className="work-calendar-item-count">{filteredItems.filter(i => i.deadline).length} scheduled deliverables</span>
+            </div>
+          </div>
 
-                const priorityLower = String(item.priority || 'medium').toLowerCase();
+          <div className="work-calendar-grid">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+              <div key={d} className="work-calendar-day-head">{d}</div>
+            ))}
 
-                return (
-                  <tr key={item._id} className={isSelected ? 'selected' : ''}>
-                    {/* Checkbox */}
-                    <td style={{ textAlign: 'center' }}>
-                      <input
-                        type="checkbox"
-                        className="work-checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelectRow(item._id)}
-                        aria-label={`Select ${item.title}`}
-                      />
-                    </td>
-
-                    {/* WORK (Title & Client) */}
-                    <td>
-                      <div className="work-item-title-wrap">
-                        <Link to={`/work/${typeKey}/${item._id}`} className="work-item-title">
-                          {item.title}
-                        </Link>
-                        <span className="work-item-client">
-                          {item.customer && typeof item.customer === 'object'
-                            ? (item.customer as any).name
-                            : '—'}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* AREA */}
-                    <td>
-                      <span className="work-item-area">
-                        <Icon
-                          name={wt?.icon || 'clipboard-list'}
-                          size={15}
-                          style={{ color: wt?.color || '#ea580c' }}
-                        />
-                        <span>{wt?.name || typeKey}</span>
-                      </span>
-                    </td>
-
-                    {/* OWNER */}
-                    <td>
-                      <CustomSelect
-                        className="work-table-select"
-                        variant="compact"
-                        placeholder="Unassigned"
-                        value={item.assignedTo?._id || ''}
-                        onChange={val => void handleAssign(item, val)}
-                        options={[
-                          { value: '', label: 'Unassigned' },
-                          ...users.map(member => ({ value: member._id, label: member.name })),
-                        ]}
-                        buttonRenderer={() => {
-                          const assigned = item.assignedTo;
-                          if (assigned?.name) {
-                            return (
-                              <div className="work-owner-pill">
-                                <span className="work-owner-avatar">{getInitials(assigned.name)}</span>
-                                <span>{assigned.name}</span>
-                                <Icon name="chevron-down" size={12} style={{ color: 'var(--muted)', marginLeft: 2 }} />
-                              </div>
-                            );
-                          }
-                          return (
-                            <div className="work-owner-pill">
-                              <span className="work-owner-avatar unassigned">
-                                <Icon name="user" size={11} />
-                              </span>
-                              <span style={{ color: 'var(--muted)' }}>Unassigned</span>
-                              <Icon name="chevron-down" size={12} style={{ color: 'var(--muted)', marginLeft: 2 }} />
-                            </div>
-                          );
+            {calendarDays.map((cell, idx) => (
+              <div
+                key={idx}
+                className={`work-calendar-cell ${cell.isCurrentMonth ? '' : 'outside'} ${cell.isToday ? 'today' : ''}`}
+              >
+                <div className="work-calendar-cell-head">
+                  <span className={`work-calendar-day-number ${cell.isToday ? 'today-pill' : ''}`}>
+                    {cell.dayNumber}
+                  </span>
+                  {cell.items.length > 0 && (
+                    <span className="work-calendar-cell-count">{cell.items.length}</span>
+                  )}
+                </div>
+                <div className="work-calendar-cell-events">
+                  {cell.items.slice(0, 3).map(item => {
+                    const wt = item.workType || workTypes.find(t => t.key === item.workType?.key || t._id === item.module);
+                    const statusColor = getStatusColor(item.status, wt);
+                    return (
+                      <Link
+                        key={item._id}
+                        to={`/work/${item.workType?.key || 'task'}/${item._id}`}
+                        className="work-calendar-chip"
+                        style={{
+                          borderLeftColor: wt?.color || '#ea580c',
                         }}
-                      />
+                        title={`${item.title} (${wt?.name || 'Task'})`}
+                      >
+                        <span className="work-calendar-chip-dot" style={{ background: statusColor }} />
+                        <span className="work-calendar-chip-title">{item.title}</span>
+                      </Link>
+                    );
+                  })}
+                  {cell.items.length > 3 && (
+                    <div className="work-calendar-more">
+                      +{cell.items.length - 3} more
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="work-table-card">
+            <table className="work-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 44, textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      className="work-checkbox"
+                      checked={paginatedItems.length > 0 && selectedIds.size === paginatedItems.length}
+                      onChange={toggleSelectAll}
+                      aria-label="Select all work items"
+                    />
+                  </th>
+                  <th>WORK ↕</th>
+                  <th>AREA ↕</th>
+                  <th>OWNER ↕</th>
+                  <th>STATUS ↕</th>
+                  <th>PRIORITY ↕</th>
+                  <th>DUE ↕</th>
+                  <th style={{ width: 48, textAlign: 'right' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '3.5rem 1rem', color: 'var(--muted)' }}>
+                      <Icon name="clipboard-list" size={32} style={{ margin: '0 auto 10px', display: 'block', opacity: 0.5 }} />
+                      <strong>No work items found</strong>
+                      <p style={{ margin: '4px 0 0', fontSize: '0.78rem' }}>Try adjusting your filters or search terms.</p>
                     </td>
+                  </tr>
+                ) : (
+                  paginatedItems.map(item => {
+                    const typeKey = item.workType?.key || 'task';
+                    const wt = item.workType || workTypes.find(t => t.key === typeKey || t._id === item.module);
+                    const statusObj = wt?.statuses?.find(s => s.key === item.status);
+                    const statusColor = getStatusColor(item.status, wt);
+                    const isSelected = selectedIds.has(item._id);
+                    const dueInfo = formatRelativeDue(item.deadline);
+                    const isStatusAllowed = canChangeWorkStatus(user, wt, item.status);
 
-                    {/* STATUS */}
-                    <td>
-                      {isStatusAllowed ? (
-                        <CustomSelect
-                          className="work-table-select"
-                          variant="compact"
-                          value={item.status}
-                          onChange={val => void handleStatusChange(item, val)}
-                          options={(wt?.statuses || []).map(s => ({ value: s.key, label: s.label }))}
-                          buttonRenderer={() => (
+                    const priorityLower = String(item.priority || 'medium').toLowerCase();
+
+                    return (
+                      <tr key={item._id} className={isSelected ? 'selected' : ''}>
+                        {/* Checkbox */}
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            className="work-checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectRow(item._id)}
+                            aria-label={`Select ${item.title}`}
+                          />
+                        </td>
+
+                        {/* WORK (Title & Client) */}
+                        <td>
+                          <div className="work-item-title-wrap">
+                            <Link to={`/work/${typeKey}/${item._id}`} className="work-item-title">
+                              {item.title}
+                            </Link>
+                            <span className="work-item-client">
+                              {item.customer && typeof item.customer === 'object'
+                                ? (item.customer as any).name
+                                : '—'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* AREA */}
+                        <td>
+                          <span className="work-item-area">
+                            <Icon
+                              name={wt?.icon || 'clipboard-list'}
+                              size={15}
+                              style={{ color: wt?.color || '#ea580c' }}
+                            />
+                            <span>{wt?.name || typeKey}</span>
+                          </span>
+                        </td>
+
+                        {/* OWNER */}
+                        <td>
+                          <CustomSelect
+                            className="work-table-select"
+                            variant="compact"
+                            placeholder="Unassigned"
+                            value={item.assignedTo?._id || ''}
+                            onChange={val => void handleAssign(item, val)}
+                            options={[
+                              { value: '', label: 'Unassigned' },
+                              ...users.map(member => ({ value: member._id, label: member.name })),
+                            ]}
+                            buttonRenderer={() => {
+                              const assigned = item.assignedTo;
+                              if (assigned?.name) {
+                                return (
+                                  <div className="work-owner-pill">
+                                    <span className="work-owner-avatar">{getInitials(assigned.name)}</span>
+                                    <span>{assigned.name}</span>
+                                    <Icon name="chevron-down" size={12} style={{ color: 'var(--muted)', marginLeft: 2 }} />
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div className="work-owner-pill">
+                                  <span className="work-owner-avatar unassigned">
+                                    <Icon name="user" size={11} />
+                                  </span>
+                                  <span style={{ color: 'var(--muted)' }}>Unassigned</span>
+                                  <Icon name="chevron-down" size={12} style={{ color: 'var(--muted)', marginLeft: 2 }} />
+                                </div>
+                              );
+                            }}
+                          />
+                        </td>
+
+                        {/* STATUS */}
+                        <td>
+                          {isStatusAllowed ? (
+                            <CustomSelect
+                              className="work-table-select"
+                              variant="compact"
+                              value={item.status}
+                              onChange={val => void handleStatusChange(item, val)}
+                              options={(wt?.statuses || []).map(s => ({ value: s.key, label: s.label }))}
+                              buttonRenderer={() => (
+                                <div
+                                  className="work-status-pill"
+                                  style={{
+                                    background: `color-mix(in srgb, ${statusColor} 12%, var(--panel, #ffffff))`,
+                                    color: statusColor,
+                                    border: `1px solid color-mix(in srgb, ${statusColor} 30%, transparent)`,
+                                  }}
+                                >
+                                  <span className="work-status-dot" style={{ background: statusColor }} />
+                                  <span>{statusObj?.label || item.status}</span>
+                                  <Icon name="chevron-down" size={12} style={{ opacity: 0.7, marginLeft: 2 }} />
+                                </div>
+                              )}
+                            />
+                          ) : (
                             <div
                               className="work-status-pill"
                               style={{
                                 background: `color-mix(in srgb, ${statusColor} 12%, var(--panel, #ffffff))`,
                                 color: statusColor,
                                 border: `1px solid color-mix(in srgb, ${statusColor} 30%, transparent)`,
+                                cursor: 'default',
                               }}
+                              title="Locked for review — only managers can change status"
                             >
                               <span className="work-status-dot" style={{ background: statusColor }} />
                               <span>{statusObj?.label || item.status}</span>
-                              <Icon name="chevron-down" size={12} style={{ opacity: 0.7, marginLeft: 2 }} />
                             </div>
                           )}
-                        />
-                      ) : (
-                        <div
-                          className="work-status-pill"
-                          style={{
-                            background: `color-mix(in srgb, ${statusColor} 12%, var(--panel, #ffffff))`,
-                            color: statusColor,
-                            border: `1px solid color-mix(in srgb, ${statusColor} 30%, transparent)`,
-                            cursor: 'default',
-                          }}
-                          title="Locked for review — only managers can change status"
-                        >
-                          <span className="work-status-dot" style={{ background: statusColor }} />
-                          <span>{statusObj?.label || item.status}</span>
-                        </div>
-                      )}
-                    </td>
+                        </td>
 
-                    {/* PRIORITY */}
-                    <td>
-                      <span className={`work-priority-badge ${priorityLower}`}>
-                        <Icon
-                          name={priorityLower === 'low' ? 'chevron-down' : 'chevron-up'}
-                          size={14}
-                        />
-                        <span style={{ textTransform: 'capitalize' }}>{item.priority || 'Medium'}</span>
-                      </span>
-                    </td>
+                        {/* PRIORITY */}
+                        <td>
+                          <span className={`work-priority-badge ${priorityLower}`}>
+                            <Icon
+                              name={priorityLower === 'low' ? 'chevron-down' : 'chevron-up'}
+                              size={14}
+                            />
+                            <span style={{ textTransform: 'capitalize' }}>{item.priority || 'Medium'}</span>
+                          </span>
+                        </td>
 
-                    {/* DUE */}
-                    <td>
-                      <div className="work-due-cell">
-                        <span className="work-due-date">{formatDate(item.deadline)}</span>
-                        {dueInfo.text && (
-                          <span className={`work-due-relative ${dueInfo.className}`}>{dueInfo.text}</span>
-                        )}
-                      </div>
-                    </td>
+                        {/* DUE */}
+                        <td>
+                          <div className="work-due-cell">
+                            <span className="work-due-date">{formatDate(item.deadline)}</span>
+                            {dueInfo.text && (
+                              <span className={`work-due-relative ${dueInfo.className}`}>{dueInfo.text}</span>
+                            )}
+                          </div>
+                        </td>
 
-                    {/* ROW ACTIONS */}
-                    <td style={{ textAlign: 'right' }}>
-                      <div className="work-row-actions">
-                        <Link
-                          to={`/work/${typeKey}/${item._id}`}
-                          className="work-row-menu-btn"
-                          title="Open details"
-                        >
-                          ···
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* 6. Pagination Footer */}
-      {totalItems > 0 && (
-        <div className="work-pagination-bar">
-          <div>
-            Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalItems)} of {totalItems} items
+                        {/* ROW ACTIONS */}
+                        <td style={{ textAlign: 'right' }}>
+                          <div className="work-row-actions">
+                            <Link
+                              to={`/work/${typeKey}/${item._id}`}
+                              className="work-row-menu-btn"
+                              title="Open details"
+                            >
+                              ···
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
 
-          <div className="work-pagination-controls">
-            <button
-              type="button"
-              className="work-page-btn"
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-              aria-label="Previous page"
-            >
-              ‹
-            </button>
+          {/* 6. Pagination Footer */}
+          {totalItems > 0 && (
+            <div className="work-pagination-bar">
+              <div>
+                Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalItems)} of {totalItems} items
+              </div>
 
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-              <button
-                key={p}
-                type="button"
-                className={`work-page-btn ${page === p ? 'active' : ''}`}
-                onClick={() => setPage(p)}
-              >
-                {p}
-              </button>
-            ))}
+              <div className="work-pagination-controls">
+                <button
+                  type="button"
+                  className="work-page-btn"
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  aria-label="Previous page"
+                >
+                  ‹
+                </button>
 
-            <button
-              type="button"
-              className="work-page-btn"
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              aria-label="Next page"
-            >
-              ›
-            </button>
-          </div>
-        </div>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={`work-page-btn ${page === p ? 'active' : ''}`}
+                    onClick={() => setPage(p)}
+                  >
+                    {p}
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  className="work-page-btn"
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  aria-label="Next page"
+                >
+                  ›
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Bulk Create Modal */}
