@@ -9032,9 +9032,84 @@ html.dark-theme .leads-table-card thead { background: var(--panel-muted); }
   color: var(--gold) !important;
 }
 
+/* Collapsed Sidebar Alignment for Nav Groups & Items */
+.sidebar.collapsed:not(:hover) .nav-group {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 38px !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+}
+
+.sidebar.collapsed:not(:hover) .nav-group-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 38px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+}
+
+.sidebar.collapsed:not(:hover) .nav-group-title-link {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 38px !important;
+  height: 38px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 0 !important;
+}
+
+.sidebar.collapsed:not(:hover) .nav-group-title-link svg,
+.sidebar.collapsed:not(:hover) .nav-group-title-link i {
+  margin: 0 !important;
+  width: 18px !important;
+  height: 18px !important;
+  flex-shrink: 0 !important;
+}
+
+.sidebar.collapsed:not(:hover) .nav-group-title-link span,
+.sidebar.collapsed:not(:hover) .nav-group-title-link strong,
 .sidebar.collapsed:not(:hover) .nav-group-toggle-btn,
 .sidebar.collapsed:not(:hover) .nav-sub-list {
   display: none !important;
+  position: absolute !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.sidebar.collapsed:hover .nav-group {
+  width: 100% !important;
+}
+
+.sidebar.collapsed:hover .nav-group-header {
+  width: 100% !important;
+  padding: 0 6px 0 12px !important;
+  justify-content: space-between !important;
+}
+
+.sidebar.collapsed:hover .nav-group-title-link {
+  width: auto !important;
+  flex: 1 !important;
+  gap: 10px !important;
+  justify-content: flex-start !important;
+}
+
+.sidebar.collapsed:hover .nav-group-title-link span {
+  display: inline-block !important;
+  position: static !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.sidebar.collapsed:hover .nav-group-toggle-btn {
+  display: flex !important;
 }
 
 .sidebar.collapsed {
