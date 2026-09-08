@@ -53,6 +53,19 @@ const navItems: NavItem[] = [
 ];
 
 const NAV_ORDER_KEY = 'sidebar-nav-order';
+const NAV_CUSTOM_LABELS_KEY = 'sidebar-custom-labels';
+const NAV_CUSTOM_ICONS_KEY = 'sidebar-custom-icons';
+
+export const CURATED_NAV_ICONS = [
+  'layout-dashboard', 'users', 'user-check', 'building-2', 'bar-chart-3',
+  'file-text', 'list-todo', 'list-checks', 'megaphone', 'folder-kanban',
+  'mail', 'settings', 'activity', 'send', 'message-circle',
+  'star', 'calendar', 'briefcase', 'globe', 'zap',
+  'bookmark', 'inbox', 'pie-chart', 'layers', 'tag',
+  'phone', 'clock', 'check-circle-2', 'palette', 'code',
+  'database', 'target', 'shield', 'bell', 'wallet',
+  'sparkles', 'rocket', 'box', 'compass', 'share-2',
+];
 
 function initials(name: string) {
   return name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase();
@@ -71,17 +84,62 @@ function saveNavOrder(order: string[]) {
   localStorage.setItem(NAV_ORDER_KEY, JSON.stringify(order));
 }
 
+function loadCustomLabels(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(NAV_CUSTOM_LABELS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveCustomLabels(labels: Record<string, string>) {
+  localStorage.setItem(NAV_CUSTOM_LABELS_KEY, JSON.stringify(labels));
+}
+
+function loadCustomIcons(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(NAV_CUSTOM_ICONS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveCustomIcons(icons: Record<string, string>) {
+  localStorage.setItem(NAV_CUSTOM_ICONS_KEY, JSON.stringify(icons));
+}
+
 export default function Sidebar({ user, activeCompany, companies, workTypes, crmTerms, isOpen, onToggle, onSwitchCompany, currentPath, mobileOpen, onCloseMobile }: SidebarProps) {
   const { logout, refreshUser } = useAuth();
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [prefsHidden, setPrefsHidden] = useState<Set<string>>(new Set(user.sidebarHiddenItems || []));
+  const [customLabels, setCustomLabels] = useState<Record<string, string>>(loadCustomLabels);
+  const [customIcons, setCustomIcons] = useState<Record<string, string>>(loadCustomIcons);
   const [navOrder, setNavOrder] = useState<string[]>(loadNavOrder);
   const [dragNavKey, setDragNavKey] = useState<string | null>(null);
   const switcherRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const resolvedPath = location.pathname;
+
+  function getItemDefaultLabel(item: NavItem): string {
+    if (item.path === '/clients') {
+      return crmTerms.recordPlural && crmTerms.recordPlural.toLowerCase() !== crmTerms.leadPlural.toLowerCase()
+        ? crmTerms.recordPlural
+        : 'Clients';
+    }
+    return item.labelKey && crmTerms[item.labelKey] ? (crmTerms[item.labelKey] as string) : item.label;
+  }
+
+  function getItemLabel(item: NavItem): string {
+    return (customLabels[item.navKey] && customLabels[item.navKey].trim()) || getItemDefaultLabel(item);
+  }
+
+  function getItemIcon(item: NavItem): string {
+    return customIcons[item.navKey] || item.icon;
+  }
 
   const isClient = user.role === 'client';
 
@@ -345,11 +403,11 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
                     <div className={`nav-item nav-group-header ${resolvedPath === '/work' ? 'active' : ''}`}>
                       <Link
                         to="/work"
-                        title={item.label}
+                        title={getItemLabel(item)}
                         className="nav-group-title-link"
                       >
-                        <Icon name={item.icon} size={18} />
-                        <span>{item.label}</span>
+                        <Icon name={getItemIcon(item)} size={18} />
+                        <span>{getItemLabel(item)}</span>
                       </Link>
                       {isOpen && (
                         <button
@@ -377,17 +435,17 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
                             <Link
                               key={child.navKey}
                               to={child.path}
-                              title={child.label}
+                              title={getItemLabel(child)}
                               className={`nav-sub-item ${isChildActive ? 'active' : ''}`}
                               style={isModule && child.color ? ({ '--module-color': child.color } as React.CSSProperties) : undefined}
                             >
                               <Icon
-                                name={child.icon}
+                                name={getItemIcon(child)}
                                 size={15}
                                 className={isModule ? 'nav-item-module-icon' : undefined}
                                 style={isModule && child.color ? { color: child.color } : undefined}
                               />
-                              <span>{child.label}</span>
+                              <span>{getItemLabel(child)}</span>
                             </Link>
                           );
                         })}
@@ -406,21 +464,17 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
                   draggable
                   onDragStart={onNavDragStart(item.navKey)}
                   onDragEnd={onNavDragEnd}
-                  title={item.label}
+                  title={getItemLabel(item)}
                   className={`nav-item ${isActive ? 'active' : ''}`}
                   style={isWorkModule && item.color ? ({ '--module-color': item.color } as React.CSSProperties) : undefined}
                 >
                   <Icon
-                    name={item.icon}
+                    name={getItemIcon(item)}
                     size={18}
                     className={isWorkModule ? 'nav-item-module-icon' : undefined}
                     style={isWorkModule && item.color ? { color: item.color } : undefined}
                   />
-                  <span>
-                    {item.path === '/clients'
-                      ? (crmTerms.recordPlural && crmTerms.recordPlural.toLowerCase() !== crmTerms.leadPlural.toLowerCase() ? crmTerms.recordPlural : 'Clients')
-                      : (item.labelKey && crmTerms[item.labelKey] ? crmTerms[item.labelKey] : item.label)}
-                  </span>
+                  <span>{getItemLabel(item)}</span>
                 </Link>
               );
             })}
@@ -443,7 +497,7 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
               <Icon name="sliders-horizontal" size={16} />
               <span>Customize</span>
             </button>
-            <button className="sidebar-tool-btn" type="button" title="Reset sidebar order" onClick={handleReset}>
+            <button className="sidebar-tool-btn" type="button" title="Reset sidebar order and custom names/icons" onClick={handleReset}>
               <Icon name="rotate-ccw" size={16} />
               <span>Reset</span>
             </button>
@@ -466,15 +520,17 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
       {prefsOpen && (
         <SidebarPrefsDrawer
           hidden={prefsHidden}
-          onToggle={(key) => setPrefsHidden(prev => {
-            const next = new Set(prev);
-            if (next.has(key)) next.delete(key); else next.add(key);
-            return next;
-          })}
-          onSave={async () => {
+          customLabels={customLabels}
+          customIcons={customIcons}
+          onSave={async (newHidden, newLabels, newIcons) => {
             setSavingPrefs(true);
             try {
-              await api.post<{ ok: true }>('/dashboard/preferences/sidebar', { hiddenItems: [...prefsHidden] });
+              await api.post<{ ok: true }>('/dashboard/preferences/sidebar', { hiddenItems: [...newHidden] });
+              saveCustomLabels(newLabels);
+              saveCustomIcons(newIcons);
+              setCustomLabels(newLabels);
+              setCustomIcons(newIcons);
+              setPrefsHidden(newHidden);
               handlePrefsSave();
             } catch (err) {
               console.error('Failed to save sidebar preferences', err);
@@ -542,28 +598,75 @@ function getDragAfterElement(container: HTMLElement, y: number): HTMLElement | n
 
 interface PrefsDrawerProps {
   hidden: Set<string>;
-  onToggle: (key: string) => void;
-  onSave: () => Promise<void>;
+  customLabels: Record<string, string>;
+  customIcons: Record<string, string>;
+  onSave: (hidden: Set<string>, labels: Record<string, string>, icons: Record<string, string>) => Promise<void>;
   onCancel: () => void;
   saving: boolean;
   navItems: NavItem[];
   crmTerms: CrmTerms;
 }
 
-function SidebarPrefsDrawer({ hidden, onToggle, onSave, onCancel, saving, navItems, crmTerms }: PrefsDrawerProps) {
-  function getLabel(item: NavItem): string {
-    if (item.labelKey && crmTerms[item.labelKey]) return crmTerms[item.labelKey] as string;
-    return item.label;
+function SidebarPrefsDrawer({ hidden, customLabels, customIcons, onSave, onCancel, saving, navItems, crmTerms }: PrefsDrawerProps) {
+  const [draftHidden, setDraftHidden] = useState<Set<string>>(() => new Set(hidden));
+  const [draftLabels, setDraftLabels] = useState<Record<string, string>>(() => ({ ...customLabels }));
+  const [draftIcons, setDraftIcons] = useState<Record<string, string>>(() => ({ ...customIcons }));
+  const [activeIconKey, setActiveIconKey] = useState<string | null>(null);
+
+  function getDefaultLabel(item: NavItem): string {
+    if (item.path === '/clients') {
+      return crmTerms.recordPlural && crmTerms.recordPlural.toLowerCase() !== crmTerms.leadPlural.toLowerCase()
+        ? crmTerms.recordPlural
+        : 'Clients';
+    }
+    return item.labelKey && crmTerms[item.labelKey] ? (crmTerms[item.labelKey] as string) : item.label;
+  }
+
+  function handleToggle(key: string) {
+    setDraftHidden(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  function handleLabelChange(key: string, val: string) {
+    setDraftLabels(prev => ({ ...prev, [key]: val }));
+  }
+
+  function handleIconSelect(key: string, iconName: string) {
+    setDraftIcons(prev => ({ ...prev, [key]: iconName }));
+    setActiveIconKey(null);
+  }
+
+  function handleResetItem(item: NavItem) {
+    setDraftLabels(prev => {
+      const next = { ...prev };
+      delete next[item.navKey];
+      return next;
+    });
+    setDraftIcons(prev => {
+      const next = { ...prev };
+      delete next[item.navKey];
+      return next;
+    });
+    if (activeIconKey === item.navKey) setActiveIconKey(null);
   }
 
   // Close on Escape key
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') onCancel();
+      if (e.key === 'Escape') {
+        if (activeIconKey) {
+          setActiveIconKey(null);
+        } else {
+          onCancel();
+        }
+      }
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onCancel]);
+  }, [onCancel, activeIconKey]);
 
   return createPortal(
     <div
@@ -584,7 +687,7 @@ function SidebarPrefsDrawer({ hidden, onToggle, onSave, onCancel, saving, navIte
       <div
         className="sidebar-preferences-drawer open"
         style={{
-          width: '420px',
+          width: '460px',
           maxWidth: '100vw',
           height: '100vh',
           background: 'var(--panel, #0f172a)',
@@ -598,14 +701,17 @@ function SidebarPrefsDrawer({ hidden, onToggle, onSave, onCancel, saving, navIte
         onClick={(e) => e.stopPropagation()}
       >
         <form
-          onSubmit={(e) => { e.preventDefault(); void onSave(); }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void onSave(draftHidden, draftLabels, draftIcons);
+          }}
           style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '1.25rem' }}
         >
           <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border)', paddingBottom: '0.85rem' }}>
             <div>
               <span className="eyebrow" style={{ fontSize: '0.65rem', letterSpacing: '0.08em', color: 'var(--gold)' }}>Navigation</span>
               <h2 style={{ margin: '0.2rem 0 0.2rem', fontSize: '1.25rem', fontWeight: 800 }}>Customize sidebar</h2>
-              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--muted)' }}>Show only the tools you use. Permissions are not affected.</p>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--muted)' }}>Change icons, rename items, and reorder or toggle visibility.</p>
             </div>
             <button
               className="modal-close"
@@ -623,7 +729,7 @@ function SidebarPrefsDrawer({ hidden, onToggle, onSave, onCancel, saving, navIte
             style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: '0.5rem',
+              gap: '0.65rem',
               overflowY: 'auto',
               flexGrow: 1,
               paddingRight: '0.35rem',
@@ -631,55 +737,192 @@ function SidebarPrefsDrawer({ hidden, onToggle, onSave, onCancel, saving, navIte
           >
             {navItems.map(item => {
               const key = item.navKey;
-              const isChecked = !hidden.has(key);
+              const isChecked = !draftHidden.has(key);
+              const defaultName = getDefaultLabel(item);
+              const customName = draftLabels[key] !== undefined ? draftLabels[key] : '';
+              const effectiveIcon = draftIcons[key] || item.icon;
+              const isCustomized = (draftLabels[key] !== undefined && draftLabels[key].trim() !== '' && draftLabels[key] !== defaultName) || Boolean(draftIcons[key]);
+              const isPickerOpen = activeIconKey === key;
+
               return (
-                <label
+                <div
                   key={key}
-                  className="sidebar-preference-row"
+                  className="sidebar-preference-card"
                   style={{
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.75rem 0.9rem',
+                    flexDirection: 'column',
                     border: '1px solid var(--border)',
                     borderRadius: '10px',
                     background: isChecked ? 'color-mix(in srgb, var(--gold) 4%, var(--panel))' : 'var(--bg-soft)',
-                    cursor: 'pointer',
                     transition: 'all 0.15s ease',
+                    overflow: 'hidden',
                   }}
                 >
-                  <span
-                    className="sidebar-preference-icon"
+                  <div
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '8px',
-                      background: isChecked ? 'color-mix(in srgb, var(--gold) 12%, var(--panel))' : 'var(--bg-soft)',
-                      color: isChecked ? 'var(--gold)' : 'var(--muted)',
-                      border: '1px solid var(--border)',
-                      flexShrink: 0,
+                      gap: '0.65rem',
+                      padding: '0.65rem 0.85rem',
                     }}
                   >
-                    <Icon name={item.icon} size={16} style={item.color ? { color: item.color } : undefined} />
-                  </span>
-                  <span style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minWidth: 0 }}>
-                    <strong style={{ fontSize: '0.88rem', color: isChecked ? 'var(--text)' : 'var(--muted)', fontWeight: 700 }}>
-                      {getLabel(item)}
-                    </strong>
-                    <small style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
-                      {isChecked ? 'Visible in sidebar' : 'Hidden from sidebar'}
-                    </small>
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={() => onToggle(key)}
-                    style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--gold)' }}
-                  />
-                </label>
+                    {/* Icon trigger button */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveIconKey(isPickerOpen ? null : key)}
+                      title="Click to choose a custom icon"
+                      style={{
+                        position: 'relative',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '8px',
+                        background: isPickerOpen ? 'var(--gold)' : (isChecked ? 'color-mix(in srgb, var(--gold) 14%, var(--panel))' : 'var(--panel)'),
+                        color: isPickerOpen ? '#000' : (isChecked ? 'var(--gold)' : 'var(--muted)'),
+                        border: isPickerOpen ? '1px solid var(--gold)' : '1px solid var(--border)',
+                        flexShrink: 0,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <Icon name={effectiveIcon} size={16} style={!isPickerOpen && item.color ? { color: item.color } : undefined} />
+                      <span
+                        style={{
+                          position: 'absolute',
+                          bottom: '-2px',
+                          right: '-2px',
+                          background: 'var(--panel)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '50%',
+                          width: '12px',
+                          height: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '8px',
+                        }}
+                      >
+                        ✏️
+                      </span>
+                    </button>
+
+                    {/* Label Input */}
+                    <div style={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <input
+                        type="text"
+                        value={customName}
+                        placeholder={defaultName}
+                        onChange={(e) => handleLabelChange(key, e.target.value)}
+                        title={`Rename ${defaultName}`}
+                        style={{
+                          width: '100%',
+                          padding: '4px 8px',
+                          fontSize: '0.86rem',
+                          fontWeight: 600,
+                          borderRadius: '6px',
+                          border: '1px solid var(--border)',
+                          background: 'var(--bg-soft, #0b1120)',
+                          color: isChecked ? 'var(--text)' : 'var(--muted)',
+                          outline: 'none',
+                        }}
+                      />
+                      <small style={{ fontSize: '0.68rem', color: 'var(--muted)', paddingLeft: '2px' }}>
+                        Default: {defaultName}
+                      </small>
+                    </div>
+
+                    {/* Revert / Reset Item Button */}
+                    {isCustomized && (
+                      <button
+                        type="button"
+                        onClick={() => handleResetItem(item)}
+                        title="Revert name and icon to default"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--muted)',
+                          cursor: 'pointer',
+                          padding: '4px',
+                          borderRadius: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Icon name="rotate-ccw" size={14} />
+                      </button>
+                    )}
+
+                    {/* Visibility Checkbox */}
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => handleToggle(key)}
+                      title={isChecked ? 'Visible in sidebar' : 'Hidden from sidebar'}
+                      style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--gold)', flexShrink: 0 }}
+                    />
+                  </div>
+
+                  {/* Inline Icon Picker Grid */}
+                  {isPickerOpen && (
+                    <div
+                      style={{
+                        padding: '0.65rem 0.85rem',
+                        borderTop: '1px solid var(--border)',
+                        background: 'rgba(0,0,0,0.25)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gold)' }}>Choose an icon</span>
+                        <button
+                          type="button"
+                          onClick={() => setActiveIconKey(null)}
+                          style={{ background: 'none', border: 'none', fontSize: '0.72rem', color: 'var(--muted)', cursor: 'pointer' }}
+                        >
+                          Close
+                        </button>
+                      </div>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(8, 1fr)',
+                          gap: '6px',
+                          maxHeight: '140px',
+                          overflowY: 'auto',
+                          paddingRight: '2px',
+                        }}
+                      >
+                        {CURATED_NAV_ICONS.map(iconName => {
+                          const isSelected = effectiveIcon === iconName;
+                          return (
+                            <button
+                              key={iconName}
+                              type="button"
+                              onClick={() => handleIconSelect(key, iconName)}
+                              title={iconName}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                height: '32px',
+                                borderRadius: '6px',
+                                border: isSelected ? '1px solid var(--gold)' : '1px solid var(--border)',
+                                background: isSelected ? 'var(--gold)' : 'var(--panel)',
+                                color: isSelected ? '#000' : 'var(--text)',
+                                cursor: 'pointer',
+                                transition: 'all 0.1s ease',
+                              }}
+                            >
+                              <Icon name={iconName} size={15} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
