@@ -687,10 +687,10 @@ function SidebarPrefsDrawer({ hidden, customLabels, customIcons, onSave, onCance
       <div
         className="sidebar-preferences-drawer open"
         style={{
-          width: '460px',
+          width: '420px',
           maxWidth: '100vw',
           height: '100vh',
-          background: 'var(--panel, #0f172a)',
+          background: 'var(--panel)',
           borderLeft: '1px solid var(--border)',
           display: 'flex',
           flexDirection: 'column',
@@ -711,7 +711,7 @@ function SidebarPrefsDrawer({ hidden, customLabels, customIcons, onSave, onCance
             <div>
               <span className="eyebrow" style={{ fontSize: '0.65rem', letterSpacing: '0.08em', color: 'var(--gold)' }}>Navigation</span>
               <h2 style={{ margin: '0.2rem 0 0.2rem', fontSize: '1.25rem', fontWeight: 800 }}>Customize sidebar</h2>
-              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--muted)' }}>Change icons, rename items, and reorder or toggle visibility.</p>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--muted)' }}>Show only the tools you use. Click icon or text to customize.</p>
             </div>
             <button
               className="modal-close"
@@ -729,7 +729,7 @@ function SidebarPrefsDrawer({ hidden, customLabels, customIcons, onSave, onCance
             style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: '0.65rem',
+              gap: '0.5rem',
               overflowY: 'auto',
               flexGrow: 1,
               paddingRight: '0.35rem',
@@ -739,159 +739,148 @@ function SidebarPrefsDrawer({ hidden, customLabels, customIcons, onSave, onCance
               const key = item.navKey;
               const isChecked = !draftHidden.has(key);
               const defaultName = getDefaultLabel(item);
-              const customName = draftLabels[key] !== undefined ? draftLabels[key] : '';
+              const customName = draftLabels[key];
               const effectiveIcon = draftIcons[key] || item.icon;
-              const isCustomized = (draftLabels[key] !== undefined && draftLabels[key].trim() !== '' && draftLabels[key] !== defaultName) || Boolean(draftIcons[key]);
+              const isCustomized = (customName !== undefined && customName.trim() !== '' && customName !== defaultName) || Boolean(draftIcons[key]);
               const isPickerOpen = activeIconKey === key;
 
               return (
                 <div
                   key={key}
-                  className="sidebar-preference-card"
+                  className="sidebar-preference-row"
                   style={{
+                    position: 'relative',
                     display: 'flex',
-                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.75rem 0.9rem',
                     border: '1px solid var(--border)',
                     borderRadius: '10px',
                     background: isChecked ? 'color-mix(in srgb, var(--gold) 4%, var(--panel))' : 'var(--bg-soft)',
                     transition: 'all 0.15s ease',
-                    overflow: 'hidden',
                   }}
                 >
-                  <div
+                  {/* Icon picker trigger button */}
+                  <button
+                    type="button"
+                    onClick={() => setActiveIconKey(isPickerOpen ? null : key)}
+                    title="Click to choose a custom icon"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '0.65rem',
-                      padding: '0.65rem 0.85rem',
+                      justifyContent: 'center',
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      background: isPickerOpen
+                        ? 'var(--gold)'
+                        : (isChecked ? 'color-mix(in srgb, var(--gold) 12%, var(--panel))' : 'var(--bg-soft)'),
+                      color: isPickerOpen ? '#000' : (isChecked ? 'var(--gold)' : 'var(--muted)'),
+                      border: isPickerOpen ? '1px solid var(--gold)' : '1px solid var(--border)',
+                      flexShrink: 0,
+                      cursor: 'pointer',
+                      padding: 0,
+                      transition: 'all 0.15s ease',
                     }}
                   >
-                    {/* Icon trigger button */}
+                    <Icon name={effectiveIcon} size={16} style={!isPickerOpen && item.color ? { color: item.color } : undefined} />
+                  </button>
+
+                  {/* Inline editable label text */}
+                  <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minWidth: 0, gap: '1px' }}>
+                    <input
+                      type="text"
+                      value={customName !== undefined ? customName : defaultName}
+                      onChange={(e) => handleLabelChange(key, e.target.value)}
+                      placeholder={defaultName}
+                      title="Click to rename"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        borderBottom: '1px dashed transparent',
+                        borderRadius: 0,
+                        color: isChecked ? 'var(--text)' : 'var(--muted)',
+                        fontSize: '0.88rem',
+                        fontWeight: 700,
+                        padding: '0',
+                        margin: 0,
+                        outline: 'none',
+                        width: '100%',
+                        fontFamily: 'inherit',
+                        boxShadow: 'none',
+                      }}
+                      onFocus={(e) => { e.currentTarget.style.borderBottomColor = 'var(--gold)'; }}
+                      onBlur={(e) => { e.currentTarget.style.borderBottomColor = 'transparent'; }}
+                    />
+                    <small style={{ fontSize: '0.72rem', color: 'var(--muted)', paddingLeft: '1px' }}>
+                      {isChecked ? 'Visible in sidebar' : 'Hidden from sidebar'}
+                    </small>
+                  </div>
+
+                  {/* Revert button if customized */}
+                  {isCustomized && (
                     <button
                       type="button"
-                      onClick={() => setActiveIconKey(isPickerOpen ? null : key)}
-                      title="Click to choose a custom icon"
+                      onClick={() => handleResetItem(item)}
+                      title="Revert name and icon to default"
                       style={{
-                        position: 'relative',
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--muted)',
+                        cursor: 'pointer',
+                        padding: '4px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        width: '34px',
-                        height: '34px',
-                        borderRadius: '8px',
-                        background: isPickerOpen ? 'var(--gold)' : (isChecked ? 'color-mix(in srgb, var(--gold) 14%, var(--panel))' : 'var(--panel)'),
-                        color: isPickerOpen ? '#000' : (isChecked ? 'var(--gold)' : 'var(--muted)'),
-                        border: isPickerOpen ? '1px solid var(--gold)' : '1px solid var(--border)',
                         flexShrink: 0,
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
                       }}
                     >
-                      <Icon name={effectiveIcon} size={16} style={!isPickerOpen && item.color ? { color: item.color } : undefined} />
-                      <span
-                        style={{
-                          position: 'absolute',
-                          bottom: '-2px',
-                          right: '-2px',
-                          background: 'var(--panel)',
-                          border: '1px solid var(--border)',
-                          borderRadius: '50%',
-                          width: '12px',
-                          height: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '8px',
-                        }}
-                      >
-                        ✏️
-                      </span>
+                      <Icon name="rotate-ccw" size={13} />
                     </button>
+                  )}
 
-                    {/* Label Input */}
-                    <div style={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <input
-                        type="text"
-                        value={customName}
-                        placeholder={defaultName}
-                        onChange={(e) => handleLabelChange(key, e.target.value)}
-                        title={`Rename ${defaultName}`}
-                        style={{
-                          width: '100%',
-                          padding: '4px 8px',
-                          fontSize: '0.86rem',
-                          fontWeight: 600,
-                          borderRadius: '6px',
-                          border: '1px solid var(--border)',
-                          background: 'var(--bg-soft, #0b1120)',
-                          color: isChecked ? 'var(--text)' : 'var(--muted)',
-                          outline: 'none',
-                        }}
-                      />
-                      <small style={{ fontSize: '0.68rem', color: 'var(--muted)', paddingLeft: '2px' }}>
-                        Default: {defaultName}
-                      </small>
-                    </div>
+                  {/* Visibility Checkbox */}
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => handleToggle(key)}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--gold)', flexShrink: 0 }}
+                  />
 
-                    {/* Revert / Reset Item Button */}
-                    {isCustomized && (
-                      <button
-                        type="button"
-                        onClick={() => handleResetItem(item)}
-                        title="Revert name and icon to default"
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--muted)',
-                          cursor: 'pointer',
-                          padding: '4px',
-                          borderRadius: '4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Icon name="rotate-ccw" size={14} />
-                      </button>
-                    )}
-
-                    {/* Visibility Checkbox */}
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => handleToggle(key)}
-                      title={isChecked ? 'Visible in sidebar' : 'Hidden from sidebar'}
-                      style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--gold)', flexShrink: 0 }}
-                    />
-                  </div>
-
-                  {/* Inline Icon Picker Grid */}
+                  {/* Floating Icon Picker Popup */}
                   {isPickerOpen && (
                     <div
                       style={{
-                        padding: '0.65rem 0.85rem',
-                        borderTop: '1px solid var(--border)',
-                        background: 'rgba(0,0,0,0.25)',
+                        position: 'absolute',
+                        top: 'calc(100% + 4px)',
+                        left: '0.9rem',
+                        width: '280px',
+                        background: 'var(--panel)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '10px',
+                        boxShadow: '0 12px 32px rgba(0, 0, 0, 0.35)',
+                        padding: '8px',
+                        zIndex: 1000,
                       }}
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gold)' }}>Choose an icon</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gold)' }}>Select Icon</span>
                         <button
                           type="button"
                           onClick={() => setActiveIconKey(null)}
                           style={{ background: 'none', border: 'none', fontSize: '0.72rem', color: 'var(--muted)', cursor: 'pointer' }}
                         >
-                          Close
+                          ✕
                         </button>
                       </div>
                       <div
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: 'repeat(8, 1fr)',
-                          gap: '6px',
-                          maxHeight: '140px',
+                          gridTemplateColumns: 'repeat(6, 1fr)',
+                          gap: '5px',
+                          maxHeight: '150px',
                           overflowY: 'auto',
-                          paddingRight: '2px',
                         }}
                       >
                         {CURATED_NAV_ICONS.map(iconName => {
@@ -906,13 +895,14 @@ function SidebarPrefsDrawer({ hidden, customLabels, customIcons, onSave, onCance
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
+                                width: '32px',
                                 height: '32px',
                                 borderRadius: '6px',
                                 border: isSelected ? '1px solid var(--gold)' : '1px solid var(--border)',
-                                background: isSelected ? 'var(--gold)' : 'var(--panel)',
+                                background: isSelected ? 'var(--gold)' : 'var(--bg-soft)',
                                 color: isSelected ? '#000' : 'var(--text)',
                                 cursor: 'pointer',
-                                transition: 'all 0.1s ease',
+                                padding: 0,
                               }}
                             >
                               <Icon name={iconName} size={15} />
