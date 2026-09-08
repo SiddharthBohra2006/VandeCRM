@@ -608,7 +608,7 @@ export default function WorkCenterPage() {
                   { value: 'all', label: 'All status' },
                 ]}
                 variant="compact"
-                style={{ minWidth: 105 }}
+                style={{ minWidth: 80 }}
               />
             </div>
 
@@ -625,7 +625,7 @@ export default function WorkCenterPage() {
                   ...users.map(u => ({ value: u._id, label: u.name })),
                 ]}
                 variant="compact"
-                style={{ minWidth: 130 }}
+                style={{ minWidth: 105 }}
               />
             </div>
 
@@ -642,7 +642,7 @@ export default function WorkCenterPage() {
                   { value: 'low', label: 'Low' },
                 ]}
                 variant="compact"
-                style={{ minWidth: 120 }}
+                style={{ minWidth: 90 }}
               />
             </div>
 
@@ -660,7 +660,7 @@ export default function WorkCenterPage() {
                   { value: 'overdue', label: 'Overdue' },
                 ]}
                 variant="compact"
-                style={{ minWidth: 105 }}
+                style={{ minWidth: 85 }}
               />
             </div>
 
@@ -678,7 +678,7 @@ export default function WorkCenterPage() {
                   { value: 'owner', label: 'Owner' },
                 ]}
                 variant="compact"
-                style={{ minWidth: 175 }}
+                style={{ minWidth: 140 }}
               />
             </div>
           </div>

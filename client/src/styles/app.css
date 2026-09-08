@@ -12223,34 +12223,36 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .work-filter-selects-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
   flex-wrap: wrap;
+  flex: 1 1 auto;
 }
 
 .work-filter-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
+  gap: 5px;
+  font-size: 0.78rem;
   font-weight: 600;
   color: var(--muted, #64748b);
+  white-space: nowrap;
 }
 
 .work-filter-item .app-select-button {
   height: 32px !important;
   min-height: 32px !important;
-  padding: 0 10px !important;
+  padding: 0 8px !important;
   border-radius: 8px !important;
   background: var(--bg-soft, #f8fafc) !important;
   border: 1px solid var(--border) !important;
-  font-size: 0.8rem !important;
+  font-size: 0.78rem !important;
   font-weight: 600 !important;
   color: var(--text) !important;
 }
@@ -12263,8 +12265,8 @@ html, body {
   position: relative;
   display: flex;
   align-items: center;
-  min-width: 250px;
-  max-width: 320px;
+  flex: 0 1 230px;
+  min-width: 170px;
   margin-left: auto;
 }
 
@@ -12278,12 +12280,12 @@ html, body {
 .work-search-input {
   width: 100%;
   height: 32px;
-  padding: 0 12px 0 32px;
+  padding: 0 12px 0 30px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--input, #ffffff);
   color: var(--text);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -12291,6 +12293,20 @@ html, body {
 .work-search-input:focus {
   border-color: var(--gold);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 15%, transparent);
+}
+
+@media (max-width: 900px) {
+  .work-filter-controls-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .work-search-box {
+    margin-left: 0;
+    max-width: 100%;
+    width: 100%;
+    flex: 1 1 100%;
+  }
 }
 
 /* KPI Quick Stats Row */
