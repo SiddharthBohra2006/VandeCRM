@@ -49,6 +49,8 @@ export interface CompanyAttachment {
   mimeType?: string;
   size: number;
   notes?: string;
+  storageProvider?: 'crm' | 'google_drive';
+  externalUrl?: string;
   uploadedBy?: {
     _id: string;
     name: string;
@@ -84,6 +86,7 @@ export interface CompanyDetailResponse {
   campaigns: any[];
   activities: any[];
   attachments: CompanyAttachment[];
+  fileStorage: { provider: 'crm' | 'google_drive'; ready: boolean; folderUrl?: string; missing: string[] };
   metrics: CompanyMetrics;
   users: AssignedUser[];
 }
@@ -117,12 +120,14 @@ export interface CompanyInput {
 }
 
 export const companiesApi = {
-  list: () => api.get<{ ok: true; data: Company[]; users: AssignedUser[] }>('/companies'),
+  list: () => api.get<{ ok: true; data: Company[]; users: AssignedUser[] }>('/companies', { skipCache: true }),
   get: (id: string) => api.get<CompanyDetailResponse>(`/companies/${id}`),
   create: (data: CompanyInput) => api.post<{ ok: true; data: Company }>('/companies', data),
   update: (id: string, data: Partial<CompanyInput>) => api.put<{ ok: true; data: Company }>(`/companies/${id}`, data),
   switch: (companyId: string) => api.post<{ ok: true; token: string; activeCompany: any }>('/companies/switch', { companyId }),
   setMain: (id: string) => api.post<{ ok: true }>(`/companies/${id}/main`, {}),
+  setStatus: (id: string, status: 'active' | 'inactive') =>
+    api.post<{ ok: true; data: Pick<Company, '_id' | 'status' | 'updatedAt'> }>(`/companies/${id}/status`, { status }),
   updateCollaborators: (id: string, userIds: string[]) =>
     api.post<{ ok: true }>(`/companies/${id}/collaborators`, { userIds }),
   addCollaborator: (id: string, userId: string) =>
@@ -130,7 +135,7 @@ export const companiesApi = {
   removeCollaborator: (id: string, userId: string) =>
     api.post<{ ok: true }>(`/companies/${id}/collaborators/remove`, { userId }),
   uploadAttachment: (id: string, data: { category: string; originalName: string; fileData: string; notes?: string }) =>
-    api.post<{ ok: true; data: CompanyAttachment }>(`/companies/${id}/attachments`, data),
+    api.post<{ ok: true; attachment: CompanyAttachment }>(`/companies/${id}/attachments`, data),
   deleteAttachment: (id: string, attachmentId: string) =>
     api.delete<{ ok: true }>(`/companies/${id}/attachments/${attachmentId}`),
   regenerateApiKey: (id: string) => api.post<{ ok: true; apiKey: string }>(`/companies/${id}/api-key/regenerate`, {}),

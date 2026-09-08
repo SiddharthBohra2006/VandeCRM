@@ -12,7 +12,7 @@ export default function IntegrationsPage() {
 
   const [data, setData] = useState<IntegrationsResponse | null>(null);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'meta' | 'ga4' | 'webhook' | 'schedule'>('meta');
+  const [activeTab, setActiveTab] = useState<'meta' | 'ga4' | 'drive' | 'webhook' | 'schedule'>('meta');
 
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -42,6 +42,8 @@ export default function IntegrationsPage() {
   const [metaTokenExpiresAt, setMetaTokenExpiresAt] = useState('');
   const [ga4PropertyId, setGa4PropertyId] = useState('');
   const [ga4ServiceAccountJson, setGa4ServiceAccountJson] = useState('');
+  const [googleDriveFolderLink, setGoogleDriveFolderLink] = useState('');
+  const [googleDriveServiceAccountJson, setGoogleDriveServiceAccountJson] = useState('');
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncInterval, setSyncInterval] = useState(360);
   const [apiKeyStatus, setApiKeyStatus] = useState<'active' | 'disabled'>('active');
@@ -78,6 +80,8 @@ export default function IntegrationsPage() {
     setMetaTokenExpiresAt(company.metaTokenExpiresAt ? company.metaTokenExpiresAt.slice(0, 10) : '');
     setGa4PropertyId(company.ga4PropertyId || '');
     setGa4ServiceAccountJson('');
+    setGoogleDriveFolderLink(company.googleDriveFolderLink || '');
+    setGoogleDriveServiceAccountJson('');
     setSyncEnabled(Boolean(company.integrationSyncEnabled));
     setSyncInterval(company.integrationSyncIntervalMinutes || 360);
     setApiKeyStatus(company.apiKeyStatus || 'active');
@@ -105,6 +109,25 @@ export default function IntegrationsPage() {
       await loadIntegrations();
     } catch (err: any) {
       setError(err.message || 'Failed to save credentials');
+    } finally {
+      setSavingCredentials(false);
+    }
+  }
+
+  async function handleSaveDrive(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedCompanyId) return;
+    try {
+      setSavingCredentials(true);
+      setError('');
+      await integrationsApi.saveCredentials(selectedCompanyId, {
+        googleDriveFolderLink,
+        googleDriveServiceAccountJson,
+      });
+      setSuccess('Google Drive storage connected. New files will upload there automatically.');
+      await loadIntegrations();
+    } catch (err: any) {
+      setError(err.message || 'Failed to connect Google Drive');
     } finally {
       setSavingCredentials(false);
     }
@@ -261,7 +284,7 @@ export default function IntegrationsPage() {
   const webhookUrl = `${window.location.origin}/api/v1/leads`;
 
   return (
-    <div className="page-container">
+    <div className="page-container experience-page integrations-page">
       {error && <div className="auth-error" style={{ marginBottom: '1rem' }}>{error}</div>}
       {success && <div className="notice success" style={{ marginBottom: '1rem' }}>{success}</div>}
 
@@ -270,7 +293,7 @@ export default function IntegrationsPage() {
           <p className="eyebrow" style={{ margin: 0, fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 800 }}>Data Sync</p>
           <h1 style={{ margin: '0.2rem 0', fontSize: '1.5rem', fontFamily: 'var(--font-display)' }}>API & Webhook Integrations</h1>
           <p className="page-subtitle" style={{ margin: 0, fontSize: '0.82rem', color: 'var(--muted)' }}>
-            Configure Meta Ads, Google Analytics 4, and universal webhook pipes.
+            Connect campaign data, Google Drive file storage, and inbound lead sources.
           </p>
         </div>
 
@@ -288,7 +311,7 @@ export default function IntegrationsPage() {
               const doneCount = entry.items.filter(i => i.done).length;
               return (
                 <option key={c._id} value={c._id}>
-                  {c.name} ({doneCount}/6 configured)
+                  {c.name} ({doneCount}/{entry.items.length} configured)
                 </option>
               );
             })}
@@ -310,6 +333,7 @@ export default function IntegrationsPage() {
         {[
           { id: 'meta', title: 'Meta Ads Manager', tag: 'META ADS FORM', desc: 'Sync spend figures, clicks, and ingest Meta lead forms.', color: '#1877f2', icon: 'f' },
           { id: 'ga4', title: 'Google Analytics 4', tag: 'GA4 INGESTION', desc: 'Pulls campaign traffic volume and GA4 conversion counts.', color: '#f4b400', icon: 'G' },
+          { id: 'drive', title: 'Google Drive', tag: 'FILE STORAGE', desc: 'Store new lead and company files in a shared Drive folder.', color: '#0f9d58', icon: 'D' },
           { id: 'webhook', title: 'Inbound Webhook Pipe', tag: 'API ENDPOINT', desc: 'A universal inbound API route accepting leads from any website.', color: 'var(--gold)', icon: '⚡' },
           { id: 'schedule', title: 'Schedules & Logs', tag: 'DIAGNOSTICS', desc: 'Set automated sync timers, check health status, and read logs.', color: 'var(--teal)', icon: '⏱' },
         ].map(card => (
@@ -576,7 +600,71 @@ export default function IntegrationsPage() {
           </div>
         )}
 
-        {/* TAB 3: WEBHOOK */}
+        {/* GOOGLE DRIVE */}
+        {activeTab === 'drive' && (
+          <div className="integration-setup-grid">
+            <form onSubmit={handleSaveDrive} className="integration-form-stack">
+              <div className="integration-section-title drive">
+                <div>
+                  <h3>Google Drive file storage</h3>
+                  <p>New files uploaded from leads and companies will appear in this folder.</p>
+                </div>
+                <span className={`connection-pill ${selectedCompany?.googleDriveFolderLink && selectedCompany?.hasGoogleDriveJson ? 'connected' : ''}`}>
+                  {selectedCompany?.googleDriveFolderLink && selectedCompany?.hasGoogleDriveJson ? 'Connected' : 'Setup needed'}
+                </span>
+              </div>
+
+              <label className="integration-field">
+                Shared Drive folder URL
+                <input
+                  type="url"
+                  placeholder="https://drive.google.com/drive/folders/..."
+                  value={googleDriveFolderLink}
+                  onChange={e => setGoogleDriveFolderLink(e.target.value)}
+                  required
+                />
+                <small>Use one folder for this client workspace. Existing CRM files stay where they are.</small>
+              </label>
+
+              <label className="integration-field">
+                Google service account JSON
+                <textarea
+                  rows={7}
+                  placeholder={selectedCompany?.hasGoogleDriveJson ? 'Service account saved securely — leave blank to keep it' : 'Paste the full JSON key here'}
+                  value={googleDriveServiceAccountJson}
+                  onChange={e => setGoogleDriveServiceAccountJson(e.target.value)}
+                  style={{ fontFamily: 'monospace', fontSize: '0.74rem' }}
+                />
+                <small>Encrypted before it is stored. Leave blank to keep the saved key.</small>
+              </label>
+
+              <div className="integration-action-row">
+                <button className="btn primary" type="submit" disabled={savingCredentials}>
+                  {savingCredentials ? 'Connecting...' : 'Connect Drive storage'}
+                </button>
+                {selectedCompany?.googleDriveFolderLink && (
+                  <a className="btn outline" href={selectedCompany.googleDriveFolderLink} target="_blank" rel="noreferrer">
+                    Open folder
+                  </a>
+                )}
+              </div>
+            </form>
+
+            <div className="integration-guide">
+              <div className="integration-guide-step"><span>1</span><div><strong>Enable Google Drive API</strong><p>Use the same Google Cloud project as the service account.</p></div></div>
+              <div className="integration-guide-step"><span>2</span><div><strong>Share the folder</strong><p>Add the JSON key’s <code>client_email</code> as an Editor on the Drive folder.</p></div></div>
+              <div className="integration-guide-step"><span>3</span><div><strong>Paste and connect</strong><p>Uploads switch to Drive immediately after both checks are complete.</p></div></div>
+              <div className="drive-routing-note">
+                <strong>Automatic routing</strong>
+                <p>{selectedCompany?.googleDriveFolderLink && selectedCompany?.hasGoogleDriveJson
+                  ? 'Drive is ready. New uploads will be stored in the shared folder.'
+                  : 'Until setup is complete, uploads continue using CRM storage.'}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* WEBHOOK */}
         {activeTab === 'webhook' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem', alignItems: 'start' }}>
             <div>

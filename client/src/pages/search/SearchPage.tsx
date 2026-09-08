@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { searchApi, SearchResponse } from '../../api/search';
 import DatePicker from '../../components/DatePicker';
+import CustomSelect from '../../components/CustomSelect';
 
 const CATEGORIES = [
   { id: 'all',        label: 'Everything' },
@@ -149,21 +150,29 @@ export default function SearchPage() {
         <div className="sp-filters">
           <label className="sp-filter-label">
             Look in
-            <select className="sp-select" value={module} onChange={e => setModule(e.target.value)}>
-              <option value="">Every work module</option>
-              {data?.modules.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
+            <CustomSelect
+              value={module}
+              onChange={val => setModule(val)}
+              options={[
+                { value: '', label: 'Every work module' },
+                ...(data?.modules.map(m => ({ value: m.id, label: m.name })) || [])
+              ]}
+              variant="compact"
+            />
           </label>
 
           <label className="sp-filter-label">
             Date refers to
-            <select className="sp-select" value={dateField} onChange={e => setDateField(e.target.value)}>
-              <option value="updated">Last updated</option>
-              <option value="created">Created / Activity</option>
-              <option value="scheduled">Due / Scheduled</option>
-            </select>
+            <CustomSelect
+              value={dateField}
+              onChange={val => setDateField(val)}
+              options={[
+                { value: 'updated', label: 'Last updated' },
+                { value: 'created', label: 'Created / Activity' },
+                { value: 'scheduled', label: 'Due / Scheduled' }
+              ]}
+              variant="compact"
+            />
           </label>
 
           <label className="sp-filter-label">

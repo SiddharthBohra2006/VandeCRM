@@ -97,7 +97,16 @@ if (process.env.NODE_ENV === 'production') {
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.json({ limit: '10mb' }));
 
-app.get('/health', (req, res) => res.status(200).send('OK'));
+// Lightweight health-check endpoint for UptimeRobot / cron monitoring services (keeps Render free-tier alive)
+app.get(['/health', '/api/health', '/healthz'], (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'VandeCRM',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
+  });
+});
+app.head(['/health', '/api/health', '/healthz'], (req, res) => res.status(200).end());
 
 // ============================================
 // API ROUTES (JSON)

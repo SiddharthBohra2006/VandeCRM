@@ -1,71 +1,281 @@
+import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
+import {
+  Users,
+  Check,
+  BarChart2,
+  User,
+  FileText,
+  Trophy,
+  Sun,
+  Moon,
+  HelpCircle,
+} from 'lucide-react';
+import {
+  THEME_PRESETS,
+  getActiveThemePreset,
+  changeThemeWithAnimation,
+  applyThemePreset,
+  ThemePreset,
+} from '../theme';
+import '../styles/auth.css';
 
 export default function AuthLayout() {
+  const [themePreset, setThemePreset] = useState<ThemePreset>(() => getActiveThemePreset());
+
+  useEffect(() => {
+    // Detect system default if no explicit saved theme
+    const savedName = localStorage.getItem('theme-name');
+    if (!savedName) {
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const defaultPreset = THEME_PRESETS.find(p => p.type === (prefersDark ? 'dark' : 'light')) || THEME_PRESETS[0];
+      applyThemePreset(defaultPreset);
+      setThemePreset(defaultPreset);
+    }
+
+    const handleThemeChanged = (e: CustomEvent<ThemePreset>) => {
+      if (e.detail) {
+        setThemePreset(e.detail);
+      }
+    };
+
+    window.addEventListener('crm-theme-changed', handleThemeChanged as EventListener);
+    return () => window.removeEventListener('crm-theme-changed', handleThemeChanged as EventListener);
+  }, []);
+
+  function handleToggleTheme(e: React.MouseEvent) {
+    const isDark = themePreset.type === 'dark';
+    const nextType = isDark ? 'light' : 'dark';
+    const nextPreset = THEME_PRESETS.find(p => p.type === nextType) || (nextType === 'dark' ? THEME_PRESETS[0] : THEME_PRESETS[2]);
+    changeThemeWithAnimation(nextPreset, e);
+    setThemePreset(nextPreset);
+  }
+
+  const isDark = themePreset.type === 'dark';
+
   return (
-    <section className="login-shell">
+    <div className="login-shell">
+      {/* Background Decorative Ambient Contour Rings */}
+      <div className="auth-contour-top" aria-hidden="true">
+        <svg width="480" height="480" viewBox="0 0 480 480" fill="none">
+          <circle cx="360" cy="0" r="240" stroke="var(--gold, #F5A900)" strokeWidth="1.2" strokeOpacity={isDark ? 0.15 : 0.22} />
+          <circle cx="360" cy="0" r="330" stroke="var(--gold, #F5A900)" strokeWidth="1.2" strokeOpacity={isDark ? 0.08 : 0.12} />
+        </svg>
+      </div>
+
+      <div className="auth-contour-bottom" aria-hidden="true">
+        <svg width="340" height="340" viewBox="0 0 340 340" fill="none">
+          <circle cx="0" cy="340" r="180" stroke="var(--gold, #F5A900)" strokeWidth="1.2" strokeOpacity={isDark ? 0.15 : 0.18} />
+          <circle cx="0" cy="340" r="260" stroke="var(--gold, #F5A900)" strokeWidth="1.2" strokeOpacity={isDark ? 0.08 : 0.1} />
+        </svg>
+      </div>
+
       <div className="auth-workspace">
-        {/* Left: story / marketing panel */}
+        {/* Left: Storytelling panel */}
         <section className="auth-story">
-          <div className="brand auth-brand">
-            <span className="brand-mark" aria-hidden="true">V</span>
-            <span>Vande<span className="auth-gold">CRM</span></span>
-          </div>
+          <div className="auth-story-inner">
+            <div className="auth-story-top-group">
+              {/* Brand Logo */}
+              <div className="auth-brand">
+                <div className="brand-mark-box" aria-hidden="true">
+                  <span className="brand-mark-letter">V</span>
+                </div>
+                <span className="brand-name">
+                  Vande<span className="gold-tag">CRM</span>
+                </span>
+              </div>
 
-          <div className="auth-copy">
-            <p className="eyebrow">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
-              Built for agencies. Designed for growth.
-            </p>
-            <h1>Shape your pipeline around how your agency <span className="auth-gold">actually sells.</span></h1>
-            <p>Custom stages, labels, fields, CSV imports, and client activity in one focused workspace.</p>
-          </div>
+              {/* Tagline */}
+              <div className="auth-tagline">
+                BUILT FOR AGENCIES. DESIGNED FOR GROWTH.
+              </div>
 
-          {/* Pipeline preview mockup */}
-          <div className="auth-preview" aria-hidden="true">
-            <div className="preview-toolbar">
-              <span /><span /><span />
-              <small>Your pipeline, at a glance</small>
+              {/* Main Headline */}
+              <h1 className="auth-hero-title">
+                Turn client<br />
+                conversations into<br />
+                <span className="auth-gold-highlight">
+                  real growth.
+                  <svg className="brush-underline" viewBox="0 0 240 14" fill="none" aria-hidden="true">
+                    <path
+                      d="M 2 8 C 50 1, 150 2, 238 6 C 160 12, 60 12, 2 8 Z"
+                      fill="var(--accent, #F5A900)"
+                      fillOpacity={isDark ? 0.75 : 0.85}
+                    />
+                    <path
+                      d="M 8 9 C 60 4, 160 4, 230 7.5"
+                      stroke="var(--accent-dark, #D97706)"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+              </h1>
+
+              <p className="auth-hero-desc">
+                Manage your leads, clients, projects, meetings and team — all in one focused workspace.
+              </p>
+
+              {/* 2-Column Hero: Features List & Flowing S-Curve Pipeline */}
+              <div className="auth-hero-split">
+                {/* Left: 3 Agency Value Pillars */}
+                <div className="auth-features-list">
+                  <div className="auth-feature-item">
+                    <div className="auth-feature-icon amber">
+                      <Users size={20} strokeWidth={2.2} />
+                    </div>
+                    <div className="auth-feature-text">
+                      <strong>Track every lead</strong>
+                      <span>From first touch to final deal</span>
+                    </div>
+                  </div>
+
+                  <div className="auth-feature-item">
+                    <div className="auth-feature-icon green">
+                      <Check size={20} strokeWidth={2.5} />
+                    </div>
+                    <div className="auth-feature-text">
+                      <strong>Stay aligned</strong>
+                      <span>Tasks, meetings and team updates</span>
+                    </div>
+                  </div>
+
+                  <div className="auth-feature-item">
+                    <div className="auth-feature-icon purple">
+                      <BarChart2 size={20} strokeWidth={2.2} />
+                    </div>
+                    <div className="auth-feature-text">
+                      <strong>See the bigger picture</strong>
+                      <span>Clear insights for smarter decisions</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Flowing Pipeline with Continuous S-Curve */}
+                <div className="auth-pipeline-stage-area">
+                  {/* Background Dot Matrix Accent */}
+                  <div className="auth-pipeline-matrix" aria-hidden="true" />
+
+                  {/* Single Smooth Continuous S-Curve SVG */}
+                  <svg className="auth-continuous-svg" viewBox="0 0 260 320" width="260" height="320" fill="none" aria-hidden="true">
+                    {/* Continuous Winding S-Path connecting the 4 stage markers */}
+                    <path
+                      d="M 28,0 C 28,14 48,12 48,26 C 48,54 16,66 16,80 C 16,94 48,92 48,106 C 48,134 16,146 16,160 C 16,174 48,172 48,186 C 48,214 16,226 16,240 C 16,254 48,252 48,266 C 48,284 28,296 28,315"
+                      stroke={isDark ? 'rgba(255, 255, 255, 0.2)' : '#CBD5E1'}
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                    />
+
+                    {/* Amber Junction Node for New Lead */}
+                    <circle cx="48" cy="26" r="5" fill="#F5A900" stroke={isDark ? '#080D1A' : '#FFFFFF'} strokeWidth="2" />
+
+                    {/* Blue Junction Node for Qualified */}
+                    <circle cx="48" cy="106" r="5" fill="#3B82F6" stroke={isDark ? '#080D1A' : '#FFFFFF'} strokeWidth="2" />
+
+                    {/* Purple Junction Node for Proposal */}
+                    <circle cx="48" cy="186" r="5" fill="#A855F7" stroke={isDark ? '#080D1A' : '#FFFFFF'} strokeWidth="2" />
+
+                    {/* Green Junction Node for Won */}
+                    <circle cx="48" cy="266" r="5" fill="#10B981" stroke={isDark ? '#080D1A' : '#FFFFFF'} strokeWidth="2" />
+                  </svg>
+
+                  {/* Card 1: New Lead */}
+                  <div className="pipeline-node-card card-new-lead">
+                    <div className="pipeline-sparks" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                    <div className="pipeline-icon amber">
+                      <User size={16} />
+                    </div>
+                    <div className="pipeline-text">
+                      <strong>New Lead</strong>
+                      <span>Capture opportunities</span>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Qualified */}
+                  <div className="pipeline-node-card card-qualified">
+                    <div className="pipeline-icon blue">
+                      <FileText size={16} />
+                    </div>
+                    <div className="pipeline-text">
+                      <strong>Qualified</strong>
+                      <span>Move to next stage</span>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Proposal */}
+                  <div className="pipeline-node-card card-proposal">
+                    <div className="pipeline-icon purple">
+                      <FileText size={16} />
+                    </div>
+                    <div className="pipeline-text">
+                      <strong>Proposal</strong>
+                      <span>Send and track</span>
+                    </div>
+                  </div>
+
+                  {/* Card 4: Won */}
+                  <div className="pipeline-node-card card-won">
+                    <div className="pipeline-icon green">
+                      <Trophy size={16} />
+                    </div>
+                    <div className="pipeline-text">
+                      <strong>Won</strong>
+                      <span>Grow your business</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="preview-grid">
-              <div className="preview-column">
-                <strong>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                  New Lead <small>2</small>
-                </strong>
-                <div className="preview-card hot"><span>Website redesign</span><em>Rs. 85,000</em></div>
-                <div className="preview-card"><span>SEO audit</span><em>Rs. 22,000</em></div>
-              </div>
-              <div className="preview-column">
-                <strong>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                  Proposal <small>1</small>
-                </strong>
-                <div className="preview-card warm"><span>Retainer plan</span><em>Rs. 1,20,000</em></div>
-              </div>
-              <div className="preview-column">
-                <strong>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-                  Won <small>1</small>
-                </strong>
-                <div className="preview-card won"><span>Brand launch</span><em>Rs. 2,40,000</em></div>
-              </div>
-            </div>
-          </div>
 
-          <div className="auth-story-foot">
-            <span>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
-              Your workflow. Your way.
-            </span>
-            <span>VandeCRM</span>
+            {/* Bottom Slogan */}
+            <div className="auth-story-foot">
+              <span className="auth-foot-bar" />
+              <span className="auth-foot-text">YOUR WORKFLOW. YOUR WAY.</span>
+            </div>
           </div>
         </section>
 
-        {/* Right: form panel — each auth page renders inside here */}
-        <div className="login-panel">
-          <Outlet />
-        </div>
+        {/* Right: Form Panel */}
+        <section className="login-panel">
+          <div className="login-panel-top">
+            <button
+              type="button"
+              className="auth-theme-btn"
+              onClick={handleToggleTheme}
+              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {isDark ? <Moon size={17} /> : <Sun size={17} />}
+            </button>
+            <span className="auth-top-divider" aria-hidden="true" />
+            <a href="#help" className="auth-help-link" onClick={e => e.preventDefault()}>
+              <HelpCircle size={15} />
+              <span>Need help?</span>
+            </a>
+          </div>
+
+          <div className="login-panel-content">
+            <Outlet />
+          </div>
+
+          <div className="login-panel-footer">
+            <span className="login-footer-copy">
+              © 2026 VandeCRM. Built for your next chapter.
+            </span>
+            <div className="login-footer-badge">
+              <div className="footer-gold-dots" aria-hidden="true">
+                <span className="dot dot-1" />
+                <span className="dot dot-2" />
+              </div>
+              <span>More clients. Greater impact.</span>
+            </div>
+          </div>
+        </section>
       </div>
-    </section>
+    </div>
   );
 }

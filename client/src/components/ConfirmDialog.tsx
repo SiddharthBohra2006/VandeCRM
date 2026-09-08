@@ -121,7 +121,7 @@ export default function ConfirmDialog({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 99999,
+        zIndex: 100060,
         background: 'rgba(0, 0, 0, 0.65)',
         backdropFilter: 'blur(4px)',
         display: 'flex',

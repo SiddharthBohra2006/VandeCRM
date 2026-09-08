@@ -3,6 +3,12 @@ import { useSearchParams } from 'react-router-dom';
 import { auditApi, AuditLogEntry, AuditResponse } from '../../api/audit';
 import CustomSelect from '../../components/CustomSelect';
 
+function humanize(value: string) {
+  return value
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
 export default function AuditPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<AuditResponse | null>(null);
@@ -45,7 +51,7 @@ export default function AuditPage() {
   }
 
   return (
-    <div className="page-container">
+    <div className="page-container experience-page audit-page">
       {error && <div className="auth-error" style={{ marginBottom: '1rem' }}>{error}</div>}
 
       <section className="page-head" style={{ marginBottom: '1.5rem' }}>
@@ -57,7 +63,7 @@ export default function AuditPage() {
       </section>
 
       {/* Filter Bar */}
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1.25rem' }}>
+      <div className="audit-filters" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1.25rem' }}>
         <CustomSelect
           value={actionFilter}
           placeholder="All actions"
@@ -111,7 +117,7 @@ export default function AuditPage() {
                 <th style={{ padding: '0.75rem 1rem' }}>Action</th>
                 <th style={{ padding: '0.75rem 1rem' }}>Entity</th>
                 <th style={{ padding: '0.75rem 1rem' }}>Message</th>
-                <th style={{ padding: '0.75rem 1rem' }}>IP</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Details</th>
               </tr>
             </thead>
             <tbody>
@@ -141,11 +147,11 @@ export default function AuditPage() {
                         className="stage-badge"
                         style={{ backgroundColor: 'var(--teal)', fontSize: '0.65rem' }}
                       >
-                        {log.action}
+                        {humanize(log.action)}
                       </span>
                     </td>
                     <td style={{ padding: '0.75rem 1rem' }}>
-                      <strong>{log.entityType}</strong>
+                      <strong>{humanize(log.entityType)}</strong>
                       {log.entityName && (
                         <span style={{ display: 'block', color: 'var(--muted)', fontSize: '0.74rem' }}>
                           {log.entityName}
@@ -156,7 +162,10 @@ export default function AuditPage() {
                       {log.message || 'No message'}
                     </td>
                     <td style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--muted)' }}>
-                      {log.ipAddress || '—'}
+                      <details className="audit-technical-details">
+                        <summary>Technical</summary>
+                        <span>IP: {log.ipAddress || 'Unavailable'}</span>
+                      </details>
                     </td>
                   </tr>
                 ))

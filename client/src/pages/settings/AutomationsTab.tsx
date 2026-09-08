@@ -8,6 +8,7 @@ import { settingsApi, AutomationRule } from '../../api/settings';
 import { Stage, Label } from '../../types';
 import { WorkType } from '../../api/work';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import '../../styles/settings/automations-customization.css';
 
 interface Props {
   stages: Stage[];

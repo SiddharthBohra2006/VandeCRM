@@ -45,6 +45,8 @@ export interface TeamMember {
   role: string;
   customRole?: CustomRole | null;
   isActive: boolean;
+  assignedCompanies?: Array<{ _id: string; name: string; isMain?: boolean }>;
+  assignedCompanyIds?: string[];
   hiddenModules?: string[];
   lastLoginAt?: string | null;
   loginCount?: number;

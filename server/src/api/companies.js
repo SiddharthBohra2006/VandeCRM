@@ -13,6 +13,7 @@ const Attachment = require('../models/Attachment');
 const { calculateCompanyMetrics } = require('../utils/reporting');
 const { logAudit } = require('../utils/audit');
 const { ensureCrmDefaults } = require('../services/defaults');
+const { driveStatus, parseAttachmentPayload, readAttachment, storeAttachment } = require('../services/fileStorage');
 
 const router = express.Router();
 router.use(requireApiAuth);
@@ -76,13 +77,13 @@ router.get('/', async (req, res, next) => {
   try {
     const orgId = req.user.organization._id;
     const filter = { organization: orgId };
-    if (req.user.role === 'agent') {
+    if (!['admin', 'manager'].includes(req.user.role)) {
       filter.assignedUsers = req.user._id;
     }
 
     const [companyDocs, users] = await Promise.all([
       ClientCompany.find(filter).populate('assignedUsers accountOwner').sort({ name: 1 }),
-      User.find({ organization: orgId, isActive: { $ne: false } }).sort({ name: 1 }),
+      User.find({ organization: orgId, isActive: { $ne: false }, role: { $in: ['admin', 'manager', 'agent'] } }).select('_id name email role').sort({ name: 1 }),
     ]);
 
     const companyIds = companyDocs.map(c => c._id);
@@ -152,6 +153,7 @@ router.get('/:id', async (req, res, next) => {
       campaigns,
       activities,
       attachments,
+      fileStorage: driveStatus(company),
       metrics,
       users,
     });
@@ -291,6 +293,31 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
+// Archive/restore only changes status, leaving profile fields and integrations intact.
+router.post('/:id/status', async (req, res, next) => {
+  try {
+    if (!hasPermission(req.user, 'businesses.update')) {
+      return res.status(403).json({ ok: false, error: 'Permission denied.' });
+    }
+    if (!/^[a-f\d]{24}$/i.test(req.params.id) || !['active', 'inactive'].includes(req.body.status)) {
+      return res.status(400).json({ ok: false, error: 'Invalid CRM or status.' });
+    }
+    const company = await ClientCompany.findOne({ _id: req.params.id, organization: req.user.organization._id });
+    if (!company) return res.status(404).json({ ok: false, error: 'CRM not found.' });
+    if (!canAccessCompany(req.user, company)) return res.status(403).json({ ok: false, error: 'Access denied to this CRM.' });
+    if (req.body.status === 'inactive' && (company.isMain || String(company._id) === String(req.activeCompanyId))) {
+      return res.status(400).json({ ok: false, error: company.isMain ? 'The main CRM cannot be archived.' : 'Open another CRM before archiving this one.' });
+    }
+    company.status = req.body.status;
+    await company.save();
+    await logAudit(req, {
+      action: 'update', entityType: 'client_company', entityId: company._id, entityName: company.name,
+      message: `CRM "${company.name}" ${company.status === 'inactive' ? 'archived' : 'restored'}.`,
+    });
+    res.json({ ok: true, data: { _id: company._id, status: company.status, updatedAt: company.updatedAt } });
+  } catch (error) { next(error); }
+});
+
 // POST /api/companies/switch — Switch active workspace
 router.post('/switch', async (req, res, next) => {
   try {
@@ -336,26 +363,6 @@ router.post('/:id/main', async (req, res, next) => {
   }
 });
 
-function parseAttachmentPayload(body) {
-  const rawData = String(body.fileData || '');
-  const match = rawData.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) return { ok: false, message: 'Please select a valid file before uploading.' };
-
-  const buffer = Buffer.from(match[2], 'base64');
-  if (!buffer.length) return { ok: false, message: 'Selected file is empty.' };
-  if (buffer.length > 5 * 1024 * 1024) return { ok: false, message: 'Attachment must be 5 MB or smaller.' };
-
-  const originalName = String(body.originalName || 'attachment').replace(/[\\/:*?"<>|]+/g, '-').trim();
-  return {
-    ok: true,
-    buffer,
-    mimeType: match[1] || 'application/octet-stream',
-    originalName: originalName || 'attachment',
-    category: ['proposal', 'contract', 'invoice', 'brief', 'screenshot', 'other'].includes(body.category) ? body.category : 'other',
-    notes: String(body.notes || '').trim()
-  };
-}
-
 // POST /api/companies/:id/attachments — Upload company attachment
 router.post('/:id/attachments', async (req, res, next) => {
   try {
@@ -374,6 +381,7 @@ router.post('/:id/attachments', async (req, res, next) => {
       return res.status(400).json({ ok: false, error: payload.message });
     }
 
+    const storage = await storeAttachment(company, payload);
     const attachment = await Attachment.create({
       organization: orgId,
       clientCompany: company._id,
@@ -383,7 +391,7 @@ router.post('/:id/attachments', async (req, res, next) => {
       mimeType: payload.mimeType,
       size: payload.buffer.length,
       notes: payload.notes,
-      data: payload.buffer
+      ...storage
     });
 
     await logAudit(req, {
@@ -403,6 +411,8 @@ router.post('/:id/attachments', async (req, res, next) => {
         category: attachment.category,
         size: attachment.size,
         notes: attachment.notes,
+        storageProvider: attachment.storageProvider,
+        externalUrl: attachment.externalUrl,
         createdAt: attachment.createdAt,
         uploadedBy: { _id: req.user._id, name: req.user.name },
       },
@@ -425,10 +435,11 @@ router.get('/:id/attachments/:attachmentId/download', async (req, res, next) => 
     const attachment = await Attachment.findOne({ _id: req.params.attachmentId, organization: orgId, clientCompany: company._id, customer: null });
     if (!attachment) return res.status(404).json({ ok: false, error: 'Attachment not found.' });
 
+    const fileData = await readAttachment(company, attachment);
     res.setHeader('Content-Type', attachment.mimeType || 'application/octet-stream');
-    res.setHeader('Content-Length', attachment.size || attachment.data.length);
+    res.setHeader('Content-Length', fileData.length);
     res.setHeader('Content-Disposition', `attachment; filename="${attachment.originalName.replace(/"/g, '')}"`);
-    res.send(attachment.data);
+    res.send(fileData);
   } catch (error) {
     next(error);
   }
@@ -476,7 +487,13 @@ router.post('/:id/collaborators', async (req, res, next) => {
     }
     const orgId = req.user.organization._id;
     const userIds = req.body.userIds || req.body.assignedUsers || [];
+    const company = await ClientCompany.findOne({ _id: req.params.id, organization: orgId });
+    if (!company) return res.status(404).json({ ok: false, error: 'CRM not found.' });
+    if (!canAccessCompany(req.user, company)) return res.status(403).json({ ok: false, error: 'Access denied to this CRM.' });
     const validAssignedUsers = await getValidUserIds(orgId, userIds);
+    if (!['admin', 'manager'].includes(req.user.role) && !validAssignedUsers.some(id => String(id) === String(req.user._id))) {
+      return res.status(400).json({ ok: false, error: 'Keep yourself assigned to this CRM.' });
+    }
 
     await ClientCompany.updateOne(
       { _id: req.params.id, organization: orgId },

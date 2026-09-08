@@ -166,7 +166,7 @@ export const CustomizeColumnsModal: React.FC<CustomizeColumnsModalProps> = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 10100
+        zIndex: 100050
       }}
       onClick={e => {
         if (e.target === e.currentTarget) onClose();

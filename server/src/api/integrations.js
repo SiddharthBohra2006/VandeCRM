@@ -5,6 +5,7 @@ const Campaign = require('../models/Campaign');
 const ClientCompany = require('../models/ClientCompany');
 const SyncLog = require('../models/SyncLog');
 const { encrypt } = require('../services/encryption');
+const { extractDriveFolderId } = require('../services/fileStorage');
 const { logAudit } = require('../utils/audit');
 const {
   getIntegrationDiagnostics,
@@ -29,12 +30,12 @@ function normalizeGa4PropertyId(value) {
   return String(value || '').trim().replace(/^properties\//i, '');
 }
 
-function parseGa4ServiceAccountJson(value) {
+function parseGoogleServiceAccountJson(value) {
   const raw = String(value || '').trim();
   if (!raw) return '';
   const parsed = JSON.parse(raw);
   if (!parsed.client_email || !parsed.private_key) {
-    throw new Error('GA4 JSON must include client_email and private_key.');
+    throw new Error('Google service account JSON must include client_email and private_key.');
   }
   return JSON.stringify(parsed);
 }
@@ -68,6 +69,8 @@ router.get('/', async (req, res, next) => {
         ga4PropertyId: company.ga4PropertyId,
         hasMetaToken: Boolean(company.metaAccessTokenEncrypted),
         hasGa4Json: Boolean(company.ga4ServiceAccountJsonEncrypted),
+        googleDriveFolderLink: company.googleDriveFolderLink,
+        hasGoogleDriveJson: Boolean(company.googleDriveServiceAccountJsonEncrypted || company.ga4ServiceAccountJsonEncrypted),
         apiKey: company.apiKey,
         apiKeyStatus: company.apiKeyStatus,
         integrationSyncEnabled: company.integrationSyncEnabled,
@@ -80,6 +83,8 @@ router.get('/', async (req, res, next) => {
         { label: 'Meta access token encrypted', done: Boolean(company.metaAccessTokenEncrypted) },
         { label: 'GA4 property ID saved', done: Boolean(company.ga4PropertyId) },
         { label: 'GA4 service account JSON encrypted', done: Boolean(company.ga4ServiceAccountJsonEncrypted) },
+        { label: 'Google Drive folder saved', done: Boolean(extractDriveFolderId(company.googleDriveFolderLink)) },
+        { label: 'Drive service account encrypted', done: Boolean(company.googleDriveServiceAccountJsonEncrypted || company.ga4ServiceAccountJsonEncrypted) },
         { label: 'Inbound API key active', done: company.apiKeyStatus !== 'disabled' && Boolean(company.apiKey) },
         { label: 'Scheduled sync enabled', done: Boolean(company.integrationSyncEnabled) },
       ],
@@ -105,7 +110,7 @@ router.get('/', async (req, res, next) => {
 router.post('/companies/:id/credentials', async (req, res, next) => {
   try {
     const orgId = req.user.organization._id;
-    const { metaAccessToken, ga4ServiceAccountJson, clearMeta, clearGa4 } = req.body;
+    const { metaAccessToken, ga4ServiceAccountJson, googleDriveServiceAccountJson, clearMeta, clearGa4 } = req.body;
     const updateData = {};
 
     if (clearMeta) {
@@ -139,10 +144,25 @@ router.post('/companies/:id/credentials', async (req, res, next) => {
       }
       if (ga4ServiceAccountJson && ga4ServiceAccountJson.trim() !== '') {
         try {
-          updateData.ga4ServiceAccountJsonEncrypted = encrypt(parseGa4ServiceAccountJson(ga4ServiceAccountJson));
+          updateData.ga4ServiceAccountJsonEncrypted = encrypt(parseGoogleServiceAccountJson(ga4ServiceAccountJson));
         } catch (error) {
           return res.status(400).json({ ok: false, error: error.message });
         }
+      }
+    }
+
+    if (req.body.googleDriveFolderLink !== undefined) {
+      const folderLink = String(req.body.googleDriveFolderLink || '').trim();
+      if (folderLink && !extractDriveFolderId(folderLink)) {
+        return res.status(400).json({ ok: false, error: 'Paste a valid Google Drive folder URL or folder ID.' });
+      }
+      updateData.googleDriveFolderLink = folderLink;
+    }
+    if (googleDriveServiceAccountJson && googleDriveServiceAccountJson.trim() !== '') {
+      try {
+        updateData.googleDriveServiceAccountJsonEncrypted = encrypt(parseGoogleServiceAccountJson(googleDriveServiceAccountJson));
+      } catch (error) {
+        return res.status(400).json({ ok: false, error: error.message });
       }
     }
 

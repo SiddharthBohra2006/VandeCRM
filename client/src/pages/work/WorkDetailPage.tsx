@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { workApi, WorkType, WorkItem, WorkSubtask } from '../../api/work';
 import { useAuth } from '../../contexts/AuthContext';
+import { isWorkItemClosed } from '../../utils/workStatus';
+import { canChangeWorkStatus } from '../../utils/permissions';
 import Icon from '../../components/Icons';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import DatePicker from '../../components/DatePicker';
+import CustomSelect from '../../components/CustomSelect';
 
 function formatDate(val?: string | Date | null): string {
   if (!val) return 'Not set';
@@ -226,7 +229,7 @@ export default function WorkDetailPage() {
 
   if (error && !item) {
     return (
-      <div className="page-container" style={{ padding: '2rem' }}>
+      <div className="page-container experience-page work-detail-page" style={{ padding: '2rem' }}>
         <div className="alert alert-error" role="alert">{error}</div>
         <Link to={`/work/${type}`} className="btn small">← Back to {type}</Link>
       </div>
@@ -235,9 +238,9 @@ export default function WorkDetailPage() {
 
   if (!item || !workType) {
     return (
-      <div className="page-container" style={{ padding: '2rem' }}>
+      <div className="page-container experience-page work-detail-page" style={{ padding: '2rem' }}>
         <div className="empty-state">Task not found.</div>
-        <Link to="/work" className="btn small">← Back to Task Center</Link>
+        <Link to="/work" className="btn small">← Back to Work Center</Link>
       </div>
     );
   }
@@ -245,7 +248,7 @@ export default function WorkDetailPage() {
   const statusDefinition = workType.statuses?.find(s => s.key === item.status);
   const completedStatus = workType.statuses?.find(s => s.isTerminalWon);
   const activeStatus = workType.statuses?.find(s => !s.isTerminalWon && !s.isTerminalLost) || workType.statuses?.[0];
-  const isComplete = Boolean(statusDefinition?.isTerminalWon);
+  const isComplete = isWorkItemClosed(item, workType);
 
   const customerObj = item.customer as any;
   const customerName = customerObj ? (customerObj.company || customerObj.name) : '';
@@ -273,16 +276,15 @@ export default function WorkDetailPage() {
   };
 
   const displayFields = workType.fields || [];
-  const links = displayFields.filter(f => f.type === 'url' && rawValue(f.key));
+  const isLinkField = (f: any) => f.type === 'url' || f.type === 'file';
+  const links = displayFields.filter(f => isLinkField(f) && rawValue(f.key));
   const extraFields = displayFields.filter(f =>
     !['title', 'customer', 'assignedTo', 'collaborators', 'secondaryAssignee', 'relatedRecords', 'status', 'priority', 'deadline', 'startDate', 'deliveredAt', 'notes'].includes(f.key) &&
-    f.type !== 'url' &&
+    !isLinkField(f) &&
     textValue(rawValue(f.key), f)
   );
 
-  const completedSubtasks = subtasks.filter(subtask =>
-    workType.statuses?.find(s => s.key === subtask.status)?.isTerminalWon
-  ).length;
+  const completedSubtasks = subtasks.filter(subtask => isWorkItemClosed(subtask, workType)).length;
   const subtaskProgress = subtasks.length ? Math.round((completedSubtasks / subtasks.length) * 100) : 0;
 
   const resolvedIcon = moduleIconMap[workType.icon] || moduleIconMap[type] || workType.icon || 'clipboard-list';
@@ -291,10 +293,10 @@ export default function WorkDetailPage() {
   const labelOf = (key: string, fallback: string) => fieldLabels[key] || fallback;
 
   return (
-    <div className="page-container">
+    <div className="page-container experience-page work-detail-page">
       {/* Top Breadcrumb Navigation */}
       <nav className="work-center-nav" aria-label="Task navigation">
-        <Link to="/work">Task Center</Link>
+        <Link to="/work">Work Center</Link>
         <Link to="/follow-ups">Lead follow-ups</Link>
       </nav>
 
@@ -330,7 +332,7 @@ export default function WorkDetailPage() {
             <Icon name="pen-line" size={14} />
             <span>{isEditing ? 'Cancel edit' : 'Edit task'}</span>
           </button>
-          {!isComplete && completedStatus && (
+          {!isComplete && completedStatus && canChangeWorkStatus(user, workType, item.status) && (
             <button
               type="button"
               className="btn small primary"
@@ -340,7 +342,7 @@ export default function WorkDetailPage() {
               <span>Mark as complete</span>
             </button>
           )}
-          {isComplete && activeStatus && (
+          {isComplete && activeStatus && canChangeWorkStatus(user, workType, item.status) && (
             <button
               type="button"
               className="btn small"
@@ -384,70 +386,69 @@ export default function WorkDetailPage() {
 
                   <div className="form-group">
                     <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('status', 'Status')}</label>
-                    <select
-                      value={editForm.status || ''}
-                      onChange={e => setEditForm({ ...editForm, status: e.target.value })}
-                      style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)' }}
-                    >
-                      {(workType.statuses || []).map(st => (
-                        <option key={st.key} value={st.key}>{st.label}</option>
-                      ))}
-                    </select>
+                    {canChangeWorkStatus(user, workType, item.status) ? (
+                      <CustomSelect
+                        value={editForm.status || ''}
+                        onChange={val => setEditForm({ ...editForm, status: val })}
+                        options={(workType.statuses || []).map(st => ({ value: st.key, label: st.label }))}
+                      />
+                    ) : (
+                      <div style={{ padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--panel-muted, #1e293b)', color: 'var(--muted)', fontSize: '0.85rem' }}>
+                        {statusDefinition?.label || editForm.status || item.status} <small style={{ marginLeft: 6, color: 'var(--gold)' }}>(Locked for review)</small>
+                      </div>
+                    )}
                   </div>
 
                   <div className="form-group">
                     <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('priority', 'Priority')}</label>
-                    <select
+                    <CustomSelect
                       value={editForm.priority || 'medium'}
-                      onChange={e => setEditForm({ ...editForm, priority: e.target.value })}
-                      style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)' }}
-                    >
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                    </select>
+                      onChange={val => setEditForm({ ...editForm, priority: val })}
+                      options={[
+                        { value: 'low', label: 'Low' },
+                        { value: 'medium', label: 'Medium' },
+                        { value: 'high', label: 'High' },
+                      ]}
+                    />
                   </div>
 
                   <div className="form-group">
                     <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('assignedTo', 'Owner / Assignee')}</label>
-                    <select
+                    <CustomSelect
                       value={editForm.assignedTo || ''}
-                      onChange={e => setEditForm({ ...editForm, assignedTo: e.target.value })}
-                      style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)' }}
-                    >
-                      <option value="">Unassigned</option>
-                      {users.map(u => (
-                        <option key={u._id} value={u._id}>{u.name}</option>
-                      ))}
-                    </select>
+                      onChange={val => setEditForm({ ...editForm, assignedTo: val })}
+                      placeholder="Unassigned"
+                      options={[
+                        { value: '', label: 'Unassigned' },
+                        ...users.map(u => ({ value: u._id, label: u.name })),
+                      ]}
+                    />
                   </div>
 
                   <div className="form-group">
                     <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('secondaryAssignee', 'Secondary Assignee')}</label>
-                    <select
+                    <CustomSelect
                       value={editForm.secondaryAssignee || ''}
-                      onChange={e => setEditForm({ ...editForm, secondaryAssignee: e.target.value })}
-                      style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)' }}
-                    >
-                      <option value="">None</option>
-                      {users.map(u => (
-                        <option key={u._id} value={u._id}>{u.name}</option>
-                      ))}
-                    </select>
+                      onChange={val => setEditForm({ ...editForm, secondaryAssignee: val })}
+                      placeholder="None"
+                      options={[
+                        { value: '', label: 'None' },
+                        ...users.map(u => ({ value: u._id, label: u.name })),
+                      ]}
+                    />
                   </div>
 
                   <div className="form-group">
                     <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('customer', 'Client / Lead')}</label>
-                    <select
+                    <CustomSelect
                       value={editForm.customer || ''}
-                      onChange={e => setEditForm({ ...editForm, customer: e.target.value })}
-                      style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)' }}
-                    >
-                      <option value="">None / Internal project</option>
-                      {customers.map(c => (
-                        <option key={c._id} value={c._id}>{c.company ? `${c.company} (${c.name})` : c.name}</option>
-                      ))}
-                    </select>
+                      onChange={val => setEditForm({ ...editForm, customer: val })}
+                      placeholder="None / Internal project"
+                      options={[
+                        { value: '', label: 'None / Internal project' },
+                        ...customers.map(c => ({ value: c._id, label: c.company ? `${c.company} (${c.name})` : c.name })),
+                      ]}
+                    />
                   </div>
 
                   <div className="form-group">
@@ -541,7 +542,8 @@ export default function WorkDetailPage() {
                     <div className="form-group" key={f.key}>
                       <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px' }}>{labelOf('custom:' + f.key, f.label)}</label>
                       <input
-                        type={f.type === 'url' ? 'url' : f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
+                        type={f.type === 'url' || f.type === 'file' ? 'url' : f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
+                        placeholder={f.type === 'url' || f.type === 'file' ? 'https://drive.google.com/... or any link' : undefined}
                         value={editForm.customFields?.[f.key] || ''}
                         onChange={e => {
                           const nextCf = { ...(editForm.customFields || {}), [f.key]: e.target.value };
@@ -551,6 +553,50 @@ export default function WorkDetailPage() {
                       />
                     </div>
                   ))}
+
+                  {/* Recurring Schedule */}
+                  {type === 'task' && (
+                    <div className="form-group" style={{ gridColumn: '1 / -1', padding: '10px 14px', borderRadius: 10, background: 'color-mix(in srgb, var(--gold) 8%, var(--panel-muted))', border: '1px solid color-mix(in srgb, var(--gold) 25%, var(--border))' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 750, fontSize: '0.85rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(editForm.customFields?.repeatMonthly)}
+                            onChange={e => {
+                              const isChecked = e.target.checked;
+                              const nextCf = { ...(editForm.customFields || {}), repeatMonthly: isChecked };
+                              if (isChecked && !nextCf.repeatDay) nextCf.repeatDay = 1;
+                              setEditForm({ ...editForm, customFields: nextCf });
+                            }}
+                          />
+                          <span>🔁 Repeat this task monthly (Recurring Task)</span>
+                        </label>
+
+                        {Boolean(editForm.customFields?.repeatMonthly) && (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
+                            <span>Schedule on day:</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={31}
+                              value={editForm.customFields?.repeatDay || 1}
+                              onChange={e => {
+                                const nextCf = { ...(editForm.customFields || {}), repeatDay: Math.max(1, Math.min(31, Number(e.target.value) || 1)) };
+                                setEditForm({ ...editForm, customFields: nextCf });
+                              }}
+                              style={{ width: 60, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--panel)', textAlign: 'center' }}
+                            />
+                            <span style={{ color: 'var(--muted)' }}>of every month</span>
+                          </div>
+                        )}
+                      </div>
+                      {Boolean(editForm.customFields?.repeatMonthly) && (
+                        <small style={{ display: 'block', marginTop: '6px', color: 'var(--gold)', fontSize: '0.74rem' }}>
+                          ✨ A new copy of this task will automatically be generated on day {editForm.customFields?.repeatDay || 1} of every month.
+                        </small>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
@@ -645,8 +691,16 @@ export default function WorkDetailPage() {
                 </div>
                 <form onSubmit={handleForward} style={{ display: 'grid', gap: '.5rem', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
                   <strong style={{ fontSize: '.8rem' }}>Forward this task</strong>
-                  <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
-                    <select required aria-label="Forward task to" value={forwardTo} onChange={e => setForwardTo(e.target.value)}><option value="">Choose team member…</option>{users.filter(person => person._id !== item.assignedTo?._id).map(person => <option key={person._id} value={person._id}>{person.name}</option>)}</select>
+                  <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <CustomSelect
+                      value={forwardTo}
+                      onChange={setForwardTo}
+                      placeholder="Choose team member…"
+                      style={{ minWidth: 200 }}
+                      options={users
+                        .filter(person => person._id !== item.assignedTo?._id)
+                        .map(person => ({ value: person._id, label: person.name }))}
+                    />
                     <input value={forwardNote} onChange={e => setForwardNote(e.target.value)} maxLength={500} placeholder="Handoff note (optional)" style={{ flex: 1, minWidth: 180 }} />
                     <button className="btn small" disabled={forwarding}>{forwarding ? 'Forwarding…' : 'Forward'}</button>
                   </div>
@@ -687,8 +741,8 @@ export default function WorkDetailPage() {
                     <div className="task-progress"><span style={{ width: `${subtaskProgress}%` }} /></div>
                     <div className="premium-subtask-list">
                       {subtasks.map(st => {
-                        const stDefinition = workType.statuses?.find(s => s.key === st.status);
-                        const isStDone = Boolean(stDefinition?.isTerminalWon || st.status === 'completed');
+                        const isStDone = isWorkItemClosed(st, workType);
+                        const stDefinition = workType?.statuses?.find(s => s.key === st.status);
                         const stId = st._id;
                         return (
                           <div
@@ -770,40 +824,39 @@ export default function WorkDetailPage() {
                         </label>
                       </div>
                       <div className="composer-grid-fields" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginTop: '8px' }}>
-                        <label>
-                          Assignee
-                          <select
+                        <div className="form-group">
+                          <label style={{ display: 'block', fontWeight: 700, fontSize: '0.78rem', marginBottom: '4px' }}>Assignee</label>
+                          <CustomSelect
                             value={newSubtaskAssignee}
-                            onChange={e => setNewSubtaskAssignee(e.target.value)}
-                            style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)' }}
-                          >
-                            <option value="">Unassigned</option>
-                            {users.map(u => (
-                              <option key={u._id} value={u._id}>{u.name}</option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Deadline
+                            onChange={setNewSubtaskAssignee}
+                            placeholder="Unassigned"
+                            options={[
+                              { value: '', label: 'Unassigned' },
+                              ...users.map(u => ({ value: u._id, label: u.name })),
+                            ]}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label style={{ display: 'block', fontWeight: 700, fontSize: '0.78rem', marginBottom: '4px' }}>Deadline</label>
                           <DatePicker
                             placeholder="Deadline"
                             value={newSubtaskDeadline}
                             onChange={val => setNewSubtaskDeadline(val)}
                             style={{ width: '100%' }}
                           />
-                        </label>
-                        <label>
-                          Priority
-                          <select
+                        </div>
+                        <div className="form-group">
+                          <label style={{ display: 'block', fontWeight: 700, fontSize: '0.78rem', marginBottom: '4px' }}>Priority</label>
+                          <CustomSelect
                             value={newSubtaskPriority}
-                            onChange={e => setNewSubtaskPriority(e.target.value)}
-                            style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)' }}
-                          >
-                            <option value="low">Low</option>
-                            <option value="medium">Normal</option>
-                            <option value="high">Important</option>
-                          </select>
-                        </label>
+                            onChange={setNewSubtaskPriority}
+                            options={[
+                              { value: 'low', label: 'Low' },
+                              { value: 'medium', label: 'Normal' },
+                              { value: 'high', label: 'Important' },
+                            ]}
+                          />
+                        </div>
                       </div>
                       <div className="composer-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
                         <button type="button" className="btn small" onClick={() => setComposerOpen(false)}>Cancel</button>
@@ -886,6 +939,22 @@ export default function WorkDetailPage() {
               <span className="summary-label">{labelOf('deadline', 'Deadline')}</span>
               <strong style={{ fontSize: '0.78rem' }}>📅 {formatDate(item.deadline)}</strong>
             </div>
+            {Boolean(item.customFields && (typeof (item.customFields as any).get === 'function' ? (item.customFields as any).get('repeatMonthly') : (item.customFields as any).repeatMonthly)) && (
+              <div className="summary-field-row">
+                <span className="summary-label">Schedule</span>
+                <strong style={{ fontSize: '0.78rem', color: 'var(--gold)' }}>
+                  🔁 Monthly (Day {(typeof (item.customFields as any).get === 'function' ? (item.customFields as any).get('repeatDay') : (item.customFields as any).repeatDay) || 1})
+                </strong>
+              </div>
+            )}
+            {Boolean(item.customFields && (typeof (item.customFields as any).get === 'function' ? (item.customFields as any).get('recurringSource') : (item.customFields as any).recurringSource)) && (
+              <div className="summary-field-row">
+                <span className="summary-label">Schedule</span>
+                <strong style={{ fontSize: '0.78rem', color: 'var(--gold)' }}>
+                  🔁 Generated for {(typeof (item.customFields as any).get === 'function' ? (item.customFields as any).get('recurringMonth') : (item.customFields as any).recurringMonth) || 'this month'}
+                </strong>
+              </div>
+            )}
             <hr className="summary-divider" />
             <div className="summary-meta-grid">
               <div>

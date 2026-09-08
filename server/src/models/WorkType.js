@@ -5,7 +5,8 @@ const statusSchema = new mongoose.Schema({
   label: { type: String, required: true, trim: true },
   color: { type: String, default: '#64748b' },
   isTerminalWon: { type: Boolean, default: false },
-  isTerminalLost: { type: Boolean, default: false }
+  isTerminalLost: { type: Boolean, default: false },
+  requiresApproval: { type: Boolean, default: false }
 }, { _id: false });
 
 const fieldSchema = new mongoose.Schema({

@@ -73,6 +73,7 @@ export default function CustomerImportPreviewPage() {
           imported: res.imported,
           updated: res.updated,
           skipped: res.skipped,
+          batchId: res.batchId,
           totalRows: preview.totalRows,
           warnings: preview.rows.filter(r => r.messages.length > 0).map(r => `Row ${r.rowNumber}: ${r.messages.join('; ')}`),
           scope: state.scope,

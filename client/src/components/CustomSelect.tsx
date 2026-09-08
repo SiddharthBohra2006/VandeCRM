@@ -24,6 +24,7 @@ export interface CustomSelectProps {
   id?: string;
   searchable?: boolean;
   'aria-label'?: string;
+  buttonRenderer?: (selected: SelectOption | undefined) => React.ReactNode;
 }
 
 export default function CustomSelect({
@@ -42,6 +43,7 @@ export default function CustomSelect({
   id,
   searchable = false,
   'aria-label': ariaLabel,
+  buttonRenderer,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [opensUp, setOpensUp] = useState(false);
@@ -209,12 +211,18 @@ export default function CustomSelect({
         onClick={handleToggle}
         onKeyDown={handleButtonKeyDown}
       >
-        <span className={`app-select-value ${!selectedOption ? 'is-placeholder' : ''}`}>
-          {selectedOption ? selectedOption.label : placeholder}
-        </span>
-        <span className="app-select-caret" aria-hidden="true">
-          <ChevronDown size={variant === 'pill' ? 11 : 14} className="caret-icon" />
-        </span>
+        {buttonRenderer ? (
+          buttonRenderer(selectedOption)
+        ) : (
+          <>
+            <span className={`app-select-value ${!selectedOption ? 'is-placeholder' : ''}`}>
+              {selectedOption ? selectedOption.label : placeholder}
+            </span>
+            <span className="app-select-caret" aria-hidden="true">
+              <ChevronDown size={variant === 'pill' ? 11 : 14} className="caret-icon" />
+            </span>
+          </>
+        )}
       </button>
 
       {isOpen && menuCoords && createPortal(
@@ -228,7 +236,7 @@ export default function CustomSelect({
             left: `${menuCoords.left}px`,
             right: 'auto',
             minWidth: `${menuCoords.width}px`,
-            zIndex: 99999,
+            zIndex: 100200,
             ...menuStyle,
           }}
           role="listbox"

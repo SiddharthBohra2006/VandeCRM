@@ -17,6 +17,7 @@ const WorkType = require('../models/WorkType');
 const { hasPermission, hasWorkPermission, isRestrictedUser, canAccessLeadField } = require('../config/roles');
 const { runLeadAutomation } = require('../services/automation');
 const { getWonStageIds } = require('../services/crmStages');
+const { driveStatus, parseAttachmentPayload, readAttachment, storeAttachment } = require('../services/fileStorage');
 const { logAudit } = require('../utils/audit');
 const { parseCsv, rowsToObjects, normalizeCustomerCsv, toCsv, suggestCustomerHeader } = require('../utils/csv');
 const { potentialFilter } = require('../utils/leadPotential');
@@ -60,12 +61,28 @@ async function formOptions(req) {
   const organization = req.user.organization._id;
   const companyFilter = { organization, status: 'active' };
   if (!isManager(req.user)) companyFilter.assignedUsers = req.user._id;
+
+  let userQuery = { organization, isActive: true, role: { $in: ['admin', 'manager', 'agent'] } };
+  if (req.activeCompanyId) {
+    const activeComp = await ClientCompany.findOne({ _id: req.activeCompanyId, organization }).select('assignedUsers');
+    if (activeComp && (activeComp.assignedUsers || []).length > 0) {
+      userQuery = {
+        organization,
+        isActive: true,
+        $or: [
+          { role: { $in: ['admin', 'manager'] } },
+          { _id: { $in: activeComp.assignedUsers } }
+        ]
+      };
+    }
+  }
+
   const [stages, availableLabels, fields, companies, users] = await Promise.all([
     CrmStage.find({ organization, clientCompany: req.activeCompanyId }).sort({ order: 1, createdAt: 1 }),
     CrmLabel.find({ organization, clientCompany: req.activeCompanyId, isActive: true }).sort({ name: 1 }),
     CustomField.find({ organization, clientCompany: req.activeCompanyId, entity: 'customer', isActive: true }).sort({ order: 1, createdAt: 1 }),
     ClientCompany.find(companyFilter).sort({ name: 1 }),
-    User.find({ organization, isActive: true, role: { $in: ['admin', 'manager', 'agent'] } }).sort({ name: 1 })
+    User.find(userQuery).sort({ name: 1 })
   ]);
   const campaigns = await Campaign.find({ organization, clientCompany: req.activeCompanyId, status: 'active' }).sort({ name: 1 });
   return { stages, labels: availableLabels, fields, companies, campaigns, users };
@@ -346,6 +363,9 @@ router.post('/import', importLimiter, permits('businesses.create'), express.text
     if (!defaultStage) return res.status(400).json({ ok: false, error: 'Create an active CRM stage before importing leads.' });
     const defaultAssignedTo = (req.body?.defaultAssignedToId && context.userById.get(String(req.body.defaultAssignedToId))) ? req.body.defaultAssignedToId : req.user._id;
     const duplicateRule = ['update', 'skip', 'create'].includes(req.body?.duplicateRule) ? req.body.duplicateRule : 'update';
+    const batchId = `import_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const createdIds = [];
+    const updatedSnapshots = [];
     let imported = 0; let updated = 0; let skipped = 0;
     for (const row of rows) {
       if (!row.name && !row.phone && !row.email) { skipped += 1; continue; }
@@ -367,6 +387,10 @@ router.post('/import', importLimiter, permits('businesses.create'), express.text
 
       if (existing) {
         const previousImportStage = existing.stage;
+        updatedSnapshots.push({
+          _id: existing._id,
+          snapshot: existing.toObject()
+        });
         existing.set({
           name: row.name || existing.name,
           company: row.company || existing.company,
@@ -422,6 +446,7 @@ router.post('/import', importLimiter, permits('businesses.create'), express.text
           customData,
           ...(followUpDate ? { nextFollowUpAt: followUpDate } : {})
         });
+        createdIds.push(customer._id);
         await runLeadAutomation({ customer, trigger: 'lead_created' });
         if (followUpDate) {
           await Activity.create({
@@ -440,9 +465,87 @@ router.post('/import', importLimiter, permits('businesses.create'), express.text
         imported += 1;
       }
     }
-    await SyncLog.create({ organization: req.user.organization._id, source: 'CSV Import', status: 'success', recordsProcessed: rows.length, recordsCreated: imported, recordsUpdated: updated });
-    await logAudit(req, { action: 'import', entityType: 'customer', message: `CSV import completed. Created ${imported}, updated ${updated}, skipped ${skipped}.`, metadata: { imported, updated, skipped, rows: rows.length } });
-    res.json({ ok: true, imported, updated, skipped });
+    await SyncLog.create({
+      organization: req.user.organization._id,
+      clientCompany: req.activeCompanyId,
+      source: 'CSV Import',
+      status: 'success',
+      trigger: 'import',
+      recordsProcessed: rows.length,
+      recordsCreated: imported,
+      recordsUpdated: updated,
+      diagnostics: {
+        batchId,
+        createdIds,
+        updatedSnapshots,
+        reverted: false
+      }
+    });
+    await logAudit(req, { action: 'import', entityType: 'customer', message: `CSV import completed. Created ${imported}, updated ${updated}, skipped ${skipped}. Batch ID: ${batchId}`, metadata: { batchId, imported, updated, skipped, rows: rows.length } });
+    res.json({ ok: true, imported, updated, skipped, batchId });
+  } catch (error) { next(error); }
+});
+
+router.post('/import/revert', permits('businesses.delete'), async (req, res, next) => {
+  try {
+    if (!isManager(req.user)) return res.status(403).json({ ok: false, error: 'Access denied' });
+    if (!workspace(req, res)) return;
+    const { batchId } = req.body || {};
+    if (!batchId) return res.status(400).json({ ok: false, error: 'Batch ID is required to revert import.' });
+
+    const organization = req.user.organization._id;
+    const syncLog = await SyncLog.findOne({
+      organization,
+      clientCompany: req.activeCompanyId,
+      'diagnostics.batchId': batchId,
+      'diagnostics.reverted': { $ne: true }
+    });
+
+    if (!syncLog) {
+      return res.status(404).json({ ok: false, error: 'Import batch not found or already reverted.' });
+    }
+
+    const { createdIds = [], updatedSnapshots = [] } = syncLog.diagnostics || {};
+
+    let deletedCount = 0;
+    if (createdIds.length > 0) {
+      await Promise.all([
+        Activity.deleteMany({ organization, customer: { $in: createdIds } }),
+        Attachment.deleteMany({ organization, customer: { $in: createdIds } }),
+        Customer.deleteMany({ organization, _id: { $in: createdIds } })
+      ]);
+      deletedCount = createdIds.length;
+    }
+
+    let restoredCount = 0;
+    for (const item of updatedSnapshots) {
+      if (!item._id || !item.snapshot) continue;
+      const snap = item.snapshot;
+      delete snap._id;
+      delete snap.__v;
+      delete snap.createdAt;
+      delete snap.updatedAt;
+      await Customer.updateOne({ _id: item._id, organization }, { $set: snap });
+      restoredCount += 1;
+    }
+
+    syncLog.diagnostics.reverted = true;
+    syncLog.markModified('diagnostics');
+    await syncLog.save();
+
+    await logAudit(req, {
+      action: 'import_revert',
+      entityType: 'customer',
+      message: `Reverted import batch ${batchId}: deleted ${deletedCount} created leads, restored ${restoredCount} updated leads.`,
+      metadata: { batchId, deletedCount, restoredCount }
+    });
+
+    res.json({
+      ok: true,
+      message: `Import reverted successfully. Removed ${deletedCount} created records and restored ${restoredCount} updated records.`,
+      deletedCount,
+      restoredCount
+    });
   } catch (error) { next(error); }
 });
 
@@ -525,12 +628,14 @@ router.get('/', async (req, res, next) => {
       else filter.$or = textConditions;
     }
     const sorts = { recent: { updatedAt: -1 }, old: { updatedAt: 1 }, 'highest-value': { value: -1 }, 'lowest-value': { value: 1 }, name: { name: 1 } };
-    const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 10));
+    const isAll = String(req.query.pageSize || '').toLowerCase() === 'all';
+    const parsedPageSize = Number.parseInt(req.query.pageSize, 10);
+    const pageSize = isAll ? 10000 : Math.min(1000, Math.max(1, parsedPageSize || 10));
     const totalResults = await Customer.countDocuments(filter);
-    const totalPages = Math.max(1, Math.ceil(totalResults / pageSize));
-    const page = Math.min(totalPages, Math.max(1, Number.parseInt(req.query.page, 10) || 1));
+    const totalPages = isAll ? 1 : Math.max(1, Math.ceil(totalResults / pageSize));
+    const page = isAll ? 1 : Math.min(totalPages, Math.max(1, Number.parseInt(req.query.page, 10) || 1));
     const [customers, savedViews] = await Promise.all([
-      Customer.find(filter).populate('stage labels assignedTo clientCompany campaign').sort(sorts[sortBy] || sorts.recent).skip((page - 1) * pageSize).limit(pageSize),
+      Customer.find(filter).populate('stage labels assignedTo clientCompany campaign').sort(sorts[sortBy] || sorts.recent).skip(isAll ? 0 : (page - 1) * pageSize).limit(pageSize),
       SavedView.find({ organization: req.user.organization._id, user: req.user._id, entity: 'customer' }).sort({ updatedAt: -1 })
     ]);
     const statsFilter = scope(req, { stage: { $nin: wonStageIds } });
@@ -540,7 +645,7 @@ router.get('/', async (req, res, next) => {
       qualified.length ? Customer.countDocuments({ ...statsFilter, stage: { $in: qualified } }) : 0,
       Customer.countDocuments({ ...statsFilter, ...potentialFilter(options.labels, options.stages) }), Customer.countDocuments({ ...statsFilter, nextFollowUpAt: { $lt: new Date() } })
     ]);
-    res.json({ ok: true, data: customers.map(c => sanitizeCustomerCustomData(c, req.user)), ...options, fields: options.fields.filter(field => canAccessLeadField(req.user, field.key, 'view')), savedViews, leadStats: { totalLeads, newLeads, qualifiedLeads, hotLeads, overdueLeads }, pagination: { page, pageSize, totalPages, totalResults } });
+    res.json({ ok: true, data: customers.map(c => sanitizeCustomerCustomData(c, req.user)), ...options, fields: options.fields.filter(field => canAccessLeadField(req.user, field.key, 'view')), savedViews, leadStats: { totalLeads, newLeads, qualifiedLeads, hotLeads, overdueLeads }, pagination: { page, pageSize: isAll ? (totalResults || 1) : pageSize, totalPages, totalResults } });
   } catch (error) { next(error); }
 });
 
@@ -719,7 +824,7 @@ router.get('/:id', async (req, res, next) => {
       CustomRecord.find(workScope).populate('module assignedTo collaborators secondaryAssignee parentRecord').sort({ createdAt: -1 }),
       formOptions(req)
     ]);
-    res.json({ ok: true, data: sanitizeCustomerCustomData(customer, req.user), activities, attachments, relatedWork, stages: options.stages, labels: options.labels, users: options.users, campaigns: options.campaigns, fields: options.fields.filter(field => canAccessLeadField(req.user, field.key, 'view')) });
+    res.json({ ok: true, data: sanitizeCustomerCustomData(customer, req.user), activities, attachments, relatedWork, fileStorage: driveStatus(customer.clientCompany), stages: options.stages, labels: options.labels, users: options.users, campaigns: options.campaigns, fields: options.fields.filter(field => canAccessLeadField(req.user, field.key, 'view')) });
   } catch (error) { next(error); }
 });
 
@@ -784,7 +889,7 @@ router.post('/:id/activity', permits('businesses.update'), async (req, res, next
   } catch (error) { next(error); }
 });
 
-// POST /api/customers/:id/stage — Inline change lead stage
+// POST /api/customers/:id/stage — Inline change lead stage with optional note & next follow-up
 router.post('/:id/stage', permits('businesses.update'), async (req, res, next) => {
   try {
     if (!workspace(req, res)) return;
@@ -798,19 +903,50 @@ router.post('/:id/stage', permits('businesses.update'), async (req, res, next) =
     const previousStageName = customer.stage?.name || 'None';
     const previousStageId = customer.stage?._id || customer.stage;
     customer.stage = stage._id;
+
+    const note = String(req.body.note || '').trim();
+    const type = ['note', 'call', 'email', 'whatsapp', 'meeting', 'stage_changed'].includes(req.body.type) ? req.body.type : 'stage_changed';
+    const callRecordingUrl = String(req.body.callRecordingUrl || '').trim().slice(0, 2000);
+    const nextFollowUpAt = req.body.nextFollowUpAt ? new Date(req.body.nextFollowUpAt) : null;
+    const nextFollowUpNote = String(req.body.nextFollowUpNote || req.body.followUpComment || '').trim();
+
+    if (nextFollowUpAt && !Number.isNaN(nextFollowUpAt.getTime())) {
+      customer.nextFollowUpAt = nextFollowUpAt;
+    } else if (stage.isWon || stage.isLost) {
+      customer.nextFollowUpAt = null;
+    }
+
+    customer.lastContactedAt = new Date();
     await customer.save();
 
     if (String(previousStageId || '') !== String(stage._id)) {
       await runLeadAutomation({ customer, trigger: 'stage_changed', previousStage: previousStageId });
     }
 
+    // Record stage change & activity log
+    const activityNote = note ? `Stage changed from ${previousStageName} to ${stage.name}. Note: ${note}` : `Stage changed from ${previousStageName} to ${stage.name}.`;
     await Activity.create({
       organization,
       customer: customer._id,
       user: req.user._id,
-      type: 'stage_changed',
-      note: `Stage changed from ${previousStageName} to ${stage.name}.`,
+      type,
+      note: activityNote,
+      callRecordingUrl,
+      nextFollowUpAt: nextFollowUpAt && !Number.isNaN(nextFollowUpAt.getTime()) ? nextFollowUpAt : null,
     });
+
+    if (nextFollowUpAt && !Number.isNaN(nextFollowUpAt.getTime())) {
+      await Activity.create({
+        organization,
+        customer: customer._id,
+        user: req.user._id,
+        type: 'task',
+        note: nextFollowUpNote ? `Next follow-up: ${nextFollowUpNote}` : `Follow-up scheduled for ${nextFollowUpAt.toLocaleString('en-IN')}.`,
+        nextFollowUpAt,
+        followUpAction: 'scheduled',
+        comment: nextFollowUpNote
+      });
+    }
 
     await logAudit(req, {
       action: 'stage_change',
@@ -820,7 +956,7 @@ router.post('/:id/stage', permits('businesses.update'), async (req, res, next) =
       message: `Stage changed from ${previousStageName} to ${stage.name}.`,
     });
 
-    res.json({ ok: true, stage });
+    res.json({ ok: true, stage, customer });
   } catch (error) { next(error); }
 });
 
@@ -869,24 +1005,6 @@ router.post('/:id/transfer', permits('businesses.update'), async (req, res, next
   } catch (error) { next(error); }
 });
 
-function parseAttachmentPayload(body) {
-  const rawData = String(body.fileData || '');
-  const match = rawData.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) return { ok: false, message: 'Please select a valid file before uploading.' };
-  const buffer = Buffer.from(match[2], 'base64');
-  if (!buffer.length) return { ok: false, message: 'Selected file is empty.' };
-  if (buffer.length > 5 * 1024 * 1024) return { ok: false, message: 'Attachment must be 5 MB or smaller.' };
-  const originalName = String(body.originalName || 'attachment').replace(/[\\/:*?"<>|]+/g, '-').trim();
-  return {
-    ok: true,
-    buffer,
-    mimeType: match[1] || 'application/octet-stream',
-    originalName: originalName || 'attachment',
-    category: ['proposal', 'contract', 'invoice', 'brief', 'screenshot', 'other'].includes(body.category) ? body.category : 'other',
-    notes: String(body.notes || '').trim(),
-  };
-}
-
 // POST /api/customers/:id/attachments — Upload file attachment
 router.post('/:id/attachments', permits('businesses.update'), async (req, res, next) => {
   try {
@@ -898,6 +1016,10 @@ router.post('/:id/attachments', permits('businesses.update'), async (req, res, n
     const payload = parseAttachmentPayload(req.body);
     if (!payload.ok) return res.status(400).json({ ok: false, error: payload.message });
 
+    const company = customer.clientCompany
+      ? await ClientCompany.findOne({ _id: customer.clientCompany, organization })
+      : null;
+    const storage = await storeAttachment(company, payload);
     const attachment = await Attachment.create({
       organization,
       customer: customer._id,
@@ -908,7 +1030,7 @@ router.post('/:id/attachments', permits('businesses.update'), async (req, res, n
       mimeType: payload.mimeType,
       size: payload.buffer.length,
       notes: payload.notes,
-      data: payload.buffer,
+      ...storage,
     });
 
     await Activity.create({
@@ -935,6 +1057,8 @@ router.post('/:id/attachments', permits('businesses.update'), async (req, res, n
         category: attachment.category,
         size: attachment.size,
         notes: attachment.notes,
+        storageProvider: attachment.storageProvider,
+        externalUrl: attachment.externalUrl,
         createdAt: attachment.createdAt,
         uploadedBy: { _id: req.user._id, name: req.user.name },
       },
@@ -953,10 +1077,14 @@ router.get('/:id/attachments/:attachmentId/download', async (req, res, next) => 
     const attachment = await Attachment.findOne({ _id: req.params.attachmentId, organization, customer: customer._id });
     if (!attachment) return res.status(404).json({ ok: false, error: 'Attachment not found.' });
 
+    const company = customer.clientCompany
+      ? await ClientCompany.findOne({ _id: customer.clientCompany, organization })
+      : null;
+    const fileData = await readAttachment(company, attachment);
     res.setHeader('Content-Type', attachment.mimeType || 'application/octet-stream');
-    res.setHeader('Content-Length', attachment.size || attachment.data.length);
+    res.setHeader('Content-Length', fileData.length);
     res.setHeader('Content-Disposition', `attachment; filename="${attachment.originalName.replace(/"/g, '')}"`);
-    res.send(attachment.data);
+    res.send(fileData);
   } catch (error) { next(error); }
 });
 

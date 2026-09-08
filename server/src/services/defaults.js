@@ -634,22 +634,42 @@ async function backfillChatlistLeads() {
       companyId = defaultCompany ? defaultCompany._id : null;
     }
 
-    const stageQuery = { organization: orgId, name: new RegExp('^' + match.stage.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') };
+    const stageKey = slugify(match.stage);
+    const stageQuery = {
+      organization: orgId,
+      $or: [
+        { key: stageKey },
+        { name: new RegExp('^' + match.stage.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') }
+      ]
+    };
     if (companyId) stageQuery.clientCompany = companyId;
     let stage = await CrmStage.findOne(stageQuery);
 
     if (!stage) {
       const stageDef = neededStages.find(s => s.name.toLowerCase() === match.stage.toLowerCase()) || { name: match.stage, color: '#0891b2', order: 50 };
-      stage = await CrmStage.create({
-        organization: orgId,
-        clientCompany: companyId,
-        name: stageDef.name,
-        key: slugify(stageDef.name),
-        color: stageDef.color,
-        order: stageDef.order,
-        isActive: true
-      });
+      const finalKey = slugify(stageDef.name);
+      try {
+        stage = await CrmStage.findOneAndUpdate(
+          { organization: orgId, clientCompany: companyId, key: finalKey },
+          {
+            $setOnInsert: {
+              organization: orgId,
+              clientCompany: companyId,
+              name: stageDef.name,
+              key: finalKey,
+              color: stageDef.color,
+              order: stageDef.order,
+              isActive: true
+            }
+          },
+          { upsert: true, new: true }
+        );
+      } catch (err) {
+        stage = await CrmStage.findOne({ organization: orgId, clientCompany: companyId, key: finalKey });
+      }
     }
+
+    if (!stage) continue;
 
     const updateFields = {
       stage: stage._id,

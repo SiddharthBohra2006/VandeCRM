@@ -161,7 +161,7 @@ export default function CampaignDetailPage() {
 
   if (!campaign) {
     return (
-      <div className="page-container" style={{ padding: '2rem', textAlign: 'center' }}>
+      <div className="page-container experience-page campaign-detail-page" style={{ padding: '2rem', textAlign: 'center' }}>
         <h2>Campaign not found</h2>
         <Link to="/campaigns" className="btn primary" style={{ marginTop: '1rem' }}>
           Back to Campaigns
@@ -177,7 +177,7 @@ export default function CampaignDetailPage() {
   const canEdit = user?.role === 'admin' || user?.role === 'manager';
 
   return (
-    <div className="page-container">
+    <div className="page-container experience-page campaign-detail-page">
       {error && <div className="auth-error" style={{ marginBottom: '1rem' }}>{error}</div>}
       {success && <div className="notice success" style={{ marginBottom: '1rem' }}>{success}</div>}
 
@@ -213,28 +213,34 @@ export default function CampaignDetailPage() {
 
       {/* Date Filter Bar */}
       <div className="filter-bar" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <DatePicker
-          placeholder="From date"
-          value={dateFrom}
-          onChange={val => {
-            const updated = new URLSearchParams(searchParams);
-            if (val) updated.set('dateFrom', val);
-            else updated.delete('dateFrom');
-            setSearchParams(updated);
-          }}
-          style={{ maxWidth: '160px' }}
-        />
-        <DatePicker
-          placeholder="To date"
-          value={dateTo}
-          onChange={val => {
-            const updated = new URLSearchParams(searchParams);
-            if (val) updated.set('dateTo', val);
-            else updated.delete('dateTo');
-            setSearchParams(updated);
-          }}
-          style={{ maxWidth: '160px' }}
-        />
+        <label className="compact-date-field">
+          <span>From</span>
+          <DatePicker
+            placeholder="Start date"
+            value={dateFrom}
+            onChange={val => {
+              const updated = new URLSearchParams(searchParams);
+              if (val) updated.set('dateFrom', val);
+              else updated.delete('dateFrom');
+              setSearchParams(updated);
+            }}
+            style={{ maxWidth: '160px' }}
+          />
+        </label>
+        <label className="compact-date-field">
+          <span>To</span>
+          <DatePicker
+            placeholder="End date"
+            value={dateTo}
+            onChange={val => {
+              const updated = new URLSearchParams(searchParams);
+              if (val) updated.set('dateTo', val);
+              else updated.delete('dateTo');
+              setSearchParams(updated);
+            }}
+            style={{ maxWidth: '160px' }}
+          />
+        </label>
         {(dateFrom || dateTo) && (
           <button
             type="button"

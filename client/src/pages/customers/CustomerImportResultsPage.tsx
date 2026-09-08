@@ -1,14 +1,24 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { RotateCcw } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { customersApi } from '../../api/customers';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import Icon from '../../components/Icons';
 
 export default function CustomerImportResultsPage() {
   const location = useLocation();
   const { crmTerms } = useAuth();
+  const [reverting, setReverting] = useState(false);
+  const [revertedMessage, setRevertedMessage] = useState('');
+  const [revertError, setRevertError] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
+
   const state = (location.state || {}) as {
     imported?: number;
     updated?: number;
     skipped?: number;
+    batchId?: string;
     totalRows?: number;
     warnings?: string[];
     fieldsCreated?: number;
@@ -25,6 +35,21 @@ export default function CustomerImportResultsPage() {
   const directoryPath = isClientScope ? '/clients' : '/customers';
   const importHref = `/customers/import${isClientScope ? '?scope=client' : ''}`;
 
+  const handleRevert = async () => {
+    if (!state.batchId) return;
+    try {
+      setReverting(true);
+      setRevertError('');
+      const res = await customersApi.revertImport(state.batchId);
+      setRevertedMessage(res.message || `Import batch reverted: ${res.deletedCount} created records removed, ${res.restoredCount} updated records restored.`);
+    } catch (err: any) {
+      setRevertError(err.message || 'Failed to revert import');
+    } finally {
+      setReverting(false);
+      setShowConfirm(false);
+    }
+  };
+
   return (
     <div className="page-container">
       <section className="page-head">
@@ -33,10 +58,44 @@ export default function CustomerImportResultsPage() {
           <h1>Import Results Report</h1>
           <p className="page-subtitle">Summary of the import completed.</p>
         </div>
-        <div className="actions">
+        <div className="actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {state.batchId && !revertedMessage && (
+            <button
+              type="button"
+              className="btn small outline"
+              style={{
+                color: 'var(--red, #ef4444)',
+                borderColor: 'rgba(239, 68, 68, 0.35)',
+                background: 'rgba(239, 68, 68, 0.08)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                fontWeight: 650,
+                borderRadius: 8
+              }}
+              disabled={reverting}
+              onClick={() => setShowConfirm(true)}
+            >
+              <RotateCcw size={14} />
+              Revert this import
+            </button>
+          )}
           <Link className="btn primary" to={directoryPath}>View {crmTerms.recordPlural} Directory</Link>
         </div>
       </section>
+
+      {revertedMessage && (
+        <div className="notice success" style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>✓</span>
+          <span>{revertedMessage}</span>
+        </div>
+      )}
+
+      {revertError && (
+        <div className="notice danger" style={{ marginBottom: '1.5rem' }}>
+          {revertError}
+        </div>
+      )}
 
       <section className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', marginBottom: '1.5rem' }}>
         <div className="metric-card">
@@ -91,12 +150,23 @@ export default function CustomerImportResultsPage() {
             <p className="team-muted">Your database has been updated. You can view all imported leads in the pipeline or search them in the directory.</p>
           </div>
         </div>
-        <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.75rem' }}>
+        <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <Link className="btn primary" to="/">Go to Dashboard</Link>
           <Link className="btn secondary outline" to={directoryPath}>View {crmTerms.recordPlural} Directory</Link>
           <Link className="btn secondary outline" to={importHref}>Import Another CSV</Link>
         </div>
       </section>
+
+      <ConfirmDialog
+        open={showConfirm}
+        title="Revert CSV Import"
+        message={`Are you sure you want to revert this import batch? This will permanently delete the ${imported} newly created record(s) and restore any modified records to their previous values.`}
+        confirmText="Yes, revert import"
+        variant="danger"
+        loading={reverting}
+        onConfirm={() => void handleRevert()}
+        onCancel={() => setShowConfirm(false)}
+      />
     </div>
   );
 }

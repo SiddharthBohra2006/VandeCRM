@@ -239,7 +239,7 @@ export default function MailPage() {
   );
 
   return (
-    <div className="page-container">
+    <div className="page-container experience-page mail-page">
       {error && <div className="auth-error" style={{ marginBottom: '1rem' }}>{error}</div>}
       {success && <div className="notice success" style={{ marginBottom: '1rem' }}>{success}</div>}
 
@@ -259,6 +259,7 @@ export default function MailPage() {
 
       {/* 3-Pane Mail Container */}
       <div
+        className="mail-workspace"
         style={{
           display: 'grid',
           gridTemplateColumns: '180px 320px minmax(0, 1fr)',
@@ -270,7 +271,7 @@ export default function MailPage() {
         }}
       >
         {/* Pane 1: Navigation / Folders */}
-        <div style={{ borderRight: '1px solid var(--border)', padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'var(--bg-soft, rgba(255,255,255,0.01))' }}>
+        <nav className="mail-workspace-nav" aria-label="Mail folders" style={{ borderRight: '1px solid var(--border)', padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'var(--bg-soft, rgba(255,255,255,0.01))' }}>
           {[
             { id: 'sent', label: 'Sent Mail', count: messages.length },
             { id: 'leads', label: 'Recipient Leads', count: customers.length },
@@ -303,10 +304,10 @@ export default function MailPage() {
               <small style={{ color: 'var(--muted)', fontSize: '0.72rem' }}>{f.count}</small>
             </button>
           ))}
-        </div>
+        </nav>
 
         {/* Pane 2: List */}
-        <div style={{ borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', background: 'var(--panel)', overflow: 'hidden' }}>
+        <div className="mail-workspace-list" style={{ borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', background: 'var(--panel)', overflow: 'hidden' }}>
           <div style={{ padding: '0.75rem', borderBottom: '1px solid var(--border)' }}>
             <input
               type="text"
@@ -408,7 +409,7 @@ export default function MailPage() {
         </div>
 
         {/* Pane 3: Detail / Compose / Settings */}
-        <div style={{ padding: '1.5rem', overflowY: 'auto' }}>
+        <div className="mail-workspace-detail" style={{ padding: '1.5rem', overflowY: 'auto' }}>
           {showCompose ? (
             <div>
               <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '1rem' }}>Compose Email</h2>

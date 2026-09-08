@@ -71,13 +71,15 @@ router.get('/', async (req, res, next) => {
     const companyFilter = { organization, status: 'active' };
     if (!['admin', 'manager'].includes(req.user.role)) companyFilter.assignedUsers = req.user._id;
 
-    const pageSize = 50;
+    const isAll = String(req.query.pageSize || '').toLowerCase() === 'all';
+    const parsedPageSize = Number.parseInt(req.query.pageSize, 10);
+    const pageSize = isAll ? 10000 : Math.min(1000, Math.max(1, parsedPageSize || 50));
     const totalResults = await Customer.countDocuments(filter);
-    const totalPages = Math.max(1, Math.ceil(totalResults / pageSize));
-    const page = Math.min(Math.max(1, Number.parseInt(pageParam, 10) || 1), totalPages);
+    const totalPages = isAll ? 1 : Math.max(1, Math.ceil(totalResults / pageSize));
+    const page = isAll ? 1 : Math.min(Math.max(1, Number.parseInt(pageParam, 10) || 1), totalPages);
 
     const [customers, allStages, availableLabels, fields, companies, campaigns, users, savedViews] = await Promise.all([
-      Customer.find(filter).populate('stage labels assignedTo clientCompany campaign').sort(sortObj).skip((page - 1) * pageSize).limit(pageSize),
+      Customer.find(filter).populate('stage labels assignedTo clientCompany campaign').sort(sortObj).skip(isAll ? 0 : (page - 1) * pageSize).limit(pageSize),
       CrmStage.find({ organization, clientCompany: req.activeCompanyId }).sort({ order: 1 }),
       CrmLabel.find({ organization, clientCompany: req.activeCompanyId, isActive: true }).sort({ name: 1 }),
       CustomField.find({ organization, clientCompany: req.activeCompanyId, entity: 'customer', isActive: true }).sort({ order: 1, createdAt: 1 }),
@@ -115,7 +117,7 @@ router.get('/', async (req, res, next) => {
       activeSavedView,
       filters: { q, stage: selectedStageId, label, campaign, sortBy, view: view || 'all', dateFrom, dateTo, viewId },
       clientStats: { totalClients, newClients, totalValue, highPriorityCount },
-      pagination: { page, pageSize, totalPages, totalResults }
+      pagination: { page, pageSize: isAll ? (totalResults || 1) : pageSize, totalPages, totalResults }
     });
   } catch (error) { next(error); }
 });

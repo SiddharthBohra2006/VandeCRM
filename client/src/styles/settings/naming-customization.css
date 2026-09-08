@@ -1,0 +1,358 @@
+/* =========================================================
+   CRM Naming & Terminology Customization
+   Theme-adaptive, clean styling using CSS custom properties
+   ========================================================= */
+
+.terminology-manager-container {
+  grid-column: 1 / -1 !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1.15fr) !important;
+  gap: 1.25rem !important;
+  width: 100% !important;
+  align-items: start !important;
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 1024px) {
+  .terminology-manager-container {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Left Card: Edit CRM names */
+.terminology-edit-card {
+  background: var(--panel, #ffffff) !important;
+  border: 1px solid var(--border, #e2e8f0) !important;
+  border-radius: 14px !important;
+  padding: 1.4rem 1.6rem !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1.25rem !important;
+  box-sizing: border-box !important;
+}
+
+.terminology-card-header {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 1rem !important;
+  flex-wrap: wrap !important;
+}
+
+.terminology-card-titles {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.15rem !important;
+  max-width: 480px !important;
+}
+
+.terminology-card-title {
+  font-size: 1.05rem !important;
+  font-weight: 750 !important;
+  color: var(--text, #0f172a) !important;
+  margin: 0 !important;
+  letter-spacing: -0.015em !important;
+}
+
+.terminology-card-subtitle {
+  font-size: 0.82rem !important;
+  color: var(--muted, #64748b) !important;
+  margin: 0 !important;
+  line-height: 1.4 !important;
+}
+
+.btn-terminology-reset {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.35rem !important;
+  padding: 0.38rem 0.8rem !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--border, #e2e8f0) !important;
+  background: var(--panel, #ffffff) !important;
+  color: var(--text, #334155) !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  transition: all 0.15s ease !important;
+}
+.btn-terminology-reset:hover {
+  background: var(--hover, #f8fafc) !important;
+  border-color: var(--border-strong, #cbd5e1) !important;
+  color: var(--text, #0f172a) !important;
+}
+
+.terminology-form {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1.25rem !important;
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+.terminology-fields-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 1.15rem 1.25rem !important;
+  width: 100% !important;
+}
+
+@media (max-width: 600px) {
+  .terminology-fields-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.term-field-group {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.35rem !important;
+  width: 100% !important;
+}
+.term-field-group.full-width {
+  grid-column: 1 / -1 !important;
+}
+
+.term-field-label {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.45rem !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  color: var(--text, #1e293b) !important;
+  margin: 0 !important;
+}
+.term-field-label svg {
+  color: var(--muted, #64748b) !important;
+  flex-shrink: 0 !important;
+}
+
+.term-input-text {
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 0.85rem !important;
+  border: 1px solid var(--border, #e2e8f0) !important;
+  border-radius: 8px !important;
+  background: var(--input, #f8fafc) !important;
+  color: var(--text, #0f172a) !important;
+  font-size: 0.86rem !important;
+  outline: none !important;
+  transition: all 0.15s ease !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+.term-input-text:focus {
+  background: var(--input, #ffffff) !important;
+  border-color: var(--gold, #ea580c) !important;
+  box-shadow: 0 0 0 3px var(--gold-dim, rgba(234, 88, 12, 0.12)) !important;
+}
+
+.term-field-hint {
+  font-size: 0.74rem !important;
+  color: var(--muted, #94a3b8) !important;
+  line-height: 1.3 !important;
+  margin-top: 1px !important;
+}
+
+.terminology-form-actions {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 1rem !important;
+  margin-top: 0.5rem !important;
+  padding-top: 1rem !important;
+  border-top: 1px solid var(--border, #f1f5f9) !important;
+  flex-wrap: wrap !important;
+}
+
+.btn-term-preview-action {
+  height: 38px !important;
+  padding: 0 1.25rem !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--border, #e2e8f0) !important;
+  background: var(--panel, #ffffff) !important;
+  color: var(--text, #0f172a) !important;
+  font-weight: 650 !important;
+  font-size: 0.84rem !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.4rem !important;
+  transition: all 0.15s ease !important;
+}
+.btn-term-preview-action:hover {
+  background: var(--hover, #f8fafc) !important;
+  border-color: var(--border-strong, #cbd5e1) !important;
+}
+
+.btn-save-term-names {
+  height: 38px !important;
+  padding: 0 1.6rem !important;
+  border-radius: 8px !important;
+  border: none !important;
+  background: var(--gold, #c2410c) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 0.86rem !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.4rem !important;
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--gold, #c2410c) 30%, transparent) !important;
+  transition: all 0.15s ease !important;
+}
+.btn-save-term-names:hover:not(:disabled) {
+  background: var(--gold-hover, #9a3412) !important;
+  transform: translateY(-1px) !important;
+}
+.btn-save-term-names:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+/* Right Column: Stacked Cards */
+.terminology-side-column {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1.25rem !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.terminology-why-card {
+  background: var(--panel-muted, #fffaf5) !important;
+  border: 1px solid var(--border, #fed7aa) !important;
+  border-radius: 14px !important;
+  padding: 1.35rem 1.4rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.85rem !important;
+  box-sizing: border-box !important;
+}
+
+.terminology-why-header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.65rem !important;
+}
+
+.terminology-why-bulb-badge {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 50% !important;
+  background: var(--gold-dim, #ffedd5) !important;
+  color: var(--gold, #ea580c) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+
+.terminology-why-header h4 {
+  font-size: 0.95rem !important;
+  font-weight: 750 !important;
+  color: var(--text, #0f172a) !important;
+  margin: 0 !important;
+}
+
+.terminology-why-list {
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.65rem !important;
+}
+
+.terminology-why-list li {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.6rem !important;
+  font-size: 0.82rem !important;
+  font-weight: 550 !important;
+  color: var(--text, #334155) !important;
+}
+
+.term-why-check {
+  width: 17px !important;
+  height: 17px !important;
+  border-radius: 50% !important;
+  background: var(--gold, #ea580c) !important;
+  color: #ffffff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+
+.terminology-preview-card {
+  background: var(--panel, #ffffff) !important;
+  border: 1px solid var(--border, #e2e8f0) !important;
+  border-radius: 14px !important;
+  padding: 1.35rem 1.4rem !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1rem !important;
+  box-sizing: border-box !important;
+}
+
+.terminology-preview-header h4 {
+  font-size: 1rem !important;
+  font-weight: 750 !important;
+  color: var(--text, #0f172a) !important;
+  margin: 0 0 0.15rem !important;
+}
+.terminology-preview-header p {
+  font-size: 0.8rem !important;
+  color: var(--muted, #64748b) !important;
+  margin: 0 !important;
+}
+
+.terminology-preview-pills-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 0.65rem !important;
+  width: 100% !important;
+}
+
+.term-preview-pill {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.55rem !important;
+  padding: 0.65rem 0.85rem !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--border, #e2e8f0) !important;
+  background: var(--input, #ffffff) !important;
+  color: var(--text, #0f172a) !important;
+  font-size: 0.85rem !important;
+  font-weight: 650 !important;
+  transition: all 0.15s ease !important;
+}
+.term-preview-pill svg {
+  color: var(--muted, #64748b) !important;
+  flex-shrink: 0 !important;
+}
+.term-preview-pill.full-width {
+  grid-column: 1 / -1 !important;
+}
+
+.terminology-preview-success-banner {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.55rem !important;
+  padding: 0.7rem 0.9rem !important;
+  border-radius: 8px !important;
+  background: rgba(22, 163, 74, 0.12) !important;
+  border: 1px solid rgba(22, 163, 74, 0.28) !important;
+  color: var(--green, #15803d) !important;
+  font-size: 0.78rem !important;
+  font-weight: 550 !important;
+  line-height: 1.35 !important;
+}
+
+.term-success-icon {
+  color: var(--green, #16a34a) !important;
+  flex-shrink: 0 !important;
+}

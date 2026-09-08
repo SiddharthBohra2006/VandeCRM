@@ -46,6 +46,13 @@ export default function AnalyticsPage() {
     dateTo: searchParams.get('dateTo') || '',
   };
 
+  const hasActiveFilters = Boolean(filters.clientCompany || filters.campaign || filters.dateFrom || filters.dateTo);
+  let activeFilterCount = 0;
+  if (filters.clientCompany) activeFilterCount++;
+  if (filters.campaign) activeFilterCount++;
+  if (filters.dateFrom) activeFilterCount++;
+  if (filters.dateTo) activeFilterCount++;
+
   useEffect(() => {
     let active = true;
     (async () => {
@@ -65,7 +72,7 @@ export default function AnalyticsPage() {
     return () => { active = false; };
   }, [searchParams.toString()]);
 
-  if (loading && !data) return <div className="loading" style={{ padding: '2rem', textAlign: 'center' }}>Loading analytics...</div>;
+  if (loading && !data) return <div className="loading" style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--muted)' }}>Loading analytics workspace...</div>;
   if (error) return <div className="page-container"><div className="auth-error">{error}</div></div>;
 
   const recordPlural = crmTerms.recordPlural || 'Records';
@@ -73,26 +80,30 @@ export default function AnalyticsPage() {
   const pipelineName = crmTerms.pipelineName || 'Pipeline';
   const stats = data?.stats || { totalLeads: 0, wonCount: 0, lostCount: 0, activeCount: 0, winRate: 0, totalValue: 0, wonValue: 0 };
 
-  // Ingestion trend SVG rendering (parity with analytics.ejs)
+  // Ingestion trend SVG rendering
   const trend = data?.ingestionTrend || [];
-  const maxVal = Math.max(...trend.map(d => d.count), 2);
-  const graphH = 120;
-  const graphW = 540;
+  const maxVal = Math.max(...trend.map(d => d.count), 5);
+  const padX = 28;
+  const graphW = 560;
+  const availW = graphW - padX * 2;
+  const numSteps = Math.max(trend.length - 1, 1);
+  const chartTopY = 24;
+  const chartBottomY = 120;
+  const chartHeight = chartBottomY - chartTopY;
+
   const points = trend.map((d, idx) => {
-    const x = (idx * (graphW / 6)).toFixed(1);
-    const y = (135 - (d.count / maxVal) * graphH).toFixed(1);
+    const x = Number((padX + idx * (availW / numSteps)).toFixed(1));
+    const y = Number((chartBottomY - (d.count / maxVal) * chartHeight).toFixed(1));
     return { x, y, dateStr: d.dateStr, count: d.count };
   });
-  const pathLine = 'M ' + points.map(p => `${p.x} ${p.y}`).join(' L ');
-  const pathArea = pathLine + ` L ${graphW} 140 L 0 140 Z`;
+  const pathLine = points.length > 0 ? 'M ' + points.map(p => `${p.x} ${p.y}`).join(' L ') : '';
+  const pathArea = points.length > 0 ? pathLine + ` L ${points[points.length - 1].x} ${chartBottomY} L ${points[0].x} ${chartBottomY} Z` : '';
 
   const winRateNum = Number(stats.winRate) || 0;
   const dashOffset = CIRCUMFERENCE - (winRateNum / 100) * CIRCUMFERENCE;
   const revPct = stats.totalValue > 0 ? Math.round((stats.wonValue / stats.totalValue) * 100) : 0;
   const activePct = stats.totalLeads > 0 ? Math.round((stats.activeCount / stats.totalLeads) * 100) : 0;
   const maxStageVal = Math.max(...(data?.stageSummary || []).map(s => s.value), 1);
-
-  const selectCtrl: React.CSSProperties = { height: 40, lineHeight: '38px', border: '1px solid var(--border)', borderRadius: 8, fontSize: '.82rem', fontWeight: 700, color: 'var(--text)', background: 'var(--panel)', padding: '0 12px', cursor: 'pointer' };
 
   function handleFilter(key: string, value: string) {
     const p = new URLSearchParams(searchParams);
@@ -101,226 +112,246 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="analytics-page" style={{ background: 'var(--bg-soft)', minHeight: '100%' }}>
-      <div className="page-content-inner">
-        <section className="analytics-page-head">
-          <div>
-            <h1>{[user?.organization?.name, user?.organization?.analyticsHeading || 'Digital Insights'].filter(Boolean).join(' ')}</h1>
-            <p>Monitor your marketing performance and pipeline health.</p>
+    <div className="analytics-page">
+      <div className="analytics-container">
+        {/* 1. Header */}
+        <header className="analytics-header">
+          <div className="analytics-header-title-group">
+            <h1 className="analytics-title">
+              {[user?.organization?.name, user?.organization?.analyticsHeading || 'Digital Insights'].filter(Boolean).join(' ')}
+            </h1>
+            <p className="analytics-subtitle">Monitor your marketing performance and pipeline health.</p>
           </div>
-        </section>
+        </header>
 
+        {/* 2. Filter Toolbar */}
         <div className="analytics-toolbar">
-          <CustomSelect
-            value={filters.clientCompany}
-            onChange={val => handleFilter('clientCompany', val)}
-            placeholder="All Client Companies"
-            options={[
-              { value: '', label: 'All Client Companies' },
-              ...(data?.companies || []).map(c => ({ value: c._id, label: c.name }))
-            ]}
-          />
-          <CustomSelect
-            value={filters.campaign}
-            onChange={val => handleFilter('campaign', val)}
-            placeholder="All Campaigns"
-            options={[
-              { value: '', label: 'All Campaigns' },
-              ...(data?.campaigns || []).map(c => ({ value: c._id, label: `${c.name} (${c.platform})` }))
-            ]}
-          />
-          <DatePicker
-            aria-label="Start date"
-            placeholder="Start date"
-            value={filters.dateFrom}
-            onChange={val => handleFilter('dateFrom', val)}
-          />
-          <DatePicker
-            aria-label="End date"
-            placeholder="End date"
-            value={filters.dateTo}
-            onChange={val => handleFilter('dateTo', val)}
-          />
-          <button type="button" className="btn" style={{ height: 40, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => navigate('/analytics')}>
-            {resetIcon()}
-            Reset
-          </button>
+          <div className="analytics-toolbar-control">
+            <CustomSelect
+              value={filters.clientCompany}
+              onChange={val => handleFilter('clientCompany', val)}
+              placeholder="All Client Companies"
+              options={[
+                { value: '', label: 'All Client Companies' },
+                ...(data?.companies || []).map(c => ({ value: c._id, label: c.name }))
+              ]}
+            />
+          </div>
+
+          <div className="analytics-toolbar-control">
+            <CustomSelect
+              value={filters.campaign}
+              onChange={val => handleFilter('campaign', val)}
+              placeholder="All Campaigns"
+              options={[
+                { value: '', label: 'All Campaigns' },
+                ...(data?.campaigns || []).map(c => ({ value: c._id, label: `${c.name} (${c.platform})` }))
+              ]}
+            />
+          </div>
+
+          <div className="analytics-toolbar-control analytics-date-picker-wrap">
+            <DatePicker
+              aria-label="Start date"
+              placeholder="Start date"
+              value={filters.dateFrom}
+              onChange={val => handleFilter('dateFrom', val)}
+            />
+          </div>
+
+          <div className="analytics-toolbar-control analytics-date-picker-wrap">
+            <DatePicker
+              aria-label="End date"
+              placeholder="End date"
+              value={filters.dateTo}
+              onChange={val => handleFilter('dateTo', val)}
+            />
+          </div>
+
+          <div className="analytics-toolbar-actions">
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                className="analytics-reset-btn has-filters"
+                onClick={() => navigate('/analytics')}
+                title="Clear all active filters"
+              >
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+                <span>Clear ({activeFilterCount})</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="analytics-reset-btn"
+                onClick={() => navigate('/analytics')}
+                title="Reset filters"
+              >
+                {resetIcon()}
+                <span>Reset</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        <section className="analytics-kpi-grid">
-          <div className="analytics-kpi-card">
-            <div className="analytics-kpi-card-header">
-              <div className="analytics-kpi-card-icon" style={{ background: 'rgba(59,130,246,.1)', color: '#3b82f6' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M17 21v-2a4 4 0 0 0-3-3.87" /><path d="M9 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-              </div>
-              <div className="analytics-kpi-card-title-block"><small>Total Ingestion</small><em>All captured {recordPlural.toLowerCase()}</em></div>
-              <strong className="analytics-kpi-card-value">{stats.totalLeads}</strong>
+        {/* 3. KPI Summary Strip */}
+        <section className="analytics-kpi-strip">
+          <div className="analytics-kpi-item">
+            <span className="kpi-label">Total Ingestion</span>
+            <div className="kpi-value-row">
+              <strong className="kpi-value">{stats.totalLeads}</strong>
             </div>
-            <div className="analytics-kpi-card-bar" style={{ background: 'var(--gold)' }} />
+            <span className="kpi-meta">All captured {recordPlural.toLowerCase()}</span>
           </div>
 
-          <div className="analytics-kpi-card">
-            <div className="analytics-kpi-card-header">
-              <div className="analytics-kpi-card-icon" style={{ background: 'rgba(20,184,166,.1)', color: '#14b8a6' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
-              </div>
-              <div className="analytics-kpi-card-title-block"><small>Active {pipelineName}</small><em>Open opportunities</em></div>
-              <strong className="analytics-kpi-card-value">{stats.activeCount}</strong>
+          <div className="analytics-kpi-item">
+            <span className="kpi-label">Active {pipelineName}</span>
+            <div className="kpi-value-row">
+              <strong className="kpi-value">{stats.activeCount}</strong>
             </div>
-            <div className="analytics-kpi-card-bar" style={{ background: 'var(--teal)' }} />
+            <span className="kpi-meta">Open opportunities ({activePct}%)</span>
           </div>
 
-          <div className="analytics-kpi-card">
-            <div className="analytics-kpi-card-header">
-              <div className="analytics-kpi-card-icon" style={{ background: 'rgba(34,197,94,.1)', color: '#22c55e' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" /><path d="M4 22h16" /><path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34" /><path d="M12 2a6 6 0 0 0-6 6v1a6 6 0 0 0 12 0V8a6 6 0 0 0 6-6z" /></svg>
-              </div>
-              <div className="analytics-kpi-card-title-block"><small>Won Deals</small><em>Won conversions</em></div>
-              <strong className="analytics-kpi-card-value">{stats.wonCount}</strong>
+          <div className="analytics-kpi-item">
+            <span className="kpi-label">Won Deals</span>
+            <div className="kpi-value-row">
+              <strong className="kpi-value kpi-won">{stats.wonCount}</strong>
             </div>
-            <div className="analytics-kpi-card-bar" style={{ background: 'var(--green)' }} />
+            <span className="kpi-meta">Won conversions</span>
           </div>
 
-          <div className="analytics-kpi-card">
-            <div className="analytics-kpi-card-header">
-              <div className="analytics-kpi-card-icon" style={{ background: 'rgba(239,68,68,.1)', color: '#ef4444' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
-              </div>
-              <div className="analytics-kpi-card-title-block"><small>Lost Deals</small><em>Lost opportunities</em></div>
-              <strong className="analytics-kpi-card-value">{stats.lostCount}</strong>
+          <div className="analytics-kpi-item">
+            <span className="kpi-label">Lost Deals</span>
+            <div className="kpi-value-row">
+              <strong className="kpi-value kpi-lost">{stats.lostCount}</strong>
             </div>
-            <div className="analytics-kpi-card-footer">
-              <span />
-              <span style={{ fontSize: '.68rem', fontWeight: 800, color: 'var(--muted)', letterSpacing: '.05em' }}>CLOSED LOST</span>
-            </div>
+            <span className="kpi-meta">Closed lost</span>
           </div>
 
-          <div className="analytics-kpi-card">
-            <div className="analytics-kpi-card-header">
-              <div className="analytics-kpi-card-icon" style={{ background: 'rgba(139,92,246,.1)', color: '#8b5cf6' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>
-              </div>
-              <div className="analytics-kpi-card-title-block"><small>Win Velocity</small><em>{recordPlural} win ratio</em></div>
-              <strong className="analytics-kpi-card-value">{stats.winRate}%</strong>
+          <div className="analytics-kpi-item">
+            <span className="kpi-label">Win Rate</span>
+            <div className="kpi-value-row">
+              <strong className="kpi-value">{stats.winRate}%</strong>
             </div>
-            <div className="analytics-kpi-card-footer">
-              <span />
-              <span style={{ fontSize: '.65rem', fontWeight: 800, color: 'var(--green)', background: 'rgba(34,197,94,.1)', padding: '2px 6px', borderRadius: 4 }}>ACTIVE</span>
-            </div>
+            <span className="kpi-meta">{recordPlural} conversion ratio</span>
           </div>
         </section>
 
+        {/* 4. Analytics Content Area (60/40 Grid) */}
         <div className="analytics-grid-two-col">
-          <article className="analytics-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-            <div>
-              <div className="analytics-card-header">
-                <div>
-                  <h2 className="analytics-card-title">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: 6, color: 'var(--gold)' }}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>
-                    Client intake trend
-                  </h2>
-                  <p className="analytics-card-subtitle">Track active marketing capture volume daily.</p>
-                </div>
-                <span style={{ fontSize: '.65rem', fontWeight: 800, color: 'var(--muted)', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: 6, textTransform: 'uppercase' }}>{filters.dateFrom || filters.dateTo ? 'Selected Range' : 'Last 7 Days'}</span>
+          {/* LEFT: Client Intake Trend */}
+          <article className="analytics-panel">
+            <div className="analytics-panel-header">
+              <div>
+                <h2 className="analytics-panel-title">Client intake trend</h2>
+                <p className="analytics-panel-subtitle">Track active marketing capture volume daily.</p>
               </div>
+              <span className="analytics-range-badge">
+                {filters.dateFrom || filters.dateTo ? 'Selected Range' : 'Last 7 Days'}
+              </span>
             </div>
-            <div style={{ position: 'relative', width: '100%', height: 160, minHeight: 160, marginTop: 12 }}>
-              {points.length > 0 && (
-                <svg viewBox="0 0 540 160" width="100%" height="100%" style={{ overflow: 'visible' }}>
+            <div className="analytics-chart-container">
+              {points.length > 0 ? (
+                <svg viewBox="0 0 560 150" width="100%" height="100%" style={{ overflow: 'visible' }}>
                   <defs>
                     <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--gold)" stopOpacity="0.22" />
-                      <stop offset="100%" stopColor="var(--gold)" stopOpacity="0" />
+                      <stop offset="0%" stopColor="var(--gold)" stopOpacity="0.2" />
+                      <stop offset="100%" stopColor="var(--gold)" stopOpacity="0.0" />
                     </linearGradient>
                   </defs>
                   {[0, 1, 2, 3].map(i => {
-                    const gridY = 15 + (i * (graphH / 3));
-                    return <line key={i} x1="0" y1={gridY} x2={graphW} y2={gridY} style={{ stroke: '#e5e7eb', strokeWidth: 1, strokeDasharray: '4 4' }} />;
+                    const gridY = chartTopY + (i * (chartHeight / 3));
+                    return <line key={i} x1={padX} y1={gridY} x2={graphW - padX} y2={gridY} style={{ stroke: 'var(--border)', strokeWidth: 1, strokeDasharray: '4 4' }} />;
                   })}
-                  <path d={pathArea} fill="url(#areaGrad)" />
-                  <path d={pathLine} fill="none" stroke="var(--gold)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  {pathArea && <path d={pathArea} fill="url(#areaGrad)" />}
+                  {pathLine && <path d={pathLine} fill="none" stroke="var(--gold)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
                   {points.map((p, idx) => (
                     <g key={idx}>
-                      <circle cx={p.x} cy={p.y} r="4.5" fill="#ffffff" stroke="var(--gold)" strokeWidth="2.5" />
-                      <text x={p.x} y={Number(p.y) - 8} fontSize="8.5" fontWeight="900" fill="var(--text)" textAnchor="middle">{p.count}</text>
-                      <text x={p.x} y="155" fontSize="8.5" fontWeight="700" fill="var(--muted)" textAnchor="middle">{p.dateStr}</text>
+                      <circle cx={p.x} cy={p.y} r="4.5" fill="var(--panel)" stroke="var(--gold)" strokeWidth="2.5" />
+                      <text x={p.x} y={p.y <= chartTopY + 10 ? p.y + 14 : p.y - 8} fontSize="10" fontWeight="750" fill="var(--text)" textAnchor="middle">{p.count}</text>
+                      <text x={p.x} y="142" fontSize="9.5" fontWeight="600" fill="var(--muted)" textAnchor="middle">{p.dateStr}</text>
                     </g>
                   ))}
                 </svg>
+              ) : (
+                <div className="analytics-chart-empty">No ingestion data recorded for this period.</div>
               )}
             </div>
           </article>
 
-          <article className="analytics-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-            <div>
-              <div className="analytics-card-header">
-                <div>
-                  <h2 className="analytics-card-title">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: 6, color: '#8b5cf6' }}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>
-                    Conversion Performance
-                  </h2>
-                  <p className="analytics-card-subtitle">Realized revenue metrics and conversion funnel throughput.</p>
-                </div>
+          {/* RIGHT: Conversion Performance */}
+          <article className="analytics-panel">
+            <div className="analytics-panel-header">
+              <div>
+                <h2 className="analytics-panel-title">Conversion Performance</h2>
+                <p className="analytics-panel-subtitle">Realized revenue and conversion efficiency</p>
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
-              <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center', background: 'var(--panel)', padding: '12px 16px', borderRadius: 10, border: '1px solid var(--border)' }}>
-                <div style={{ position: 'relative', width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <svg width="72" height="72" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
-                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="#f3f4f6" strokeWidth="8" />
-                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="var(--green)" strokeWidth="8" strokeDasharray={CIRCUMFERENCE} strokeDashoffset={dashOffset} strokeLinecap="round" />
+
+            <div className="analytics-performance-body">
+              {/* Win rate hero row */}
+              <div className="conversion-hero-row">
+                <div className="conversion-gauge-wrap">
+                  <svg width="58" height="58" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
+                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="var(--hover)" strokeWidth="10" />
+                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="var(--green)" strokeWidth="10" strokeDasharray={CIRCUMFERENCE} strokeDashoffset={dashOffset} strokeLinecap="round" />
                   </svg>
-                  <div style={{ position: 'absolute', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
-                    <strong style={{ fontSize: '.95rem', color: 'var(--text)' }}>{stats.winRate}%</strong>
-                    <span style={{ fontSize: '.55rem', color: 'var(--muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.02em' }}>Win</span>
+                  <div className="conversion-gauge-text">
+                    <strong>{stats.winRate}%</strong>
                   </div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <strong style={{ display: 'block', fontSize: '.8rem', color: 'var(--text)', marginBottom: 2 }}>Overall Closure Speed</strong>
-                  <span style={{ fontSize: '.7rem', color: 'var(--sub)', lineHeight: 1.4 }}>{stats.wonCount} of {stats.totalLeads} {recordPlural.toLowerCase()} converted successfully.</span>
+                <div className="conversion-hero-text">
+                  <div className="conversion-hero-title">{stats.winRate}% Win rate</div>
+                  <div className="conversion-hero-sub">{stats.wonCount} of {stats.totalLeads} {recordPlural.toLowerCase()} converted</div>
                 </div>
               </div>
 
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.76rem', marginBottom: '.35rem' }}>
-                  <span style={{ color: 'var(--muted)', fontWeight: 700 }}>Revenue Realized</span>
-                  <strong style={{ color: 'var(--green)', fontWeight: 800 }}>Rs. {formatIn(stats.wonValue)}</strong>
+              {/* Revenue Realized */}
+              <div className="conversion-revenue-block">
+                <div className="conversion-metric-row">
+                  <span className="conversion-metric-label">Revenue realized</span>
+                  <strong className="conversion-metric-value">Rs. {formatIn(stats.wonValue)}</strong>
                 </div>
-                <div style={{ height: 6, background: '#f3f4f6', border: '1px solid var(--border)', borderRadius: 99, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${revPct}%`, background: 'var(--green)', borderRadius: 99 }} />
+                <div className="conversion-progress-track">
+                  <div className="conversion-progress-bar" style={{ width: `${Math.min(revPct, 100)}%` }} />
                 </div>
-                <span style={{ fontSize: '.68rem', color: 'var(--muted)', display: 'block', marginTop: '.25rem' }}>{revPct}% of total pipeline value (Rs. {formatIn(stats.totalValue)}) won</span>
+                <div className="conversion-progress-hint">
+                  {revPct}% of total pipeline (Rs. {formatIn(stats.totalValue)}) won
+                </div>
               </div>
 
-              <div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.76rem', borderBottom: '1px solid #f3f4f6', paddingBottom: 4 }}>
-                    <span style={{ color: 'var(--muted)' }}>1. Ingestion</span>
-                    <span style={{ fontWeight: 750 }}>{stats.totalLeads} {recordPlural.toLowerCase()} (100%)</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.76rem', borderBottom: '1px solid #f3f4f6', paddingBottom: 4 }}>
-                    <span style={{ color: 'var(--muted)' }}>2. Active pipeline</span>
-                    <span style={{ fontWeight: 750, color: 'var(--gold)' }}>{stats.activeCount} {recordPlural.toLowerCase()} ({activePct}%)</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.76rem' }}>
-                    <span style={{ color: 'var(--muted)' }}>3. Converted</span>
-                    <span style={{ fontWeight: 750, color: 'var(--green)' }}>{stats.wonCount} won ({stats.winRate}%)</span>
-                  </div>
+              {/* Funnel throughput list */}
+              <div className="conversion-funnel-list">
+                <div className="conversion-funnel-row">
+                  <span className="funnel-label">Total Ingestion</span>
+                  <span className="funnel-val">{stats.totalLeads} {recordPlural.toLowerCase()}</span>
+                </div>
+                <div className="conversion-funnel-row">
+                  <span className="funnel-label">Active pipeline</span>
+                  <span className="funnel-val">{stats.activeCount} ({activePct}%)</span>
+                </div>
+                <div className="conversion-funnel-row">
+                  <span className="funnel-label">Won deals</span>
+                  <span className="funnel-val funnel-won">{stats.wonCount}</span>
+                </div>
+                <div className="conversion-funnel-row">
+                  <span className="funnel-label">Lost deals</span>
+                  <span className="funnel-val funnel-lost">{stats.lostCount}</span>
                 </div>
               </div>
             </div>
           </article>
         </div>
 
+        {/* 5. Lower Breakdown Sections */}
         <div className="analytics-row-full">
-          <article className="analytics-card">
-            <div className="analytics-card-header" style={{ marginBottom: 14 }}>
+          {/* Sales Stages Allocation */}
+          <article className="analytics-panel">
+            <div className="analytics-panel-header">
               <div>
-                <h2 className="analytics-card-title">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: 6, color: 'var(--text)' }}><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
-                  Sales Stages Allocation Breakdown
-                </h2>
-                <p className="analytics-card-subtitle">Value and {recordSingular.toLowerCase()} distribution across {pipelineName.toLowerCase()} stages.</p>
+                <h2 className="analytics-panel-title">Sales Stages Allocation Breakdown</h2>
+                <p className="analytics-panel-subtitle">Value and {recordSingular.toLowerCase()} distribution across {pipelineName.toLowerCase()} stages.</p>
               </div>
             </div>
             <div className="stages-grid">
@@ -329,11 +360,14 @@ export default function AnalyticsPage() {
                 return (
                   <div key={s.name} className="stage-mini-card">
                     <div className="stage-mini-card-top">
-                      <span className="stage-mini-card-name"><span className="stage-mini-card-dot" style={{ background: s.color }} />{s.name}</span>
+                      <span className="stage-mini-card-name">
+                        <span className="stage-mini-card-dot" style={{ background: s.color }} />
+                        {s.name}
+                      </span>
                       <span className="stage-mini-card-count">{s.count} {recordPlural.toLowerCase()}</span>
                     </div>
                     <div className="stage-mini-card-bottom">
-                      <span className="stage-mini-card-label">Cumulative Value ({pct}%)</span>
+                      <span className="stage-mini-card-label">Cumulative ({pct}%)</span>
                       <strong className="stage-mini-card-value">Rs. {formatIn(s.value)}</strong>
                     </div>
                   </div>
@@ -342,37 +376,45 @@ export default function AnalyticsPage() {
             </div>
           </article>
 
-          <article className="analytics-card">
-            <div className="analytics-card-header" style={{ marginBottom: 14 }}>
+          {/* Campaign Attribution */}
+          <article className="analytics-panel">
+            <div className="analytics-panel-header">
               <div>
-                <h2 className="analytics-card-title">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: 6, color: '#f43f5e' }}><path d="M11 5L6 9H2v6h4l5 4V5z" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /></svg>
-                  Campaign Attribution &amp; Performance ROI
-                </h2>
-                <p className="analytics-card-subtitle">Track advertising cost conversions and {recordSingular.toLowerCase()}-source profitability.</p>
+                <h2 className="analytics-panel-title">Campaign Attribution &amp; Performance ROI</h2>
+                <p className="analytics-panel-subtitle">Track advertising cost conversions and {recordSingular.toLowerCase()}-source profitability.</p>
               </div>
             </div>
             <div className="analytics-table-card">
               <table>
                 <thead>
                   <tr>
-                    <th>Campaign</th><th>Platform</th><th style={{ textAlign: 'center' }}>{recordPlural} captured</th><th>{pipelineName} value</th><th>Revenue Realized</th><th>Spent Budget</th><th>Campaign ROI</th>
+                    <th>Campaign</th>
+                    <th>Platform</th>
+                    <th style={{ textAlign: 'center' }}>{recordPlural} captured</th>
+                    <th>{pipelineName} value</th>
+                    <th>Revenue Realized</th>
+                    <th>Spent Budget</th>
+                    <th>Campaign ROI</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(data?.campaignSummary || []).length === 0 && (
-                    <tr><td colSpan={7} style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--muted)' }}>No campaigns logged yet.</td></tr>
+                    <tr>
+                      <td colSpan={7} style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--muted)' }}>
+                        No campaigns logged yet.
+                      </td>
+                    </tr>
                   )}
                   {(data?.campaignSummary || []).map(cam => {
                     const pill = platformPill(cam.platform);
                     const roi = cam.budget > 0 ? cam.wonValue / cam.budget : null;
                     return (
                       <tr key={cam.name}>
-                        <td style={{ fontWeight: 800, color: 'var(--text)' }}>{cam.name}</td>
+                        <td style={{ fontWeight: 700, color: 'var(--text)' }}>{cam.name}</td>
                         <td><span className="pill" style={{ background: pill.bg, color: pill.color, border: `1px solid ${pill.bd}` }}>{pill.text}</span></td>
-                        <td style={{ textAlign: 'center', fontWeight: 800 }}>{cam.leadsCount}</td>
-                        <td style={{ color: 'var(--gold)', fontWeight: 750 }}>Rs. {formatIn(cam.pipelineValue)}</td>
-                        <td style={{ color: 'var(--green)', fontWeight: 800 }}>Rs. {formatIn(cam.wonValue)}</td>
+                        <td style={{ textAlign: 'center', fontWeight: 700 }}>{cam.leadsCount}</td>
+                        <td style={{ color: 'var(--gold)', fontWeight: 700 }}>Rs. {formatIn(cam.pipelineValue)}</td>
+                        <td style={{ color: 'var(--green)', fontWeight: 750 }}>Rs. {formatIn(cam.wonValue)}</td>
                         <td style={{ color: 'var(--muted)' }}>Rs. {formatIn(cam.budget)}</td>
                         <td>
                           {roi !== null ? (() => { const p = roiPill(roi); return <span className="pill" style={{ background: p.bg, color: p.color, border: `1px solid ${p.bd}` }}>{p.label}</span>; })()
@@ -386,32 +428,37 @@ export default function AnalyticsPage() {
             </div>
           </article>
 
-          <article className="analytics-card">
-            <div className="analytics-card-header" style={{ marginBottom: 14 }}>
+          {/* Client Accounts Breakdown */}
+          <article className="analytics-panel">
+            <div className="analytics-panel-header">
               <div>
-                <h2 className="analytics-card-title">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: 6, color: 'var(--muted)' }}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-                  Client Accounts Breakdown
-                </h2>
-                <p className="analytics-card-subtitle">Analyze customer allocation and account pipeline valuation shares.</p>
+                <h2 className="analytics-panel-title">Client Accounts Breakdown</h2>
+                <p className="analytics-panel-subtitle">Analyze customer allocation and account pipeline valuation shares.</p>
               </div>
             </div>
             <div className="analytics-table-card">
               <table>
                 <thead>
                   <tr>
-                    <th>Client Brand</th><th style={{ textAlign: 'center' }}>Total {recordPlural}</th><th>Account Pipeline Share</th><th>Status</th>
+                    <th>Client Brand</th>
+                    <th style={{ textAlign: 'center' }}>Total {recordPlural}</th>
+                    <th>Account Pipeline Share</th>
+                    <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(data?.companySummary || []).length === 0 && (
-                    <tr><td colSpan={4} style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--muted)' }}>No client companies logged yet.</td></tr>
+                    <tr>
+                      <td colSpan={4} style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--muted)' }}>
+                        No client companies logged yet.
+                      </td>
+                    </tr>
                   )}
                   {(data?.companySummary || []).map(com => (
                     <tr key={com.name}>
-                      <td style={{ fontWeight: 800, color: 'var(--text)' }}>{com.name}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 800 }}>{com.leadsCount}</td>
-                      <td style={{ color: 'var(--gold)', fontWeight: 750 }}>Rs. {formatIn(com.pipelineValue)}</td>
+                      <td style={{ fontWeight: 700, color: 'var(--text)' }}>{com.name}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 700 }}>{com.leadsCount}</td>
+                      <td style={{ color: 'var(--gold)', fontWeight: 700 }}>Rs. {formatIn(com.pipelineValue)}</td>
                       <td><span className="pill" style={{ background: 'rgba(34,197,94,.1)', color: 'var(--green)', border: '1px solid rgba(34,197,94,.2)' }}>{com.status.toUpperCase()}</span></td>
                     </tr>
                   ))}

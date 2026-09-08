@@ -26,6 +26,8 @@ export interface CompanyIntegrationSetup {
     ga4PropertyId?: string;
     hasMetaToken?: boolean;
     hasGa4Json?: boolean;
+    googleDriveFolderLink?: string;
+    hasGoogleDriveJson?: boolean;
     apiKey?: string;
     apiKeyStatus?: string;
     integrationSyncEnabled?: boolean;
@@ -50,7 +52,7 @@ export interface IntegrationsResponse {
 
 export const integrationsApi = {
   get: () => api.get<IntegrationsResponse>('/integrations'),
-  saveCredentials: (companyId: string, data: { metaAdAccountId?: string; metaAccessToken?: string; ga4PropertyId?: string; ga4ServiceAccountJson?: string }) =>
+  saveCredentials: (companyId: string, data: { metaAdAccountId?: string; metaAccessToken?: string; ga4PropertyId?: string; ga4ServiceAccountJson?: string; googleDriveFolderLink?: string; googleDriveServiceAccountJson?: string }) =>
     api.post<{ ok: true; data: any }>(`/integrations/companies/${companyId}/credentials`, data),
   clearMeta: (companyId: string) => api.post<{ ok: true; data: any }>(`/integrations/companies/${companyId}/meta/clear`),
   clearGa4: (companyId: string) => api.post<{ ok: true; data: any }>(`/integrations/companies/${companyId}/ga4/clear`),

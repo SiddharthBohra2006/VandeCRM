@@ -699,12 +699,15 @@ export default function SettingsPage() {
         { key: 'approved', label: 'Approved', color: '#16a34a', isTerminalWon: true },
         { key: 'published', label: 'Published', color: '#059669', isTerminalWon: true },
       ],
-      fields: Array.from({ length: 23 }, (_, i) => ({
-        key: `video_field_${i + 1}`,
-        label: i === 0 ? 'Video Title' : i === 1 ? 'Channel / Platform' : i === 2 ? 'Script URL' : `Spec Field ${i + 1}`,
-        type: i === 1 ? 'select' : 'text',
-        options: i === 1 ? ['YouTube', 'Instagram', 'TikTok', 'Website'] : undefined,
-      })),
+      fields: [
+        { key: 'videoTitle', label: 'Video Title', type: 'text', required: true },
+        { key: 'channelPlatform', label: 'Channel / Platform', type: 'select', options: ['YouTube', 'Instagram', 'TikTok', 'Website'], required: false },
+        { key: 'scriptUrl', label: 'Script URL', type: 'url', required: false },
+        { key: 'rawFootageLink', label: 'Raw Footage Link', type: 'file', required: false },
+        { key: 'editedVideoLink', label: 'Edited Video Link', type: 'file', required: false },
+        { key: 'thumbnailLink', label: 'Thumbnail Link', type: 'file', required: false },
+        { key: 'publishDate', label: 'Publish Date', type: 'date', required: false },
+      ],
     },
     {
       name: 'Designs',
@@ -745,11 +748,14 @@ export default function SettingsPage() {
         { key: 'delivered', label: 'Delivered', color: '#16a34a', isTerminalWon: true },
         { key: 'closed', label: 'Closed / Handover', color: '#059669', isTerminalWon: true },
       ],
-      fields: Array.from({ length: 12 }, (_, i) => ({
-        key: `project_field_${i + 1}`,
-        label: i === 0 ? 'Project Scope' : i === 1 ? 'Budget (INR)' : i === 2 ? 'Tech Stack' : `Project Milestone ${i + 1}`,
-        type: i === 1 ? 'currency' : 'text',
-      })),
+      fields: [
+        { key: 'projectScope', label: 'Project Scope', type: 'textarea', required: true },
+        { key: 'budget', label: 'Budget', type: 'currency', required: false },
+        { key: 'techStack', label: 'Tech Stack', type: 'text', required: false },
+        { key: 'repoDriveLink', label: 'Repository / Drive Link', type: 'url', required: false },
+        { key: 'clientPoc', label: 'Client Point of Contact', type: 'text', required: false },
+        { key: 'goLiveDate', label: 'Go-Live Date', type: 'date', required: false },
+      ],
     },
     {
       name: 'Clients',
@@ -764,72 +770,38 @@ export default function SettingsPage() {
         { key: 'at-risk', label: 'At Risk', color: '#ef4444' },
         { key: 'churned', label: 'Churned', color: '#94a3b8', isTerminalLost: true },
       ],
-      fields: Array.from({ length: 15 }, (_, i) => ({
-        key: `client_field_${i + 1}`,
-        label: i === 0 ? 'Company Size' : i === 1 ? 'Contract Value' : i === 2 ? 'Account Manager' : `Client Attribute ${i + 1}`,
-        type: i === 1 ? 'currency' : 'text',
-      })),
+      fields: [
+        { key: 'companySize', label: 'Company Size', type: 'select', options: ['1-10', '11-50', '51-200', '200+'], required: false },
+        { key: 'contractValue', label: 'Contract Value', type: 'currency', required: false },
+        { key: 'accountManager', label: 'Account Manager', type: 'user-picker', required: false },
+        { key: 'contractAgreementLink', label: 'Contract / Agreement Link', type: 'file', required: false },
+        { key: 'renewalDate', label: 'Renewal Date', type: 'date', required: false },
+      ],
     },
   ];
 
   function getModuleVisuals(item: WorkType) {
-    const name = (item.name || '').toLowerCase();
-    const icon = (item.icon || '').toLowerCase();
     const color = item.color || '#ea580c';
+    const legacyIcons: Record<string, string> = {
+      '✅': 'square-check-big',
+      '🎬': 'clapperboard',
+      '🎨': 'palette',
+      '🌐': 'globe',
+      '✍️': 'pen-line',
+      '📋': 'clipboard-list',
+      'check-square': 'square-check-big',
+      'video': 'clapperboard',
+      'file-text': 'pen-line',
+      'clipboard': 'clipboard-list',
+    };
 
-    if (name.includes('task') || icon.includes('check')) {
-      return {
-        iconName: 'square-check-big',
-        bg: '#ffedd5',
-        color: '#ea580c',
-        defaultDesc: 'Track and manage all your tasks efficiently.',
-      };
-    }
-    if (name.includes('meet') || icon.includes('calendar')) {
-      return {
-        iconName: 'calendar',
-        bg: '#dbeafe',
-        color: '#2563eb',
-        defaultDesc: 'Schedule and track client meetings.',
-      };
-    }
-    if (name.includes('video') || icon.includes('video') || icon.includes('clapper')) {
-      return {
-        iconName: 'video',
-        bg: '#f3e8ff',
-        color: '#9333ea',
-        defaultDesc: 'Manage video production and content.',
-      };
-    }
-    if (name.includes('design') || icon.includes('palette') || icon.includes('paint')) {
-      return {
-        iconName: 'palette',
-        bg: '#ccfbf1',
-        color: '#0d9488',
-        defaultDesc: 'Track design requests and deliveries.',
-      };
-    }
-    if (name.includes('project') || icon.includes('folder') || icon.includes('briefcase')) {
-      return {
-        iconName: 'briefcase',
-        bg: '#fef3c7',
-        color: '#d97706',
-        defaultDesc: 'Manage all your projects end to end.',
-      };
-    }
-    if (name.includes('client') || icon.includes('user')) {
-      return {
-        iconName: 'users',
-        bg: '#ffe4e6',
-        color: '#e11d48',
-        defaultDesc: 'Store and manage client information.',
-      };
-    }
+    const iconName = legacyIcons[item.icon] || item.icon || 'clipboard-list';
+    const bg = `color-mix(in srgb, ${color} 15%, var(--panel, #ffffff))`;
 
     return {
-      iconName: item.icon || 'clipboard-list',
-      bg: `color-mix(in srgb, ${color} 15%, #ffffff)`,
-      color: color,
+      iconName,
+      bg,
+      color,
       defaultDesc: (item as any).description || `Manage ${item.name} records and workflow.`,
     };
   }
@@ -1671,7 +1643,7 @@ export default function SettingsPage() {
 
                             <div className="module-card-body">
                               <div className="module-name-status-row">
-                                <h4 className="module-card-name">{item.name}</h4>
+                                <h4 className="module-card-name" title={item.name}>{item.name}</h4>
                                 <span className={`module-status-pill ${item.isActive ? 'active' : 'hidden'}`}>
                                   {item.isActive ? 'Active' : 'Hidden'}
                                 </span>

@@ -6,6 +6,7 @@ import Icon from '../../components/Icons';
 import CustomSelect from '../../components/CustomSelect';
 import { MetricCardSkeleton, KanbanSkeleton } from '../../components/SkeletonLoader';
 import { Customer, Stage } from '../../types';
+import QuickActivityPrompt from '../../components/QuickActivityPrompt';
 
 interface DashboardStats {
   totalLeads: number;
@@ -174,6 +175,7 @@ export default function DashboardPage() {
   const [panScrollLeft, setPanScrollLeft] = useState(0);
 
   const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [quickPromptId, setQuickPromptId] = useState('');
   const customizeDialogRef = useRef<HTMLDialogElement | null>(null);
   const [customizeTab, setCustomizeTab] = useState<'cards' | 'sections'>('cards');
   const [editHidden, setEditHidden] = useState<Set<string>>(new Set());
@@ -293,6 +295,7 @@ export default function DashboardPage() {
       setMoving(true);
       await api.post<{ ok: true }>('/dashboard/pipeline/move', { customerId, stageId });
       await loadDashboard();
+      setQuickPromptId(customerId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not move lead');
     } finally {
@@ -1466,6 +1469,14 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      <QuickActivityPrompt
+        open={!!quickPromptId}
+        customerId={quickPromptId}
+        customerName={(dashboard.stageCards || []).flatMap((card: StageCard) => card.customers).find(c => c._id === quickPromptId)?.name}
+        onClose={() => setQuickPromptId('')}
+        onLogged={() => setQuickPromptId('')}
+      />
     </div>
   );
 }

@@ -3,8 +3,11 @@ import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { workApi, WorkType, WorkItem, WorkTypeField } from '../../api/work';
 import { useAuth } from '../../contexts/AuthContext';
 import { parseCsv, importFileToCsv } from '../../utils/importCsv';
+import { isWorkItemClosed } from '../../utils/workStatus';
+import { canChangeWorkStatus } from '../../utils/permissions';
 import DatePicker from '../../components/DatePicker';
 import CustomSelect from '../../components/CustomSelect';
+import BulkCreateModal from '../../components/work/BulkCreateModal';
 import WorkTypeBuilder from '../settings/WorkTypeBuilder';
 import { Settings as SettingsIcon } from 'lucide-react';
 
@@ -40,6 +43,8 @@ const [workType, setWorkType] = useState<WorkType | null>(null);
   const [success, setSuccess] = useState('');
 
   const [showCreate, setShowCreate] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
+  const [showMoreFields, setShowMoreFields] = useState(false);
   const [builderOpen, setBuilderOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<Record<string, any>>({
@@ -65,6 +70,8 @@ const [workType, setWorkType] = useState<WorkType | null>(null);
   const searchQuery = searchParams.get('q') || '';
   const view = (searchParams.get('view') || '') as ViewMode;
   const month = searchParams.get('month') || '';
+  const prefillCustomerId = searchParams.get('prefill_customer') || '';
+  const prefillTitle = searchParams.get('prefill_title') || '';
 
   const enabledViews = workType?.presentation?.enabledViews || ['list', 'board', 'calendar'];
   const defaultView = workType?.presentation?.defaultView || 'list';
@@ -81,12 +88,29 @@ const [workType, setWorkType] = useState<WorkType | null>(null);
     return map;
   }, [workType]);
 
-useEffect(() => {
+  useEffect(() => {
+    setPage(1);
+    setWorkType(null);
+    setItems([]);
+    setShowCreate(false);
+    setShowImport(false);
+    setBuilderOpen(false);
+    setForm({
+      title: '',
+      status: '',
+      priority: 'medium',
+      deadline: '',
+      startDate: '',
+      assignedTo: '',
+      customer: '',
+      notes: '',
+      customFields: {},
+    });
+  }, [type]);
+
+  useEffect(() => {
     loadWorkList();
   }, [type, searchParams, page]);
-
-  const prefillCustomerId = searchParams.get('prefill_customer') || '';
-  const prefillTitle = searchParams.get('prefill_title') || '';
 
   useEffect(() => {
     if (!prefillCustomerId && !prefillTitle) return;
@@ -275,6 +299,11 @@ function setParam(key: string, value: string) {
 
   async function handleStatusDrag(itemId: string, newStatus: string) {
     if (!itemId || !newStatus) return;
+    const targetItem = items.find(i => i._id === itemId);
+    if (targetItem && !canChangeWorkStatus(user, workType, targetItem.status)) {
+      setError('This item is locked for review — only a manager can change its status.');
+      return;
+    }
     await handleQuickStatusChange(itemId, newStatus);
   }
 
@@ -289,6 +318,10 @@ function setParam(key: string, value: string) {
   }
 
   function onDragStart(e: React.DragEvent, item: WorkItem) {
+    if (!canChangeWorkStatus(user, workType, item.status)) {
+      e.preventDefault();
+      return;
+    }
     (e.currentTarget as HTMLElement).classList.add('is-dragging');
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', item._id);
@@ -313,7 +346,7 @@ function setParam(key: string, value: string) {
   const totalItems = items.length;
 
   return (
-    <div className="page-container">
+    <div className="page-container experience-page work-list-page">
       {error && <div className="auth-error" style={{ marginBottom: '1rem' }}>{error}</div>}
       {success && <div className="notice success" style={{ marginBottom: '1rem' }}>{success}</div>}
 
@@ -321,7 +354,7 @@ function setParam(key: string, value: string) {
       <section className="page-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <p className="eyebrow">
-            <Link to="/work" style={{ color: 'var(--muted)', textDecoration: 'none' }}>Task Center</Link> / {workType?.name || type}
+            <Link to="/work" style={{ color: 'var(--muted)', textDecoration: 'none' }}>Work Center</Link> / {workType?.name || type}
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 style={{ margin: '0 0 0.2rem', fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-0.02em' }}>{workType?.name || type}</h1>
@@ -356,6 +389,14 @@ function setParam(key: string, value: string) {
           <button
             type="button"
             className="btn small"
+            onClick={() => setShowBulk(true)}
+            style={{ fontWeight: 600 }}
+          >
+            Bulk Add
+          </button>
+          <button
+            type="button"
+            className="btn small"
             onClick={() => setShowImport(true)}
             style={{ fontWeight: 600 }}
           >
@@ -374,25 +415,53 @@ function setParam(key: string, value: string) {
             </button>
           )}
           <button type="button" className="btn primary" onClick={() => setShowCreate(!showCreate)}>
-            {showCreate ? 'Cancel' : `+ Add ${workType?.name || type}`}
+            {showCreate ? 'Cancel' : `Add ${workType?.name || type}`}
           </button>
         </div>
       </section>
 
+      <BulkCreateModal
+        isOpen={showBulk}
+        onClose={() => setShowBulk(false)}
+        onSuccess={loadWorkList}
+        workTypes={workType ? [workType] : []}
+        users={users}
+        initialWorkTypeKey={type}
+        lockedWorkType={true}
+      />
+
       {/* Create Drawer */}
       {showCreate && (
         <form onSubmit={handleCreate} style={{
-          marginBottom: '1.5rem', padding: '1.5rem', border: '1px solid var(--border)',
-          borderRadius: '12px', background: 'var(--panel)', boxShadow: 'var(--shadow-soft)',
+          marginBottom: '1.5rem', padding: '1.4rem 1.6rem', border: '1px solid var(--border)',
+          borderRadius: '14px', background: 'var(--panel)', boxShadow: '0 8px 30px rgba(0,0,0,0.06)',
         }}>
-          <h2 style={{ margin: '0 0 1rem', fontSize: '1.1rem' }}>New {workType?.name || 'Item'}</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Title *
-              <input required placeholder="e.g. June Instagram Video Edit" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
+          <div style={{ marginBottom: '1.1rem' }}>
+            <h2 style={{ margin: '0 0 0.2rem', fontSize: '1.15rem', fontWeight: 800 }}>New {workType?.name || 'Task'}</h2>
+            <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--muted)' }}>Fill in the essentials below to schedule and assign this deliverable.</p>
+          </div>
+
+          {/* 1. Primary Title */}
+          <div style={{ marginBottom: '0.85rem' }}>
+            <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: 800, color: 'var(--muted)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+              Task Title *
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Linked Client / Lead
+            <input
+              required
+              autoFocus
+              placeholder="e.g. June Instagram Video Edit"
+              value={form.title}
+              onChange={e => setForm({ ...form, title: e.target.value })}
+              style={{ width: '100%', padding: '0.6rem 0.85rem', fontSize: '0.92rem', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg, #f8f9fc)', color: 'var(--text)', fontWeight: 600 }}
+            />
+          </div>
+
+          {/* 2. Core Metadata Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '0.85rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 800, color: 'var(--muted)', marginBottom: '0.3rem' }}>
+                Linked Client / Lead
+              </label>
               <CustomSelect
                 value={form.customer || ''}
                 placeholder="No client linked"
@@ -403,32 +472,12 @@ function setParam(key: string, value: string) {
                 ]}
                 onChange={val => setForm({ ...form, customer: val || null })}
               />
-            </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Status
-              <CustomSelect
-                value={form.status || ''}
-                placeholder="Select status"
-                options={(workType?.statuses || []).map(s => ({ value: s.key, label: s.label }))}
-                onChange={val => setForm({ ...form, status: val })}
-              />
-            </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Priority
-              <CustomSelect
-                value={form.priority || 'medium'}
-                options={[
-                  { value: 'low', label: 'Low' },
-                  { value: 'medium', label: 'Medium' },
-                  { value: 'high', label: 'High' }
-                ]}
-                onChange={val => setForm({ ...form, priority: val })}
-              />
-            </label>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Owner
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 800, color: 'var(--muted)', marginBottom: '0.3rem' }}>
+                Owner / Assignee
+              </label>
               <CustomSelect
                 value={form.assignedTo || ''}
                 placeholder="Unassigned"
@@ -439,52 +488,183 @@ function setParam(key: string, value: string) {
                 ]}
                 onChange={val => setForm({ ...form, assignedTo: val || null })}
               />
-            </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Deadline
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 800, color: 'var(--muted)' }}>
+                Status
+              </label>
+              <CustomSelect
+                value={form.status || ''}
+                placeholder="Select status"
+                options={(workType?.statuses || []).map(s => ({ value: s.key, label: s.label }))}
+                onChange={val => setForm({ ...form, status: val })}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 800, color: 'var(--muted)', marginBottom: '0.3rem' }}>
+                Priority
+              </label>
+              <CustomSelect
+                value={form.priority || 'medium'}
+                options={[
+                  { value: 'low', label: 'Low' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'high', label: 'High' }
+                ]}
+                onChange={val => setForm({ ...form, priority: val })}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 800, color: 'var(--muted)', marginBottom: '0.3rem' }}>
+                Deadline
+              </label>
               <DatePicker
                 placeholder="Select deadline"
                 value={form.deadline}
                 onChange={val => setForm({ ...form, deadline: val })}
+                style={{ width: '100%' }}
               />
-            </label>
+            </div>
           </div>
+
+          {/* 3. Notes / Brief */}
+          <div style={{ marginBottom: '0.85rem' }}>
+            <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 800, color: 'var(--muted)', marginBottom: '0.3rem' }}>
+              Notes & Brief
+            </label>
+            <textarea
+              rows={2}
+              placeholder="Instructions, deliverables, or context for the team…"
+              value={form.notes}
+              onChange={e => setForm({ ...form, notes: e.target.value })}
+              style={{ width: '100%', padding: '0.55rem 0.8rem', fontSize: '0.82rem', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg, #f8f9fc)', color: 'var(--text)', resize: 'vertical' }}
+            />
+          </div>
+
+          {/* 4. Collapsible Additional Custom Fields & Links */}
           {(workType?.fields || []).length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
-              {(workType?.fields || []).map(field => (
-                <label key={field.key} style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-                  {field.label} {field.required ? '*' : ''}
-                  {field.type === 'select' ? (
-                    <CustomSelect
-                      value={form.customFields?.[field.key] || ''}
-                      placeholder="Select..."
-                      options={[
-                        { value: '', label: 'Select...' },
-                        ...(field.options || []).map(opt => ({ value: opt, label: opt }))
-                      ]}
-                      onChange={val => setForm({ ...form, customFields: { ...form.customFields, [field.key]: val } })}
-                    />
-                  ) : field.type === 'checkbox' ? (
-                    <input type="checkbox" checked={!!form.customFields?.[field.key]} onChange={e => setForm({ ...form, customFields: { ...form.customFields, [field.key]: e.target.checked } })} />
-                  ) : field.type === 'date' ? (
-                    <DatePicker
-                      value={form.customFields?.[field.key] || ''}
-                      onChange={val => setForm({ ...form, customFields: { ...form.customFields, [field.key]: val } })}
-                    />
-                  ) : (
-                    <input type={field.type === 'number' || field.type === 'currency' ? 'number' : 'text'} value={form.customFields?.[field.key] || ''} onChange={e => setForm({ ...form, customFields: { ...form.customFields, [field.key]: e.target.value } })} />
-                  )}
-                </label>
-              ))}
+            <div style={{ marginBottom: '1rem', borderTop: '1px dashed var(--border)', paddingTop: '0.75rem' }}>
+              <button
+                type="button"
+                onClick={() => setShowMoreFields(!showMoreFields)}
+                style={{
+                  background: 'transparent', border: 'none', padding: '0.2rem 0',
+                  color: 'var(--gold)', fontSize: '0.76rem', fontWeight: 800,
+                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+                }}
+              >
+                <span>{showMoreFields ? '▾ Hide additional links & settings' : `▸ + Additional Links & Settings (${(workType?.fields || []).length} options)`}</span>
+              </button>
+
+              {showMoreFields && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem', marginTop: '0.75rem', padding: '0.85rem 1rem', background: 'color-mix(in srgb, var(--panel) 70%, var(--bg, #f4f6fb))', border: '1px solid var(--border)', borderRadius: 10 }}>
+                  {(workType?.fields || []).map(field => (
+                    <div key={field.key} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                      <label style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--muted)' }}>
+                        {field.label} {field.required ? '*' : ''}
+                      </label>
+                      {field.type === 'select' ? (
+                        <CustomSelect
+                          value={form.customFields?.[field.key] || ''}
+                          placeholder="Select..."
+                          options={[
+                            { value: '', label: 'Select...' },
+                            ...(field.options || []).map(opt => ({ value: opt, label: opt }))
+                          ]}
+                          onChange={val => setForm({ ...form, customFields: { ...form.customFields, [field.key]: val } })}
+                        />
+                      ) : field.type === 'checkbox' ? (
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)', padding: '0.4rem 0' }}>
+                          <input
+                            type="checkbox"
+                            checked={!!form.customFields?.[field.key]}
+                            onChange={e => setForm({ ...form, customFields: { ...form.customFields, [field.key]: e.target.checked } })}
+                            style={{ accentColor: 'var(--gold)', width: 16, height: 16 }}
+                          />
+                          <span>Enable {field.label}</span>
+                        </label>
+                      ) : field.type === 'date' ? (
+                        <DatePicker
+                          value={form.customFields?.[field.key] || ''}
+                          onChange={val => setForm({ ...form, customFields: { ...form.customFields, [field.key]: val } })}
+                        />
+                      ) : field.type === 'url' || field.type === 'file' ? (
+                        <input
+                          type="url"
+                          placeholder="https://drive.google.com/… or any link"
+                          style={{ padding: '0.45rem 0.7rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text)', fontSize: '0.8rem' }}
+                          value={form.customFields?.[field.key] || ''}
+                          onChange={e => setForm({ ...form, customFields: { ...form.customFields, [field.key]: e.target.value } })}
+                        />
+                      ) : (
+                        <input
+                          type={field.type === 'number' || field.type === 'currency' ? 'number' : 'text'}
+                          style={{ padding: '0.45rem 0.7rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text)', fontSize: '0.8rem' }}
+                          value={form.customFields?.[field.key] || ''}
+                          onChange={e => setForm({ ...form, customFields: { ...form.customFields, [field.key]: e.target.value } })}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-          <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)', marginBottom: '1rem' }}>
-            Notes & Brief
-            <textarea rows={3} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
-          </label>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
-            <button type="button" className="btn small" onClick={() => setShowCreate(false)}>Cancel</button>
-            <button type="submit" className="btn primary small" disabled={creating}>{creating ? 'Creating...' : `Create ${workType?.name || 'Item'}`}</button>
+
+          {/* 4.5 Recurring Schedule for Tasks */}
+          {type === 'task' && (
+            <div style={{ marginBottom: '1rem', padding: '0.75rem 0.9rem', borderRadius: 10, background: 'color-mix(in srgb, var(--gold) 8%, var(--panel))', border: '1px solid color-mix(in srgb, var(--gold) 25%, var(--border))' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 750, fontSize: '0.8rem', color: 'var(--text)' }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.customFields?.repeatMonthly)}
+                    onChange={e => {
+                      const isChecked = e.target.checked;
+                      const nextCf = { ...(form.customFields || {}), repeatMonthly: isChecked };
+                      if (isChecked && !nextCf.repeatDay) nextCf.repeatDay = 1;
+                      setForm({ ...form, customFields: nextCf });
+                    }}
+                    style={{ accentColor: 'var(--gold)', width: 16, height: 16 }}
+                  />
+                  <span>🔁 Repeat this task monthly (Recurring Task)</span>
+                </label>
+
+                {Boolean(form.customFields?.repeatMonthly) && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}>
+                    <span>Schedule on day:</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={31}
+                      value={form.customFields?.repeatDay || 1}
+                      onChange={e => {
+                        const nextCf = { ...(form.customFields || {}), repeatDay: Math.max(1, Math.min(31, Number(e.target.value) || 1)) };
+                        setForm({ ...form, customFields: nextCf });
+                      }}
+                      style={{ width: 55, padding: '2px 6px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--panel)', textAlign: 'center', fontSize: '0.78rem' }}
+                    />
+                    <span style={{ color: 'var(--muted)' }}>of every month</span>
+                  </div>
+                )}
+              </div>
+              {Boolean(form.customFields?.repeatMonthly) && (
+                <small style={{ display: 'block', marginTop: '6px', color: 'var(--gold)', fontSize: '0.72rem' }}>
+                  ✨ A new copy of this task will automatically be generated on day {form.customFields?.repeatDay || 1} of every month.
+                </small>
+              )}
+            </div>
+          )}
+
+          {/* 5. Footer Actions */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem', borderTop: '1px solid var(--border)', paddingTop: '0.85rem' }}>
+            <button type="button" className="btn small outline" onClick={() => setShowCreate(false)}>Cancel</button>
+            <button type="submit" className="btn primary small" disabled={creating} style={{ padding: '0.45rem 1.2rem', fontWeight: 700 }}>
+              {creating ? 'Creating...' : `Create ${workType?.name || 'Task'}`}
+            </button>
           </div>
         </form>
       )}
@@ -627,31 +807,52 @@ function setParam(key: string, value: string) {
                     <span>{statusItems.length}</span>
                   </header>
                   {statusItems.length === 0 && <div className="work-column-empty">No tasks</div>}
-                  {statusItems.map(item => (
-                    <article
-                      className="work-card"
-                      key={item._id}
-                      draggable
-                      data-id={item._id}
-                      onDragStart={e => onDragStart(e, item)}
-                      onDragEnd={onDragEnd}
-                    >
-                      <a className="work-card-title" href={`/work/${type}/${item._id}`}>{item.title}</a>
-                      {item.customer && <span className="work-card-client">{customerLabel(item.customer)}</span>}
-                      <div className="work-card-details">
-                        {boardFields.filter(key => key !== 'title' && key !== 'status').map(key => (
-                          <span className={`work-card-field work-card-field-${key.replace(':', '-')}`} key={key}>
-                            <small>{fieldMap.get(key)?.label || key}</small>
-                            <b>{displayValue(item, key)}</b>
-                          </span>
-                        ))}
-                      </div>
-                      <select aria-label={`Assign ${item.title}`} value={item.assignedTo?._id || ''} onMouseDown={e => e.stopPropagation()} onChange={e => void handleQuickAssign(item, e.target.value)} style={{ width: '100%', marginTop: '.5rem' }}>
-                        <option value="">Assign to…</option>{users.map(person => <option key={person._id} value={person._id}>{person.name}</option>)}
-                      </select>
-                      {(item.workflowHistory || []).some(event => event.event === 'forwarded') && <small style={{ display: 'block', marginTop: '.35rem', color: 'var(--muted)' }}>Forwarded {(item.workflowHistory || []).filter(event => event.event === 'forwarded').length}×</small>}
-                    </article>
-                  ))}
+                  {statusItems.map(item => {
+                    const isStatusEditable = canChangeWorkStatus(user, workType, item.status);
+                    return (
+                      <article
+                        className={`work-card ${!isStatusEditable ? 'status-locked' : ''}`}
+                        key={item._id}
+                        draggable={isStatusEditable}
+                        data-id={item._id}
+                        onDragStart={e => onDragStart(e, item)}
+                        onDragEnd={onDragEnd}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <a className="work-card-title" href={`/work/${type}/${item._id}`}>{item.title}</a>
+                          {item.customFields?.repeatMonthly && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.66rem', padding: '1px 5px', borderRadius: 4, background: 'color-mix(in srgb, var(--gold) 15%, transparent)', color: 'var(--gold)', fontWeight: 750 }}>
+                              🔁 Monthly (Day {item.customFields?.repeatDay || 1})
+                            </span>
+                          )}
+                          {item.customFields?.recurringSource && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.66rem', padding: '1px 5px', borderRadius: 4, background: 'color-mix(in srgb, var(--gold) 15%, transparent)', color: 'var(--gold)', fontWeight: 750 }}>
+                              🔁 Recurring
+                            </span>
+                          )}
+                        </div>
+                        {item.customer && <span className="work-card-client">{customerLabel(item.customer)}</span>}
+                        <div className="work-card-details">
+                          {boardFields.filter(key => key !== 'title' && key !== 'status').map(key => (
+                            <span className={`work-card-field work-card-field-${key.replace(':', '-')}`} key={key}>
+                              <small>{fieldMap.get(key)?.label || key}</small>
+                              <b>{displayValue(item, key)}</b>
+                            </span>
+                          ))}
+                        </div>
+                        <div onMouseDown={e => e.stopPropagation()} style={{ width: '100%', marginTop: '.5rem' }}>
+                          <CustomSelect
+                            value={item.assignedTo?._id || ''}
+                            onChange={val => void handleQuickAssign(item, val)}
+                            options={[{ value: '', label: 'Assign to…' }, ...users.map(person => ({ value: person._id, label: person.name }))]}
+                            variant="compact"
+                            placeholder="Assign to…"
+                          />
+                        </div>
+                        {(item.workflowHistory || []).some(event => event.event === 'forwarded') && <small style={{ display: 'block', marginTop: '.35rem', color: 'var(--muted)' }}>Forwarded {(item.workflowHistory || []).filter(event => event.event === 'forwarded').length}×</small>}
+                      </article>
+                    );
+                  })}
                 </div>
               );
             })}
@@ -677,7 +878,7 @@ function setParam(key: string, value: string) {
                 <tr><td colSpan={listColumns.length + 1} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--muted)' }}>Nothing here yet. Add the first record.</td></tr>
               ) : listItems.map(item => {
                 const subtasks = subtasksByParent.get(String(item._id)) || [];
-                const completedSubtasks = subtasks.filter(sub => workType?.statuses?.find(s => s.key === sub.status)?.isTerminalWon).length;
+                const completedSubtasks = subtasks.filter(sub => isWorkItemClosed(sub, workType)).length;
                 return (
                   <Fragment key={item._id}>
                     <tr className="work-summary-row" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -685,7 +886,19 @@ function setParam(key: string, value: string) {
                         <td key={key} style={{ padding: '0.75rem 1rem' }}>
                           {key === 'title' ? (
                             <>
-                              <Link to={`/work/${type}/${item._id}`} className="work-title-link">{item.title}</Link>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <Link to={`/work/${type}/${item._id}`} className="work-title-link">{item.title}</Link>
+                                {item.customFields?.repeatMonthly && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.66rem', padding: '1px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--gold) 15%, transparent)', color: 'var(--gold)', fontWeight: 750 }}>
+                                    🔁 Monthly (Day {item.customFields?.repeatDay || 1})
+                                  </span>
+                                )}
+                                {item.customFields?.recurringSource && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.66rem', padding: '1px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--gold) 15%, transparent)', color: 'var(--gold)', fontWeight: 750 }}>
+                                    🔁 Recurring
+                                  </span>
+                                )}
+                              </div>
                               {item.customer && (
                                 <span className="muted-small" style={{ display: 'block', marginTop: '0.15rem' }}>
                                   Client: <b>{customerLabel(item.customer)}</b>
@@ -693,9 +906,18 @@ function setParam(key: string, value: string) {
                               )}
                             </>
                           ) : key === 'status' ? (
-                            <select value={item.status} onChange={e => handleQuickStatusChange(item._id, e.target.value)} style={{ padding: '2px 6px', fontSize: '0.75rem', borderRadius: '4px' }}>
-                              {(workType?.statuses || []).map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                            </select>
+                            canChangeWorkStatus(user, workType, item.status) ? (
+                              <CustomSelect
+                                value={item.status}
+                                onChange={val => handleQuickStatusChange(item._id, val)}
+                                options={(workType?.statuses || []).map(s => ({ value: s.key, label: s.label }))}
+                                variant="compact"
+                              />
+                            ) : (
+                              <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+                                {workType?.statuses?.find(s => s.key === item.status)?.label || item.status}
+                              </span>
+                            )
                           ) : (
                             <span className="pre-wrap-val">{displayValue(item, key)}</span>
                           )}
@@ -718,9 +940,10 @@ function setParam(key: string, value: string) {
                             <div className="subtask-tree-list">
                               {subtasks.map(subtask => {
                                 const subStatus = workType?.statuses?.find(s => s.key === subtask.status);
+                                const isStDone = isWorkItemClosed(subtask, workType);
                                 return (
                                   <Link to={`/work/${type}/${subtask._id}`} key={subtask._id}>
-                                    <span className={`subtask-tree-state ${subStatus?.isTerminalWon ? 'done' : ''}`}>{subStatus?.isTerminalWon ? '✓' : '○'}</span>
+                                    <span className={`subtask-tree-state ${isStDone ? 'done' : ''}`}>{isStDone ? '✓' : '○'}</span>
                                     <strong>{subtask.title}</strong>
                                     <small>{subtask.assignedTo?.name || 'Unassigned'}</small>
                                     <em>{subStatus?.label || subtask.status}</em>
@@ -891,7 +1114,7 @@ function setParam(key: string, value: string) {
     const inProgressCount = items.filter(i => /progress|active|working/i.test(i.status) || /progress|active|working/i.test(statusLabels[i.status])).length;
     const reviewCount = items.filter(i => /review|qa|testing/i.test(i.status) || /review|qa|testing/i.test(statusLabels[i.status])).length;
     const revisionCount = items.filter(i => /revision|change|blocked|rejected/i.test(i.status) || /revision|change|blocked|rejected/i.test(statusLabels[i.status])).length;
-    const completedCount = items.filter(i => workType?.statuses?.find(s => s.key === i.status)?.isTerminalWon || /done|completed|delivered|approved|won/i.test(i.status)).length;
+    const completedCount = items.filter(i => isWorkItemClosed(i, workType)).length;
 
     const groupKey = overviewGroups[0] || 'customer';
 
@@ -954,7 +1177,7 @@ function setParam(key: string, value: string) {
                 <tr><td colSpan={overviewSteps.length + 3} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--muted)' }}>No records to display in overview.</td></tr>
               ) : Array.from(grouped.entries()).map(([groupName, groupItems]) => {
                 const totalInGroup = groupItems.length;
-                const completedInGroup = groupItems.filter(i => workType?.statuses?.find(s => s.key === i.status)?.isTerminalWon || /done|completed|delivered/i.test(i.status)).length;
+                const completedInGroup = groupItems.filter(i => isWorkItemClosed(i, workType)).length;
                 const pct = totalInGroup > 0 ? Math.round((completedInGroup / totalInGroup) * 100) : 0;
                 return (
                   <tr key={groupName} style={{ borderBottom: '1px solid var(--border)' }}>

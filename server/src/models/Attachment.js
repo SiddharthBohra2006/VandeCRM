@@ -15,7 +15,10 @@ const attachmentSchema = new mongoose.Schema({
   mimeType: { type: String, default: 'application/octet-stream', trim: true },
   size: { type: Number, default: 0 },
   notes: { type: String, default: '', trim: true },
-  data: { type: Buffer, required: true }
+  storageProvider: { type: String, enum: ['crm', 'google_drive'], default: 'crm', index: true },
+  externalFileId: { type: String, default: '', trim: true },
+  externalUrl: { type: String, default: '', trim: true },
+  data: { type: Buffer, default: null }
 }, { timestamps: true });
 
 attachmentSchema.index({ organization: 1, customer: 1, createdAt: -1 });

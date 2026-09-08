@@ -133,7 +133,7 @@ export default function CampaignsPage() {
   }
 
   return (
-    <div className="page-container">
+    <div className="page-container experience-page campaigns-page">
       {error && <div className="auth-error" style={{ marginBottom: '1rem' }}>{error}</div>}
       {success && <div className="notice success" style={{ marginBottom: '1rem' }}>{success}</div>}
 
@@ -317,18 +317,24 @@ export default function CampaignsPage() {
           ))}
         </select>
 
-        <DatePicker
-          placeholder="From date"
-          value={currentDateFrom}
-          onChange={val => handleFilterChange('dateFrom', val)}
-          style={{ minWidth: '140px' }}
-        />
-        <DatePicker
-          placeholder="To date"
-          value={currentDateTo}
-          onChange={val => handleFilterChange('dateTo', val)}
-          style={{ minWidth: '140px' }}
-        />
+        <label className="compact-date-field">
+          <span>From</span>
+          <DatePicker
+            placeholder="Start date"
+            value={currentDateFrom}
+            onChange={val => handleFilterChange('dateFrom', val)}
+            style={{ minWidth: '140px' }}
+          />
+        </label>
+        <label className="compact-date-field">
+          <span>To</span>
+          <DatePicker
+            placeholder="End date"
+            value={currentDateTo}
+            onChange={val => handleFilterChange('dateTo', val)}
+            style={{ minWidth: '140px' }}
+          />
+        </label>
 
         {(currentStatus || currentCompany || currentDateFrom || currentDateTo) && (
           <button

@@ -52,7 +52,7 @@ export interface WorkType {
   name: string;
   icon: string;
   color: string;
-  statuses: { key: string; label: string; color: string }[];
+  statuses: { key: string; label: string; color: string; isTerminalWon?: boolean; isTerminalLost?: boolean; requiresApproval?: boolean }[];
   fields: any[];
   presentation: any;
 }

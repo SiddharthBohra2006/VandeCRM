@@ -17,6 +17,7 @@ export default function CompanyDetailPage() {
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<CompanyAttachment[]>([]);
+  const [fileStorage, setFileStorage] = useState<{ provider: 'crm' | 'google_drive'; ready: boolean; folderUrl?: string; missing: string[] } | null>(null);
   const [metrics, setMetrics] = useState<CompanyMetrics | null>(null);
   const [users, setUsers] = useState<AssignedUser[]>([]);
 
@@ -108,6 +109,7 @@ export default function CompanyDetailPage() {
       setCampaigns(res.campaigns || []);
       setActivities(res.activities || []);
       setAttachments(res.attachments || []);
+      setFileStorage(res.fileStorage || null);
       setMetrics(res.metrics || null);
       setUsers(res.users || []);
 
@@ -190,7 +192,7 @@ export default function CompanyDetailPage() {
           fileData: file.base64,
           notes: attachmentNotes,
         });
-        setAttachments(prev => [res.data, ...prev]);
+        setAttachments(prev => [res.attachment, ...prev]);
         uploadedCount += 1;
       }
       setSelectedFile(null);
@@ -205,19 +207,19 @@ export default function CompanyDetailPage() {
     }
   }
 
-  function promptDeleteAttachment(attachmentId: string, name: string) {
+  function promptDeleteAttachment(attachmentId: string, name: string, isDriveFile = false) {
     setConfirmState({
       open: true,
       title: 'Delete Attachment',
-      message: `Delete "${name}"? This action cannot be undone.`,
-      confirmText: 'Delete',
+      message: isDriveFile ? `Remove "${name}" from the CRM? The original file will stay in Google Drive.` : `Delete "${name}"? This action cannot be undone.`,
+      confirmText: isDriveFile ? 'Remove from CRM' : 'Delete',
       variant: 'danger',
       action: async () => {
         if (!id) return;
         try {
           await companiesApi.deleteAttachment(id, attachmentId);
           setAttachments(prev => prev.filter(a => a._id !== attachmentId));
-          setSuccess('Attachment deleted.');
+          setSuccess(isDriveFile ? 'Attachment removed from CRM. The file remains in Drive.' : 'Attachment deleted.');
         } catch (err: any) {
           setError(err.message || 'Failed to delete attachment');
         } finally {
@@ -361,7 +363,7 @@ export default function CompanyDetailPage() {
 
   if (!company) {
     return (
-      <div className="page-container" style={{ padding: '2rem', textAlign: 'center' }}>
+      <div className="page-container experience-page company-detail-page" style={{ padding: '2rem', textAlign: 'center' }}>
         <h2>Company not found</h2>
         <Link to="/companies" className="btn primary" style={{ marginTop: '1rem' }}>
           Back to Workspaces
@@ -402,7 +404,7 @@ export default function CompanyDetailPage() {
   );
 
   return (
-    <div className="page-container">
+    <div className="page-container experience-page company-detail-page">
       {error && <div className="auth-error" style={{ marginBottom: '1rem' }}>{error}</div>}
       {success && <div className="notice success" style={{ marginBottom: '1rem' }}>{success}</div>}
 
@@ -686,6 +688,14 @@ export default function CompanyDetailPage() {
               <p style={{ fontSize: '0.76rem', color: 'var(--muted)', marginBottom: '1rem' }}>
                 Store account-level proposals, contracts, invoices, briefs, screenshots, and reports.
               </p>
+              <div className={`file-storage-status ${fileStorage?.ready ? 'drive-ready' : ''}`}>
+                <span className="file-storage-icon">{fileStorage?.ready ? 'D' : 'C'}</span>
+                <div>
+                  <strong>{fileStorage?.ready ? 'Uploads go to Google Drive' : 'Uploads use CRM storage'}</strong>
+                  <small>{fileStorage?.ready ? 'Saved in the shared folder for this company.' : 'Connect Drive from Integrations to route new files there.'}</small>
+                </div>
+                {fileStorage?.folderUrl && <a href={fileStorage.folderUrl} target="_blank" rel="noreferrer">Open folder</a>}
+              </div>
 
               <form onSubmit={handleUploadAttachment} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.76rem', fontWeight: 800, color: 'var(--muted)' }}>
@@ -743,7 +753,7 @@ export default function CompanyDetailPage() {
                   className="btn primary"
                   disabled={uploadingAttachment || (selectedFiles.length === 0 && !selectedFile)}
                 >
-                  {uploadingAttachment ? 'Uploading...' : selectedFiles.length > 1 ? `Upload ${selectedFiles.length} Attachments` : 'Upload Attachment'}
+                  {uploadingAttachment ? 'Uploading...' : selectedFiles.length > 1 ? `Upload ${selectedFiles.length} files` : fileStorage?.ready ? 'Upload to Drive' : 'Upload file'}
                 </button>
               </form>
             </article>
@@ -784,6 +794,9 @@ export default function CompanyDetailPage() {
                         <span style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>
                           {att.category} · {Math.ceil((att.size || 0) / 1024)} KB · {att.uploadedBy?.name || 'System'}
                         </span>
+                        <span className={`storage-badge ${att.storageProvider === 'google_drive' ? 'drive' : ''}`}>
+                          {att.storageProvider === 'google_drive' ? 'Google Drive' : 'CRM'}
+                        </span>
                         {att.notes && (
                           <small style={{ display: 'block', color: 'var(--sub)', fontSize: '0.72rem', marginTop: '2px' }}>
                             {att.notes}
@@ -792,6 +805,9 @@ export default function CompanyDetailPage() {
                       </div>
 
                       <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
+                        {att.externalUrl && (
+                          <a className="btn small outline" href={att.externalUrl} target="_blank" rel="noreferrer" style={{ padding: '3px 8px', fontSize: '0.7rem' }}>Open</a>
+                        )}
                         <button
                           type="button"
                           className="btn small outline"
@@ -804,9 +820,9 @@ export default function CompanyDetailPage() {
                           type="button"
                           className="btn small danger"
                           style={{ padding: '3px 8px', fontSize: '0.7rem' }}
-                          onClick={() => promptDeleteAttachment(att._id, att.originalName)}
+                          onClick={() => promptDeleteAttachment(att._id, att.originalName, att.storageProvider === 'google_drive')}
                         >
-                          Delete
+                          {att.storageProvider === 'google_drive' ? 'Remove' : 'Delete'}
                         </button>
                       </div>
                     </div>

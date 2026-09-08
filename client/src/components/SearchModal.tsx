@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { X } from 'lucide-react';
 import { searchApi, SearchResponse, SearchResultItem, SearchStats } from '../api/search';
 import DatePicker from './DatePicker';
+import CustomSelect from './CustomSelect';
 
 interface SearchModalProps {
   open: boolean;
@@ -383,20 +385,20 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
                   inputRef.current?.focus();
                 }}
               >
-                &times;
+                <X size={14} />
               </button>
             )}
-            <button
-              type="button"
-              id="airbnbModalCloseBtn"
-              className="crm-modal-close-icon-btn"
-              title="Close search"
-              aria-label="Close search"
-              onClick={onClose}
-            >
-              &times;
-            </button>
           </div>
+          <button
+            type="button"
+            id="airbnbModalCloseBtn"
+            className="crm-modal-close-icon-btn"
+            title="Close search (Esc)"
+            aria-label="Close search"
+            onClick={onClose}
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* Quick Suggestion Chips Bar */}
@@ -440,19 +442,20 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
         <div className="crm-search-filter-bar">
           <div className="crm-filter-item">
             <label>Date range</label>
-            <select
+            <CustomSelect
               id="searchDateRangePreset"
-              className="crm-filter-select"
               value={preset}
-              onChange={e => handlePresetChange(e.target.value)}
-            >
-              <option value="">Anytime</option>
-              <option value="today">Today</option>
-              <option value="yesterday">Yesterday</option>
-              <option value="week">Last 7 days</option>
-              <option value="month">This month</option>
-              <option value="custom">Custom range</option>
-            </select>
+              onChange={val => handlePresetChange(val)}
+              options={[
+                { value: '', label: 'Anytime' },
+                { value: 'today', label: 'Today' },
+                { value: 'yesterday', label: 'Yesterday' },
+                { value: 'week', label: 'Last 7 days' },
+                { value: 'month', label: 'This month' },
+                { value: 'custom', label: 'Custom range' }
+              ]}
+              variant="compact"
+            />
           </div>
 
           <div className="crm-filter-item">
@@ -487,16 +490,17 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
 
           <div className="crm-filter-item">
             <label>Field</label>
-            <select
+            <CustomSelect
               id="airbnbDateFieldSelect"
-              className="crm-filter-select"
               value={dateField}
-              onChange={e => setDateField(e.target.value)}
-            >
-              <option value="updated">Last updated</option>
-              <option value="created">Created / Logged</option>
-              <option value="scheduled">Follow-up / Deadline</option>
-            </select>
+              onChange={val => setDateField(val)}
+              options={[
+                { value: 'updated', label: 'Last updated' },
+                { value: 'created', label: 'Created / Logged' },
+                { value: 'scheduled', label: 'Follow-up / Deadline' }
+              ]}
+              variant="compact"
+            />
           </div>
 
           <div className="crm-filter-item crm-filter-more-wrap">

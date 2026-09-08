@@ -33,6 +33,7 @@ type NavItem = {
   mainOnly?: boolean;
   reportOnly?: boolean;
   color?: string;
+  isGroup?: boolean;
 };
 
 const navItems: NavItem[] = [
@@ -42,8 +43,7 @@ const navItems: NavItem[] = [
   { path: '/clients', labelKey: 'recordPlural', label: 'Clients', icon: 'building-2', navKey: 'nav-clients', permission: 'businesses.view' },
   { path: '/analytics', label: 'Analytics', icon: 'bar-chart-3', navKey: 'nav-analytics', permission: 'reports.view' },
   { path: '/reports', label: 'Reports', icon: 'file-text', navKey: 'nav-reports', permission: 'reports.view' },
-  { path: '/work', label: 'Work Center', icon: 'list-todo', navKey: 'nav-task-center' },
-  { path: '/work/threads', label: 'Team Chat', icon: 'send', navKey: 'nav-team-chat' },
+  { path: '/work', label: 'Work', icon: 'list-todo', navKey: 'nav-work-group', isGroup: true },
   { path: '/follow-ups', label: 'Follow-ups', icon: 'list-checks', navKey: 'nav-follow-ups', permission: 'tasks.view' },
   { path: '/campaigns', label: 'Ads', icon: 'megaphone', navKey: 'nav-campaigns', permission: 'ads.view' },
   { path: '/companies', label: 'CRMs', icon: 'folder-kanban', navKey: 'nav-companies', permission: 'mail.view' },
@@ -93,22 +93,50 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
 
   const accessibleWorkTypes = workTypes.filter(wt => canAccessWorkType(user, wt));
 
-  // Build candidate items list (all items user is permitted to see)
-  const candidateNavItems: NavItem[] = isClient ? [] : [
-    ...navItems.filter(item => {
-      if (item.permission && !hasPermission(user, item.permission)) return false;
-      if (item.adminOnly && !['admin', 'manager'].includes(user.role)) return false;
-      if (item.mainOnly && !(user.role === 'admin' && activeCompany?.isMain)) return false;
-      if ((item.navKey === 'nav-task-center' || item.navKey === 'nav-team-chat') && accessibleWorkTypes.length === 0) return false;
-      return true;
-    }),
+  const [workGroupOpen, setWorkGroupOpen] = useState(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/work')) return true;
+    const stored = localStorage.getItem('sidebar-work-group-open');
+    return stored !== null ? stored === 'true' : true;
+  });
+
+  useEffect(() => {
+    if (resolvedPath.startsWith('/work')) {
+      setWorkGroupOpen(true);
+    }
+  }, [resolvedPath]);
+
+  function toggleWorkGroup(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setWorkGroupOpen(prev => {
+      const next = !prev;
+      localStorage.setItem('sidebar-work-group-open', String(next));
+      return next;
+    });
+  }
+
+  // Work child items
+  const workChildren: NavItem[] = [
+    { path: '/work', label: 'Work Center', icon: 'layout-grid', navKey: 'nav-task-center' },
+    { path: '/work/threads', label: 'Team Chat', icon: 'send', navKey: 'nav-team-chat' },
     ...accessibleWorkTypes.map(wt => ({
       path: `/work/${wt.key}`,
       label: wt.name,
       icon: wt.icon || 'clipboard-list',
       navKey: `nav-work-${wt.key}`,
       color: wt.color,
-    }))
+    })),
+  ];
+
+  // Build candidate items list (all items user is permitted to see)
+  const candidateNavItems: NavItem[] = isClient ? [] : [
+    ...navItems.filter(item => {
+      if (item.permission && !hasPermission(user, item.permission)) return false;
+      if (item.adminOnly && !['admin', 'manager'].includes(user.role)) return false;
+      if (item.mainOnly && !(user.role === 'admin' && activeCompany?.isMain)) return false;
+      if (item.navKey === 'nav-work-group' && accessibleWorkTypes.length === 0) return false;
+      return true;
+    }),
   ];
 
   // Visible nav items (excluding hidden)
@@ -298,8 +326,76 @@ export default function Sidebar({ user, activeCompany, companies, workTypes, crm
                 isActive = resolvedPath === '/clients' || resolvedPath.startsWith('/clients/') || (resolvedPath.startsWith('/customers/') && isFromClients);
               } else if (item.path === '/customers') {
                 isActive = (resolvedPath === '/customers' || resolvedPath.startsWith('/customers/')) && !isFromClients;
+              } else if (item.path === '/work') {
+                isActive = resolvedPath === '/work';
               } else {
                 isActive = resolvedPath === item.path || resolvedPath.startsWith(item.path + '/');
+              }
+
+              if (item.isGroup || item.navKey === 'nav-work-group') {
+                const isAnyWorkActive = resolvedPath.startsWith('/work');
+                return (
+                  <div
+                    key={item.navKey}
+                    data-nav-id={item.navKey}
+                    draggable
+                    onDragStart={onNavDragStart(item.navKey)}
+                    onDragEnd={onNavDragEnd}
+                    className={`nav-group ${isAnyWorkActive ? 'has-active' : ''}`}
+                  >
+                    <div className={`nav-item nav-group-header ${resolvedPath === '/work' ? 'active' : ''}`}>
+                      <Link
+                        to="/work"
+                        title={item.label}
+                        className="nav-group-title-link"
+                      >
+                        <Icon name={item.icon} size={18} />
+                        <span>{item.label}</span>
+                      </Link>
+                      {isOpen && (
+                        <button
+                          type="button"
+                          className="nav-group-toggle-btn"
+                          onClick={toggleWorkGroup}
+                          aria-label={workGroupOpen ? 'Collapse Work menu' : 'Expand Work menu'}
+                          title={workGroupOpen ? 'Collapse' : 'Expand'}
+                        >
+                          <Icon name="chevron-down" size={14} className={`nav-group-chevron ${workGroupOpen ? 'open' : ''}`} />
+                        </button>
+                      )}
+                    </div>
+
+                    {isOpen && workGroupOpen && (
+                      <div className="nav-sub-list">
+                        {workChildren.map(child => {
+                          const isChildActive = child.path === '/work'
+                            ? resolvedPath === '/work'
+                            : (child.path === '/work/threads'
+                                ? resolvedPath === '/work/threads' || resolvedPath.startsWith('/work/threads/')
+                                : resolvedPath === child.path || resolvedPath.startsWith(child.path + '/'));
+                          const isModule = child.navKey.startsWith('nav-work-');
+                          return (
+                            <Link
+                              key={child.navKey}
+                              to={child.path}
+                              title={child.label}
+                              className={`nav-sub-item ${isChildActive ? 'active' : ''}`}
+                              style={isModule && child.color ? ({ '--module-color': child.color } as React.CSSProperties) : undefined}
+                            >
+                              <Icon
+                                name={child.icon}
+                                size={15}
+                                className={isModule ? 'nav-item-module-icon' : undefined}
+                                style={isModule && child.color ? { color: child.color } : undefined}
+                              />
+                              <span>{child.label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
               }
 
               const isWorkModule = item.navKey.startsWith('nav-work-');
@@ -407,10 +503,24 @@ function useMemoSet(arr: string[]) {
 
 function applyOrder<T extends { navKey: string }>(items: T[], order: string[], getKey: (item: T) => string): T[] {
   if (!order.length) return items;
+  const defaultIndexMap = new Map(items.map((item, idx) => [getKey(item), idx]));
   return [...items].sort((a, b) => {
-    const ia = order.indexOf(getKey(a));
-    const ib = order.indexOf(getKey(b));
-    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    const keyA = getKey(a);
+    const keyB = getKey(b);
+    let ia = order.indexOf(keyA);
+    let ib = order.indexOf(keyB);
+
+    // If legacy order had any work-related key (nav-task-center, nav-work-*, nav-tasks), adopt its position for nav-work-group
+    if (ia === -1 && keyA === 'nav-work-group') {
+      ia = order.findIndex(k => k.startsWith('nav-work-') || k === 'nav-task-center' || k === 'nav-tasks');
+    }
+    if (ib === -1 && keyB === 'nav-work-group') {
+      ib = order.findIndex(k => k.startsWith('nav-work-') || k === 'nav-task-center' || k === 'nav-tasks');
+    }
+
+    const posA = ia !== -1 ? ia : (defaultIndexMap.get(keyA) ?? 999);
+    const posB = ib !== -1 ? ib : (defaultIndexMap.get(keyB) ?? 999);
+    return posA - posB;
   });
 }
 

@@ -33,6 +33,7 @@ const clientCompanySchema = new mongoose.Schema({
   ga4MeasurementId: { type: String, default: '', trim: true },
   metaAccessTokenEncrypted: { type: String, default: '' },
   ga4ServiceAccountJsonEncrypted: { type: String, default: '' },
+  googleDriveServiceAccountJsonEncrypted: { type: String, default: '' },
   metaAdAccountId: { type: String, default: '', trim: true },
   ga4PropertyId: { type: String, default: '', trim: true },
   apiKey: { type: String, unique: true, sparse: true },

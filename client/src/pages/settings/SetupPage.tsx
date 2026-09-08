@@ -101,7 +101,7 @@ export default function SetupPage() {
   }
 
   return (
-    <div className="page-container">
+    <div className="page-container experience-page setup-page">
       <section className="page-head">
         <div>
           <p className="eyebrow">Company setup</p>

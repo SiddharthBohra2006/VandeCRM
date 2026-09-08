@@ -48,7 +48,7 @@ export default function ReportsIndexPage() {
   }, []);
 
   if (loading && !data) return <div className="loading" style={{ padding: '2rem', textAlign: 'center' }}>Loading reports...</div>;
-  if (error) return <div className="page-container"><div className="auth-error">{error}</div></div>;
+  if (error) return <div className="page-container experience-page reports-page"><div className="auth-error">{error}</div></div>;
 
   const recordSingular = crmTerms.recordSingular || 'Lead';
   const recordPlural = crmTerms.recordPlural || 'Leads';
@@ -77,7 +77,7 @@ export default function ReportsIndexPage() {
   }
 
   return (
-    <div className="page-container">
+    <div className="page-container experience-page reports-page">
       <section className="page-head">
         <div>
           <p className="eyebrow">Reports</p>
@@ -88,8 +88,8 @@ export default function ReportsIndexPage() {
 
       <section className="module-report-entry">
         <div>
-          <strong>Generic module report builder</strong>
-          <span>Group any custom module, apply filters, calculate COUNT/SUM/AVG/MIN/MAX formulas, visualize results, and save or export the report.</span>
+          <strong>Build a module report</strong>
+          <span>Choose a module, group its records, compare useful totals, and save or export the result.</span>
         </div>
         <Link className="btn primary" to={`/reports/module-builder${firstModuleId ? `?module=${firstModuleId}` : ''}`}>Build module report</Link>
       </section>
@@ -115,7 +115,7 @@ export default function ReportsIndexPage() {
               <span>{item[1]}</span>
               <p>{descriptions[item[0]]}</p>
             </div>
-            <Link className="btn primary" to={`/reports/${item[0]}`}>Open Report</Link>
+            <Link className="btn" to={`/reports/${item[0]}`}>View report</Link>
           </article>
         ))}
       </section>

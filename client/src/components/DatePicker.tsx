@@ -1,4 +1,4 @@
-﻿import React, { CSSProperties, useEffect, useRef, useState } from 'react';
+import React, { CSSProperties, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 export interface DatePickerProps {
@@ -315,6 +315,7 @@ export default function DatePicker({
             style={{
               top: `${position.top}px`,
               left: `${position.left}px`,
+              zIndex: 100200,
             }}
             onClick={e => e.stopPropagation()}
             onMouseDown={e => e.stopPropagation()}

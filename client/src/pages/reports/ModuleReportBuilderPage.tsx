@@ -164,7 +164,7 @@ export default function ModuleReportBuilderPage() {
 
   if (error) {
     return (
-      <div className="page-container">
+      <div className="page-container experience-page report-builder-page">
         <section className="page-head"><div><p className="eyebrow">Reports</p><h1>Custom Module Report Builder</h1><p className="page-subtitle">Group any module and calculate counts, totals, averages, minimums, or maximums from its numeric fields.</p></div><div className="actions"><Link className="btn" to="/reports">All reports</Link></div></section>
         <section className="table-card empty" style={{ textAlign: 'center', padding: '2.5rem 1.5rem' }}>
           <strong style={{ display: 'block', fontSize: '1rem', color: 'var(--text)' }}>The module report builder could not be loaded.</strong>
@@ -180,7 +180,7 @@ export default function ModuleReportBuilderPage() {
 
   if (!data?.workType) {
     return (
-      <div className="page-container">
+      <div className="page-container experience-page report-builder-page">
         <section className="page-head"><div><p className="eyebrow">Reports</p><h1>Custom Module Report Builder</h1><p className="page-subtitle">Group any module and calculate counts, totals, averages, minimums, or maximums from its numeric fields.</p></div><div className="actions"><Link className="btn" to="/reports">All reports</Link></div></section>
         <section className="table-card empty">Create a custom module before building a module report.</section>
       </div>
@@ -206,7 +206,7 @@ export default function ModuleReportBuilderPage() {
   });
 
   return (
-    <div className="page-container">
+    <div className="page-container experience-page report-builder-page">
       <section className="page-head">
         <div><p className="eyebrow">Reports</p><h1>Custom Module Report Builder</h1><p className="page-subtitle">Group any module and calculate counts, totals, averages, minimums, or maximums from its numeric fields.</p></div>
         <div className="actions"><Link className="btn" to="/reports">All reports</Link></div>

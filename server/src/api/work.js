@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const { requireApiAuth } = require('./middleware/auth');
-const { hasPermission, hasWorkPermission, isRestrictedUser, canEditWorkField } = require('../config/roles');
+const { hasPermission, hasWorkPermission, isRestrictedUser, canEditWorkField, canChangeWorkStatus } = require('../config/roles');
 const { isClosed, isComplete, completionError } = require('../utils/workCompletion');
 const { assignableWorkUsers } = require('../utils/workAssignments');
 const { logAudit } = require('../utils/audit');
@@ -418,22 +418,35 @@ router.post('/:type', resolveWorkType, async (req, res, next) => {
     const organization = req.user.organization._id;
     const body = req.body;
 
+    const mayEditField = field => canEditWorkField(req.user, req.workType, field);
+
     const title = String(body.title || '').trim();
     if (!title) {
       return res.status(400).json({ ok: false, error: 'Title is required.' });
     }
 
-    const status = body.status || req.workType.statuses[0]?.key || 'pending';
+    const status = (body.status && mayEditField('status')) ? body.status : (req.workType.statuses[0]?.key || 'pending');
     if (!req.workType.statuses.some(s => s.key === status)) return res.status(400).json({ ok: false, error: 'Invalid status.' });
-    const priority = priorities.includes(body.priority) ? body.priority : 'medium';
-    const deadline = body.deadline ? new Date(body.deadline) : null;
-    const startDate = body.startDate ? new Date(body.startDate) : null;
+    const priority = (body.priority && mayEditField('priority') && priorities.includes(body.priority)) ? body.priority : 'medium';
+    const deadline = (body.deadline && mayEditField('deadline')) ? new Date(body.deadline) : null;
+    const startDate = (body.startDate && mayEditField('startDate')) ? new Date(body.startDate) : null;
+    const notes = (body.notes && mayEditField('notes')) ? String(body.notes).trim() : '';
+    const customer = (body.customer && mayEditField('customer')) ? body.customer : null;
+    const assignedTo = (body.assignedTo && mayEditField('assignedTo')) ? body.assignedTo : req.user._id;
 
-    const customFields = body.customFields || {};
-
-    const assignedTo = body.assignedTo || req.user._id;
     if (!(await assignableWorkUsers(organization, activeWorkspace, req.workType)).some(user => String(user._id) === String(assignedTo))) {
       return res.status(400).json({ ok: false, error: 'Choose an eligible team member.' });
+    }
+
+    const collaborators = (body.collaborators && mayEditField('collaborators')) ? ids(body.collaborators) : [];
+    const secondaryAssignee = (body.secondaryAssignee && mayEditField('secondaryAssignee')) ? body.secondaryAssignee : null;
+    const relatedRecords = (body.relatedRecords && mayEditField('relatedRecords') && Array.isArray(body.relatedRecords)) ? body.relatedRecords : [];
+
+    const customFields = {};
+    if (body.customFields && typeof body.customFields === 'object') {
+      for (const [k, v] of Object.entries(body.customFields)) {
+        if (mayEditField(k)) customFields[k] = v;
+      }
     }
 
     const item = await CustomRecord.create({
@@ -445,12 +458,12 @@ router.post('/:type', resolveWorkType, async (req, res, next) => {
       priority,
       deadline,
       startDate,
-      notes: String(body.notes || '').trim(),
-      customer: body.customer || null,
+      notes,
+      customer,
       assignedTo,
-      collaborators: ids(body.collaborators),
-      secondaryAssignee: body.secondaryAssignee || null,
-      relatedRecords: Array.isArray(body.relatedRecords) ? body.relatedRecords : [],
+      collaborators,
+      secondaryAssignee,
+      relatedRecords,
       workflowHistory: [{ event: 'created', actor: req.user._id, toUser: assignedTo, toStatus: status, note: 'Task created.' }],
       customFields,
       createdBy: req.user._id,
@@ -509,7 +522,7 @@ router.put('/:type/:id', resolveWorkType, async (req, res, next) => {
     const mayEditField = field => canEditWorkField(req.user, req.workType, field);
 
     if (body.title !== undefined && mayEditField('title')) item.title = String(body.title).trim();
-    if (body.status !== undefined && mayEditField('status')) {
+    if (body.status !== undefined && canChangeWorkStatus(req.user, req.workType, previousStatus)) {
       item.status = body.status;
       if (previousStatus !== body.status) {
         const definition = req.workType.statuses.find(s => s.key === body.status);
@@ -596,6 +609,10 @@ router.post('/:type/:id/status', resolveWorkType, async (req, res, next) => {
 
     if (!item) {
       return res.status(404).json({ ok: false, error: 'Record not found.' });
+    }
+
+    if (!canChangeWorkStatus(req.user, req.workType, item.status)) {
+      return res.status(403).json({ ok: false, error: 'This item is locked for review — only a manager can change its status.' });
     }
 
     if (!req.workType.statuses.some(s => s.key === status)) return res.status(400).json({ ok: false, error: 'Invalid status.' });

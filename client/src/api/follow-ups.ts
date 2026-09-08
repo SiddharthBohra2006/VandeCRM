@@ -5,6 +5,8 @@ export interface FollowUpStats {
   due: number;
   today: number;
   upcoming: number;
+  overdue: number;
+  completed: number;
   all: number;
 }
 

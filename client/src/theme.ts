@@ -265,7 +265,8 @@ export function changeThemeWithAnimation(
     Math.max(x, window.innerWidth - x),
     Math.max(y, window.innerHeight - y)
   );
-  const REVEAL_DUR = 680;
+  const isMobile = window.innerWidth <= 768;
+  const REVEAL_DUR = isMobile ? 380 : 680;
   const color = preset.gold;
 
   if (prefersReduced) {
@@ -273,15 +274,13 @@ export function changeThemeWithAnimation(
     return;
   }
 
-  // ── Phase 1: Supernova + Fireflies burst from click origin ──
-  spawnSupernova(x, y, color);
-  spawnFireflies(x, y, color);
-
-  // ── Phase 2: Dual Aurora rings expand ──
-  spawnAuroraRings(x, y, color, endRadius);
-
-  // ── Phase 3: Luminous Wavefront Lens sweeps across all text & UI elements ──
-  spawnWavefrontLens(x, y, color, endRadius, REVEAL_DUR);
+  // ── Desktop Cinematic Engine: particles & wavefront lens (bypassed on mobile for 60fps smoothness) ──
+  if (!isMobile) {
+    spawnSupernova(x, y, color);
+    spawnFireflies(x, y, color);
+    spawnAuroraRings(x, y, color, endRadius);
+    spawnWavefrontLens(x, y, color, endRadius, REVEAL_DUR);
+  }
 
   // ── Phase 4: Circular reveal via View Transitions API ──
   if ('startViewTransition' in document && typeof (document as any).startViewTransition === 'function') {

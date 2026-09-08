@@ -6,6 +6,7 @@ import { downloadAuthenticatedFile } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { CustomerInput } from '../../types';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import QuickActivityPrompt from '../../components/QuickActivityPrompt';
 import CustomSelect from '../../components/CustomSelect';
 import DatePicker from '../../components/DatePicker';
 import Icon from '../../components/Icons';
@@ -84,6 +85,13 @@ export default function CustomerDetailPage() {
   const [timelineSearch, setTimelineSearch] = useState('');
   const [timelineFilter, setTimelineFilter] = useState('all');
   const [submittingActivity, setSubmittingActivity] = useState(false);
+  const [showQuickPrompt, setShowQuickPrompt] = useState(false);
+  const [stagePromptData, setStagePromptData] = useState<{
+    targetStageId?: string;
+    targetStageName?: string;
+    currentStageName?: string;
+    isTerminalStage?: boolean;
+  } | null>(null);
 
   // Work search & filter
   const [workSearch, setWorkSearch] = useState('');
@@ -154,16 +162,19 @@ export default function CustomerDetailPage() {
     }
   }
 
-  async function handleUpdateStage() {
-    if (!id || !selectedStageId) return;
-    try {
-      setError('');
-      await customersApi.updateStage(id, selectedStageId);
-      setSuccess('Stage updated successfully.');
-      await load(id);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to update stage');
-    }
+  function handleUpdateStage() {
+    if (!id || !selectedStageId || !detail?.data) return;
+    if (selectedStageId === detail.data.stage?._id) return;
+    const targetStage = detail.stages.find(s => s._id === selectedStageId);
+    const isTerminal = Boolean(targetStage?.isWon || /closed|won|lost|deal done|dead/i.test(targetStage?.name || ''));
+
+    setStagePromptData({
+      targetStageId: selectedStageId,
+      targetStageName: targetStage?.name || 'New Stage',
+      currentStageName: detail.data.stage?.name || 'Current Stage',
+      isTerminalStage: isTerminal
+    });
+    setShowQuickPrompt(true);
   }
 
   async function handleUpdateOwner() {
@@ -257,7 +268,7 @@ export default function CustomerDetailPage() {
       let uploadedCount = 0;
       let skipped = 0;
       for (const file of uploadFiles) {
-        if (file.size > 3 * 1024 * 1024) {
+        if (file.size > 5 * 1024 * 1024) {
           skipped += 1;
           continue;
         }
@@ -298,11 +309,12 @@ export default function CustomerDetailPage() {
   async function handleConfirmDeleteAttachment() {
     if (!id || confirmAction?.kind !== 'deleteAttachment') return;
     const attachmentId = confirmAction.attachmentId;
+    const isDriveFile = attachments.find(item => item._id === attachmentId)?.storageProvider === 'google_drive';
     setConfirmAction(null);
     try {
       setError('');
       await customersApi.deleteAttachment(id, attachmentId);
-      setSuccess('Attachment deleted.');
+      setSuccess(isDriveFile ? 'Attachment removed from CRM. The file remains in Drive.' : 'Attachment deleted.');
       await load(id);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to delete attachment');
@@ -313,7 +325,7 @@ export default function CustomerDetailPage() {
   if (error && !detail) return <div className="notice danger" style={{ margin: '1.5rem' }}>{error}</div>;
   if (!detail) return <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>Record not found.</div>;
 
-  const { data: customer, activities, attachments, relatedWork, stages, labels, users, campaigns, fields } = detail;
+  const { data: customer, activities, attachments, relatedWork, fileStorage, stages, labels, users, campaigns, fields } = detail;
   const initials = customer.name.trim().charAt(0).toUpperCase() || 'C';
   const avatarPalette = getAvatarColor(customer.name);
   const stageColor = customer.stage?.color || '#b58d00';
@@ -372,7 +384,7 @@ export default function CustomerDetailPage() {
   const leadCourse = customer.campaign ? customer.campaign.name : (customer.customData && (customer.customData as any).specialization_course) || '';
 
   return (
-    <div className={isClientProfile ? '' : 'lead-record-ui'} style={{ maxWidth: '1640px', margin: '0 auto', padding: '1.25rem 1.75rem 3rem' }}>
+    <div className={`lead-record-ui lead-detail-container ${isClientProfile ? 'is-client-profile' : ''}`}>
       {/* Navigation Breadcrumbs */}
       <div className="breadcrumbs lead-breadcrumbs" style={{ display: 'flex', gap: '0.45rem', fontSize: '0.76rem', color: 'var(--muted)', marginBottom: '12px', paddingLeft: '4px' }}>
         <Link to={listPath} style={{ color: 'var(--muted)', textDecoration: 'none' }}>{relationshipPlural}</Link>
@@ -389,8 +401,8 @@ export default function CustomerDetailPage() {
       </div>
 
       {/* Header Card */}
-      <section className="page-head lead-detail-head" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px 0 32px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03)', marginBottom: '24px', display: 'block' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.75rem' }}>
+      <section className="page-head lead-detail-head">
+        <div className="lead-header-main-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.75rem' }}>
           <div className="lead-identity" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <span
               className="lead-avatar"
@@ -427,7 +439,7 @@ export default function CustomerDetailPage() {
               </p>
             </div>
           </div>
-          <div className="actions" style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
+          <div className="actions lead-header-primary-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
             <button
               type="button"
               className="btn primary"
@@ -488,30 +500,32 @@ export default function CustomerDetailPage() {
         </div>
 
         {!isClientProfile && (
-          <div className="lead-contact-actions" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', padding: '12px 0 20px', borderTop: '1px solid var(--border)' }}>
-            {customer.phone && (
-              <>
-                <a className="btn small" href={`tel:${customer.phone.replace(/[^+\d]/g, '')}`} style={{ fontSize: '0.76rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <Icon name="phone" size={13} /> Call
-                </a>
-                <a className="btn small" href={`https://wa.me/${customer.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.76rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <Icon name="message-circle" size={13} /> WhatsApp
-                </a>
-              </>
-            )}
-            <button className="btn small" onClick={() => setEditing(v => !v)} style={{ fontSize: '0.76rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <Icon name="tags" size={13} /> Edit details
-            </button>
-            <div className="lead-header-metrics" style={{ marginLeft: 'auto', display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
-              <div>
+          <div className="lead-contact-actions">
+            <div className="lead-quick-action-buttons">
+              {customer.phone && (
+                <>
+                  <a className="btn small" href={`tel:${customer.phone.replace(/[^+\d]/g, '')}`} style={{ fontSize: '0.76rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <Icon name="phone" size={13} /> Call
+                  </a>
+                  <a className="btn small" href={`https://wa.me/${customer.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.76rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <Icon name="message-circle" size={13} /> WhatsApp
+                  </a>
+                </>
+              )}
+              <button className="btn small" onClick={() => setEditing(v => !v)} style={{ fontSize: '0.76rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Icon name="tags" size={13} /> Edit details
+              </button>
+            </div>
+            <div className="lead-header-metrics">
+              <div className="lead-metric-item">
                 <small style={{ display: 'block', fontSize: '0.68rem', color: 'var(--muted)' }}>Total value</small>
                 <strong style={{ fontSize: '0.85rem' }}>₹{(customer.value || 0).toLocaleString('en-IN')}</strong>
               </div>
-              <div>
+              <div className="lead-metric-item">
                 <small style={{ display: 'block', fontSize: '0.68rem', color: 'var(--muted)' }}>Owner</small>
                 <strong style={{ fontSize: '0.85rem' }}>{customer.assignedTo?.name || 'Unassigned'}</strong>
               </div>
-              <div>
+              <div className="lead-metric-item">
                 <small style={{ display: 'block', fontSize: '0.68rem', color: 'var(--muted)' }}>Next follow-up</small>
                 <strong style={{ fontSize: '0.85rem' }}>{customer.nextFollowUpAt ? new Date(customer.nextFollowUpAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Not scheduled'}</strong>
               </div>
@@ -521,21 +535,21 @@ export default function CustomerDetailPage() {
 
         {/* Prominent Latest Call Summary & Conversation Notes */}
         {customer.notes && (
-          <div className="lead-call-summary-banner" style={{ background: 'color-mix(in srgb, var(--gold) 8%, var(--panel))', border: '1px solid color-mix(in srgb, var(--gold) 35%, var(--border))', borderRadius: '12px', padding: '14px 18px', marginTop: '1rem', marginBottom: '0.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ color: 'var(--gold)', display: 'grid', placeItems: 'center' }}>
+          <div className="lead-call-summary-banner">
+            <div className="lead-call-summary-header">
+              <div className="lead-call-summary-title">
+                <span className="lead-call-summary-icon" style={{ color: 'var(--gold)', display: 'grid', placeItems: 'center' }}>
                   <Icon name="message-square" size={16} />
                 </span>
-                <strong style={{ fontSize: '0.84rem', color: 'var(--text)', letterSpacing: '0.01em' }}>
+                <strong>
                   Latest Call Summary & Conversation Notes
                 </strong>
               </div>
-              <button type="button" className="btn small" style={{ fontSize: '0.7rem', padding: '2px 8px' }} onClick={() => setEditing(true)}>
+              <button type="button" className="btn small lead-call-summary-btn" onClick={() => setEditing(true)}>
                 Edit summary
               </button>
             </div>
-            <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>
+            <p className="lead-call-summary-text">
               {customer.notes}
             </p>
           </div>
@@ -663,11 +677,11 @@ export default function CustomerDetailPage() {
       {success && <div className="notice success" style={{ marginBottom: '1rem' }}>{success}</div>}
 
       {/* Grid Layout: Main column + Right Settings Sidebar */}
-      <div className="lead-profile-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(300px, 0.9fr)', gap: '24px', alignItems: 'start' }}>
+      <div className="lead-profile-grid">
         {/* Left Column */}
-        <div className="lead-main-column" style={{ display: 'flex', flexDirection: 'column', gap: '24px', minWidth: 0 }}>
+        <div className="lead-main-column">
           {editing ? (
-            <article className="profile-panel lead-overview-card" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px' }}>
+            <article className="profile-panel lead-overview-card">
               <h2 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 800 }}>Edit {relationshipName}</h2>
               <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700 }}>
@@ -1261,6 +1275,14 @@ export default function CustomerDetailPage() {
                     <p className="muted-small" style={{ margin: '0 0 1rem', fontSize: '0.76rem', color: 'var(--muted)' }}>
                       Store documents, confirmations, requests, receipts, contracts, and any other files related to this {relationshipName.toLowerCase()}.
                     </p>
+                    <div className={`file-storage-status ${fileStorage?.ready ? 'drive-ready' : ''}`}>
+                      <span className="file-storage-icon">{fileStorage?.ready ? 'D' : 'C'}</span>
+                      <div>
+                        <strong>{fileStorage?.ready ? 'Uploads go to Google Drive' : 'Uploads use CRM storage'}</strong>
+                        <small>{fileStorage?.ready ? 'Files are saved in this workspace’s shared Drive folder.' : 'Connect Drive in Integrations whenever you are ready.'}</small>
+                      </div>
+                      {fileStorage?.folderUrl && <a href={fileStorage.folderUrl} target="_blank" rel="noreferrer">Open folder</a>}
+                    </div>
                     <form onSubmit={handleUploadAttachment} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       <CustomSelect
                         value={uploadCategory}
@@ -1290,7 +1312,7 @@ export default function CustomerDetailPage() {
                         style={{ padding: '0.65rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--input)', color: 'var(--text)', fontSize: '0.82rem' }}
                       />
                       <button className="btn primary" type="submit" disabled={uploading || uploadFiles.length === 0} style={{ alignSelf: 'flex-start' }}>
-                        {uploading ? 'Uploading...' : uploadFiles.length > 1 ? `Upload ${uploadFiles.length} files` : 'Upload file'}
+                        {uploading ? 'Uploading...' : uploadFiles.length > 1 ? `Upload ${uploadFiles.length} files` : fileStorage?.ready ? 'Upload to Drive' : 'Upload file'}
                       </button>
                     </form>
                   </article>
@@ -1308,9 +1330,15 @@ export default function CustomerDetailPage() {
                               <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
                                 {att.category} · {Math.ceil((att.size || 0) / 1024)} KB · {att.uploadedBy ? att.uploadedBy.name : 'System'}
                               </span>
+                              <span className={`storage-badge ${att.storageProvider === 'google_drive' ? 'drive' : ''}`}>
+                                {att.storageProvider === 'google_drive' ? 'Google Drive' : 'CRM'}
+                              </span>
                               {att.notes && <small style={{ display: 'block', fontSize: '0.72rem', color: 'var(--sub)', marginTop: '2px' }}>{att.notes}</small>}
                             </div>
                             <div className="attachment-actions" style={{ display: 'flex', gap: '6px' }}>
+                              {att.externalUrl && (
+                                <a className="btn small outline" href={att.externalUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', padding: '2px 8px' }}>Open</a>
+                              )}
                               <button
                                 type="button"
                                 className="btn small"
@@ -1326,7 +1354,7 @@ export default function CustomerDetailPage() {
                                   style={{ fontSize: '0.72rem', padding: '2px 8px' }}
                                   onClick={() => confirmDeleteAttachment(att._id)}
                                 >
-                                  Delete
+                                  {att.storageProvider === 'google_drive' ? 'Remove' : 'Delete'}
                                 </button>
                               )}
                             </div>
@@ -1369,9 +1397,9 @@ export default function CustomerDetailPage() {
         </div>
 
         {/* Right Column: Settings Card */}
-        <aside className="lead-side-column" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <article className="profile-panel lead-controls-card" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03)' }}>
-            <h2 style={{ margin: '0 0 1.25rem', fontSize: '1.1rem', fontWeight: 800 }}>
+        <aside className="lead-side-column">
+          <article className="profile-panel lead-controls-card">
+            <h2 className="lead-controls-title">
               {isClientProfile ? 'Relationship settings' : `Manage ${relationshipName.toLowerCase()}`}
             </h2>
 
@@ -1447,14 +1475,42 @@ export default function CustomerDetailPage() {
 
       <ConfirmDialog
         open={confirmAction !== null}
-        title={confirmAction?.kind === 'deleteAttachment' ? 'Delete Attachment' : `Delete this ${relationshipName.toLowerCase()}?`}
+        title={confirmAction?.kind === 'deleteAttachment'
+          ? (attachments.find(item => item._id === confirmAction.attachmentId)?.storageProvider === 'google_drive' ? 'Remove Attachment' : 'Delete Attachment')
+          : `Delete this ${relationshipName.toLowerCase()}?`}
         message={confirmAction?.kind === 'deleteAttachment'
-          ? 'Delete this attachment permanently?'
+          ? (attachments.find(item => item._id === confirmAction.attachmentId)?.storageProvider === 'google_drive'
+            ? 'Remove this attachment from the CRM? The original file will stay in Google Drive.'
+            : 'Delete this attachment permanently?')
           : `This will permanently delete the ${relationshipName.toLowerCase()} and all of its data. This action cannot be undone.`}
-        confirmText="Delete"
+        confirmText={confirmAction?.kind === 'deleteAttachment' && attachments.find(item => item._id === confirmAction.attachmentId)?.storageProvider === 'google_drive' ? 'Remove from CRM' : 'Delete'}
         variant="danger"
         onConfirm={() => void (confirmAction?.kind === 'deleteAttachment' ? handleConfirmDeleteAttachment() : handleConfirmDelete())}
         onCancel={() => setConfirmAction(null)}
+      />
+
+      <QuickActivityPrompt
+        open={showQuickPrompt}
+        customerId={id || ''}
+        customerName={customer.name}
+        targetStageId={stagePromptData?.targetStageId}
+        targetStageName={stagePromptData?.targetStageName}
+        currentStageName={stagePromptData?.currentStageName}
+        isTerminalStage={stagePromptData?.isTerminalStage}
+        onClose={() => {
+          setShowQuickPrompt(false);
+          setStagePromptData(null);
+        }}
+        onSaved={() => {
+          setShowQuickPrompt(false);
+          setStagePromptData(null);
+          if (id) void load(id);
+        }}
+        onLogged={() => {
+          setShowQuickPrompt(false);
+          setStagePromptData(null);
+          if (id) void load(id);
+        }}
       />
     </div>
   );

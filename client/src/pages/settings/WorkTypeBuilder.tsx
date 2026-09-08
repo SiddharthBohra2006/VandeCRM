@@ -1,45 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { settingsApi } from '../../api/settings';
 import { WorkType } from '../../api/work';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import Icon from '../../components/Icons';
 import {
-  ChevronRight,
-  ChevronDown,
-  Check,
+  X,
   Plus,
   Trash2,
   Settings,
-  MoreHorizontal,
-  GripVertical,
+  ChevronUp,
+  ChevronDown,
+  Search,
   Eye,
-  Columns3,
-  List as ListIcon,
-  Calendar as CalendarIcon,
+  Kanban,
+  LayoutList,
+  FileText,
+  BarChart2,
+  User,
+  Clock,
+  ArrowLeft,
   Maximize2,
   Minimize2,
-  X,
-  Layers,
-  Sparkles,
-  SlidersHorizontal,
-  SquareCheckBig,
-  ClipboardList,
-  Palette,
-  Globe,
-  Users,
+  Calendar,
   Building2,
-  Megaphone,
-  Target,
-  FileText,
+  CheckCircle2,
+  Check,
+  AlertCircle,
+  Hash,
   Mail,
-  Video,
   Phone,
-  Briefcase,
-  Tag,
-  Flag,
-  Clock,
-  Shield,
+  Globe,
+  Paperclip,
+  GripVertical,
 } from 'lucide-react';
+import '../../styles/settings/work-type-builder.css';
 
 export interface StatusDraft {
   key: string;
@@ -47,6 +42,7 @@ export interface StatusDraft {
   color: string;
   isTerminalWon?: boolean;
   isTerminalLost?: boolean;
+  requiresApproval?: boolean;
 }
 
 export interface FieldDraft {
@@ -57,6 +53,8 @@ export interface FieldDraft {
   required: boolean;
   placeholder?: string;
   group?: string;
+  helpText?: string;
+  defaultValue?: string;
   min?: number | null;
   max?: number | null;
 }
@@ -67,122 +65,295 @@ interface Props {
   onChanged: () => void;
 }
 
-const FIELD_TYPES = [
-  'text', 'textarea', 'number', 'currency', 'percentage', 'date',
-  'datetime', 'email', 'phone', 'select', 'checkbox', 'url',
-  'user-picker', 'company-picker', 'customer-picker'
+const SUPPORTED_FIELD_TYPES = [
+  { id: 'text', label: 'Text' },
+  { id: 'textarea', label: 'Long Text (Textarea)' },
+  { id: 'number', label: 'Number' },
+  { id: 'currency', label: 'Currency (₹)' },
+  { id: 'percentage', label: 'Percentage (%)' },
+  { id: 'date', label: 'Date' },
+  { id: 'datetime', label: 'Date & Time' },
+  { id: 'select', label: 'Dropdown (Select)' },
+  { id: 'multi-select', label: 'Multi-select' },
+  { id: 'checkbox', label: 'Checkbox' },
+  { id: 'url', label: 'Website / Link (URL)' },
+  { id: 'email', label: 'Email' },
+  { id: 'phone', label: 'Phone' },
+  { id: 'user-picker', label: 'User / Team member' },
+  { id: 'file', label: 'File / Attachment link' },
 ];
 
-const ICON_MAP: Record<string, React.ElementType> = {
-  'square-check-big': SquareCheckBig,
-  'clipboard-list': ClipboardList,
-  'layers': Layers,
-  'palette': Palette,
-  'globe': Globe,
-  'users': Users,
-  'building-2': Building2,
-  'megaphone': Megaphone,
-  'calendar': CalendarIcon,
-  'target': Target,
-  'file-text': FileText,
-  'sparkles': Sparkles,
-  'mail': Mail,
-  'video': Video,
-  'phone': Phone,
-  'briefcase': Briefcase,
-  'tag': Tag,
-  'flag': Flag,
-  'clock': Clock,
-  'shield': Shield,
-};
+const BUSINESS_ICON_CATALOG: [string, string, string, string][] = [
+  ['layout-dashboard','Dashboard','recommended','overview home workspace'],
+  ['clipboard-list','Work items','recommended','tasks checklist module'],
+  ['list-checks','Processes','recommended','workflow operations'],
+  ['calendar-days','Schedule','recommended','calendar appointments'],
+  ['folder-kanban','Projects','recommended','project delivery'],
+  ['bar-chart-3','Analytics','recommended','reports performance'],
+  ['users','Customers','recommended','people clients'],
+  ['briefcase','Business','recommended','company work'],
+  ['target','Goals','recommended','targets objectives'],
+  ['settings','Operations','recommended','settings process'],
 
-const ICON_OPTIONS = Object.keys(ICON_MAP);
+  ['handshake','Deals','sales','partnership sales agreement'],
+  ['contact','Contacts','sales','customer people address book'],
+  ['filter','Leads','sales','pipeline prospects'],
+  ['badge-dollar-sign','Revenue','sales','money deal value'],
+  ['shopping-cart','Orders','sales','purchase ecommerce'],
+  ['file-signature','Proposals','sales','quote contract'],
+  ['phone-call','Calls','sales','telephone followup'],
+  ['map-pinned','Territories','sales','location region'],
+  ['trophy','Targets','sales','achievement quota'],
 
-const VIEWS = ['board', 'list', 'calendar'];
-const CORE_FIELDS = ['title', 'assignedTo', 'collaborators', 'secondaryAssignee', 'relatedRecords', 'status', 'priority', 'deadline', 'startDate', 'deliveredAt', 'notes'];
+  ['megaphone','Campaigns','marketing','advertising promotion'],
+  ['send','Outreach','marketing','message campaign'],
+  ['mail','Email marketing','marketing','newsletter inbox'],
+  ['share-2','Social media','marketing','social sharing'],
+  ['newspaper','Content','marketing','article editorial'],
+  ['palette','Branding','marketing','design identity'],
+  ['search','SEO research','marketing','search optimization'],
+
+  ['landmark','Banking','finance','bank accounts'],
+  ['wallet-cards','Payments','finance','wallet card'],
+  ['receipt-text','Expenses','finance','receipt bill'],
+  ['circle-dollar-sign','Billing','finance','invoice money'],
+  ['calculator','Calculations','finance','accounting numbers'],
+  ['piggy-bank','Budget','finance','savings'],
+
+  ['scale','Legal matters','legal','law justice cases'],
+  ['gavel','Court cases','legal','judge litigation'],
+  ['file-lock','Compliance','legal','secure document regulation'],
+  ['scroll-text','Contracts','legal','agreement document'],
+  ['shield-check','Risk & compliance','legal','protection audit'],
+
+  ['stethoscope','Medical care','healthcare','doctor clinic'],
+  ['hospital','Hospital','healthcare','medical building'],
+  ['heart-pulse','Patient health','healthcare','care wellness'],
+  ['pill','Pharmacy','healthcare','medicine prescription'],
+  ['clipboard-plus','Patient records','healthcare','medical file'],
+
+  ['house','Properties','real-estate','home listings'],
+  ['building-2','Commercial property','real-estate','office building'],
+  ['key-round','Rentals','real-estate','key lease'],
+  ['ruler','Floor plans','real-estate','measurement plan'],
+
+  ['graduation-cap','Students','education','school learning'],
+  ['school','Institution','education','college building'],
+  ['book-open','Courses','education','learning lessons'],
+  ['presentation','Training','education','class presentation'],
+
+  ['hotel','Hotels','hospitality','rooms lodging'],
+  ['bed-double','Bookings','hospitality','room reservation'],
+  ['utensils','Restaurant','hospitality','food dining'],
+  ['coffee','Cafe','hospitality','drink beverage'],
+
+  ['store','Store','retail','shop business'],
+  ['shopping-bag','Products','retail','shopping commerce'],
+  ['package','Inventory','retail','stock product'],
+  ['tags','Pricing','retail','price labels'],
+
+  ['truck','Delivery','logistics','shipping vehicle'],
+  ['container','Freight','logistics','cargo shipping'],
+  ['warehouse','Warehouse','logistics','storage inventory'],
+  ['plane','Air freight','logistics','flight travel'],
+
+  ['hard-hat','Construction','construction','builder safety'],
+  ['hammer','Contracting','construction','tool builder'],
+  ['drafting-compass','Architecture','construction','design plan'],
+
+  ['factory','Manufacturing','manufacturing','industry production'],
+  ['wrench','Maintenance','manufacturing','repair tools'],
+  ['workflow','Production line','manufacturing','factory process'],
+
+  ['clapperboard','Video production','media','film reel'],
+  ['video','Video','media','camera recording'],
+  ['image','Design assets','media','picture gallery'],
+  ['pen-line','Writing','media','copy content'],
+  ['music','Music','media','song audio'],
+
+  ['code-2','Development','technology','software coding'],
+  ['monitor','Software','technology','computer app'],
+  ['database','Data','technology','storage records'],
+  ['cloud','Cloud services','technology','hosting online'],
+  ['shield','Cybersecurity','technology','security protection'],
+
+  ['user-check','Recruitment','people','hire employee'],
+  ['users-round','Teams','people','staff group'],
+  ['calendar-check','Attendance','people','schedule presence'],
+
+  ['headphones','Customer support','support','help service'],
+  ['message-square','Conversations','support','chat messages'],
+  ['circle-help','Help desk','support','question assistance'],
+  ['clock-3','Service SLA','support','time deadline'],
+];
+
+const ICON_CATEGORIES = [
+  { id: 'recommended', label: 'Recommended' },
+  { id: 'sales', label: 'Sales & CRM' },
+  { id: 'marketing', label: 'Marketing' },
+  { id: 'finance', label: 'Finance' },
+  { id: 'legal', label: 'Legal' },
+  { id: 'healthcare', label: 'Healthcare' },
+  { id: 'real-estate', label: 'Real estate' },
+  { id: 'education', label: 'Education' },
+  { id: 'hospitality', label: 'Hospitality' },
+  { id: 'retail', label: 'Retail' },
+  { id: 'logistics', label: 'Logistics' },
+  { id: 'construction', label: 'Construction' },
+  { id: 'manufacturing', label: 'Manufacturing' },
+  { id: 'media', label: 'Media & creative' },
+  { id: 'technology', label: 'Technology' },
+  { id: 'people', label: 'HR & people' },
+  { id: 'support', label: 'Service & support' },
+  { id: 'all', label: 'All icons' },
+];
+
+const DEFAULT_STATUSES: StatusDraft[] = [
+  { key: 'backlog', label: 'Backlog', color: '#64748b' },
+  { key: 'in_progress', label: 'In progress', color: '#f59e0b' },
+  { key: 'review', label: 'Review', color: '#3b82f6' },
+  { key: 'done', label: 'Done', color: '#16a34a', isTerminalWon: true },
+];
+
+const CORE_FIELDS = [
+  { key: 'title', label: 'Title / Name' },
+  { key: 'status', label: 'Stage / Status' },
+  { key: 'assignedTo', label: 'Owner / Assignee' },
+  { key: 'priority', label: 'Priority' },
+  { key: 'deadline', label: 'Deadline / Due date' },
+  { key: 'startDate', label: 'Start date' },
+  { key: 'deliveredAt', label: 'Delivered date' },
+  { key: 'customer', label: 'Business / Client' },
+  { key: 'notes', label: 'Internal Notes' },
+];
 
 function slugify(value: string) {
   return String(value || '')
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 }
 
-const defaultStatuses: StatusDraft[] = [
-  { key: 'pending', label: 'Pending', color: '#3b82f6' },
-  { key: 'started', label: 'Started', color: '#10b981' },
-  { key: 'in_progress', label: 'In Progress', color: '#f59e0b' },
-  { key: 'review', label: 'Review', color: '#8b5cf6' },
-  { key: 'completed', label: 'Completed', color: '#ef4444', isTerminalWon: true },
-];
+/**
+ * Pure generator for preview sample records distributed across configured statuses & fields
+ */
+function generatePreviewRecords(
+  name: string,
+  statuses: StatusDraft[],
+  fields: FieldDraft[]
+) {
+  if (!statuses || statuses.length === 0) return [];
+  const sampleTitles = [
+    'Initial Consultation & Discovery',
+    'Technical Scope & Requirements',
+    'Milestone Sign-off & Delivery',
+    'Customer Review & Approval',
+    'Performance Audit & Sign-off',
+    'Deployment & Verification',
+  ];
+  const sampleUsers = ['Alex Carter', 'Priya Sharma', 'David Miller', 'Elena Rostova'];
+  const samplePriorities = ['high', 'normal', 'urgent', 'low'];
+  const prefix = slugify(name || 'REC').toUpperCase() || 'MOD';
 
-interface SampleCard {
-  id: string;
-  title: string;
-  avatar: string;
-  avatarBg: string;
-  priority: 'High' | 'Medium' | 'Low';
-  date: string;
-}
+  const totalCount = Math.max(statuses.length, 3);
+  const records = [];
 
-function getSampleDataForModule(modName: string): Record<number, SampleCard[]> {
-  const lower = (modName || '').toLowerCase();
-  if (lower.includes('meet') || lower.includes('call') || lower.includes('calendar')) {
-    return {
-      0: [
-        { id: '1', title: 'Q3 Strategy & Review Call', avatar: 'AK', avatarBg: 'linear-gradient(135deg, #0d9488, #14b8a6)', priority: 'High', date: '12 Sep' },
-        { id: '2', title: 'Product Demo with Acme Corp', avatar: 'RK', avatarBg: 'linear-gradient(135deg, #e11d48, #f43f5e)', priority: 'Medium', date: '14 Sep' },
-      ],
-      1: [
-        { id: '3', title: 'Client Onboarding Kickoff', avatar: 'VD', avatarBg: 'linear-gradient(135deg, #7c3aed, #a855f7)', priority: 'High', date: '16 Sep' },
-      ],
-      2: [
-        { id: '4', title: 'Weekly Sprint Sync', avatar: 'AK', avatarBg: 'linear-gradient(135deg, #0d9488, #14b8a6)', priority: 'Medium', date: '18 Sep' },
-        { id: '5', title: 'Monthly Executive Briefing', avatar: 'RK', avatarBg: 'linear-gradient(135deg, #e11d48, #f43f5e)', priority: 'Low', date: '20 Sep' },
-      ],
-      3: [
-        { id: '6', title: 'Post-Meeting Debrief & Notes', avatar: 'AK', avatarBg: 'linear-gradient(135deg, #0d9488, #14b8a6)', priority: 'High', date: '24 Sep' },
-      ],
+  for (let i = 0; i < totalCount; i++) {
+    const status = statuses[i % statuses.length];
+    const recId = `#${prefix}-${String(101 + i)}`;
+    const title = `Sample ${name || 'Item'} — ${sampleTitles[i % sampleTitles.length]}`;
+    const user = sampleUsers[i % sampleUsers.length];
+    const priority = samplePriorities[i % samplePriorities.length];
+
+    const values: Record<string, any> = {
+      title,
+      status: status.label,
+      assignedTo: user,
+      priority,
+      deadline: `In ${2 + i * 2} days`,
+      startDate: `Oct ${10 + i}, 2026`,
+      deliveredAt: `Nov ${15 + i}, 2026`,
+      customer: i % 2 === 0 ? 'Acme Global' : 'Apex Dynamics',
+      notes: 'Sample workflow notes and review checkpoints.',
     };
+
+    fields.forEach((f, fIdx) => {
+      const key = `custom:${f.key}`;
+      if (f.type === 'currency') {
+        values[key] = `₹${(15000 + (i + 1) * (fIdx + 1) * 8500).toLocaleString()}`;
+      } else if (f.type === 'percentage') {
+        values[key] = `${Math.min(100, (i + 1) * 25)}%`;
+      } else if (f.type === 'number') {
+        values[key] = `${(i + 1) * 15}`;
+      } else if (f.type === 'date' || f.type === 'datetime') {
+        values[key] = `2026-10-${String(12 + i * 2).padStart(2, '0')}`;
+      } else if (f.type === 'select' || f.type === 'multi-select') {
+        values[key] = f.options && f.options.length > 0 ? f.options[i % f.options.length] : 'Option 1';
+      } else if (f.type === 'checkbox') {
+        values[key] = i % 2 === 0 ? 'Yes' : 'No';
+      } else if (f.type === 'email') {
+        values[key] = `client.${i + 1}@example.com`;
+      } else if (f.type === 'phone') {
+        values[key] = `+91 98765 4321${i}`;
+      } else if (f.type === 'url') {
+        values[key] = `https://portal.client.com/${f.key}-${i + 1}`;
+      } else if (f.type === 'user-picker') {
+        values[key] = sampleUsers[(i + 1) % sampleUsers.length];
+      } else if (f.type === 'file') {
+        values[key] = `document_v${i + 1}.pdf`;
+      } else {
+        values[key] = `Sample ${f.label || f.key}`;
+      }
+    });
+
+    records.push({
+      id: recId,
+      title,
+      statusKey: status.key,
+      statusLabel: status.label,
+      statusColor: status.color || '#64748b',
+      priority,
+      user,
+      values,
+    });
   }
 
-  return {
-    0: [
-      { id: '1', title: 'Design launch thumbnail', avatar: 'AK', avatarBg: 'linear-gradient(135deg, #0d9488, #14b8a6)', priority: 'High', date: '12 Sep' },
-      { id: '2', title: 'Setup database', avatar: 'RK', avatarBg: 'linear-gradient(135deg, #e11d48, #f43f5e)', priority: 'Medium', date: '14 Sep' },
-    ],
-    1: [
-      { id: '3', title: 'Edit product video', avatar: 'VD', avatarBg: 'linear-gradient(135deg, #7c3aed, #a855f7)', priority: 'High', date: '16 Sep' },
-    ],
-    2: [
-      { id: '4', title: 'Write blog content', avatar: 'AK', avatarBg: 'linear-gradient(135deg, #0d9488, #14b8a6)', priority: 'Medium', date: '18 Sep' },
-      { id: '5', title: 'Update landing page', avatar: 'RK', avatarBg: 'linear-gradient(135deg, #e11d48, #f43f5e)', priority: 'Low', date: '20 Sep' },
-      { id: '6', title: 'Social media plan', avatar: 'VD', avatarBg: 'linear-gradient(135deg, #7c3aed, #a855f7)', priority: 'Medium', date: '22 Sep' },
-    ],
-    3: [
-      { id: '7', title: 'QA testing', avatar: 'AK', avatarBg: 'linear-gradient(135deg, #0d9488, #14b8a6)', priority: 'High', date: '24 Sep' },
-    ],
-  };
+  return records;
 }
 
 export default function WorkTypeBuilder({ workType, onClose, onChanged }: Props) {
   const isNew = !workType;
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [previewView, setPreviewView] = useState<'board' | 'list' | 'calendar'>('board');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewTab, setPreviewTab] = useState<'board' | 'form' | 'table' | 'overview'>('board');
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Module Details
-  const [name, setName] = useState(workType?.name || (isNew ? 'New module' : 'Tasks'));
-  const [icon, setIcon] = useState(workType?.icon || 'square-check-big');
+  // Drag and Drop state
+  const [draggedStatusIdx, setDraggedStatusIdx] = useState<number | null>(null);
+  const [dragOverStatusIdx, setDragOverStatusIdx] = useState<number | null>(null);
+  const [draggedFieldIdx, setDraggedFieldIdx] = useState<number | null>(null);
+  const [dragOverFieldIdx, setDragOverFieldIdx] = useState<number | null>(null);
+
+  // Module Identity
+  const [name, setName] = useState(workType?.name || '');
+  const [key, setKey] = useState(workType?.key || '');
+  const [icon, setIcon] = useState(workType?.icon || 'clipboard-list');
   const [color, setColor] = useState(workType?.color || '#ea580c');
   const [order, setOrder] = useState<number>(workType?.order || 0);
-  const [key, setKey] = useState(workType?.key || (isNew ? '' : 'tasks'));
   const [isActive, setIsActive] = useState(workType?.isActive !== false);
 
-  // Statuses
+  // Icon Library Popover
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const [iconCategory, setIconCategory] = useState('recommended');
+  const [iconSearch, setIconSearch] = useState('');
+  const iconPopoverRef = useRef<HTMLDivElement>(null);
+
+  // Statuses (Step 1)
   const [statuses, setStatuses] = useState<StatusDraft[]>(
     workType?.statuses?.length
       ? workType.statuses.map(s => ({
@@ -191,11 +362,12 @@ export default function WorkTypeBuilder({ workType, onClose, onChanged }: Props)
           color: s.color || '#64748b',
           isTerminalWon: s.isTerminalWon,
           isTerminalLost: s.isTerminalLost,
+          requiresApproval: s.requiresApproval,
         }))
-      : defaultStatuses
+      : DEFAULT_STATUSES
   );
 
-  // Fields
+  // Form Fields (Step 2)
   const [fields, setFields] = useState<FieldDraft[]>(
     workType?.fields?.length
       ? workType.fields.map(f => ({
@@ -204,1379 +376,1788 @@ export default function WorkTypeBuilder({ workType, onClose, onChanged }: Props)
           type: f.type,
           options: f.options || [],
           required: !!f.required,
-          placeholder: f.placeholder,
+          placeholder: f.placeholder || '',
+          helpText: (f as any).helpText || '',
+          defaultValue: (f as any).defaultValue || '',
           group: f.group,
-          min: (f as any).min,
-          max: (f as any).max,
         }))
       : []
   );
 
-  const p = workType?.presentation || {};
-  const [enabledViews, setEnabledViews] = useState<string[]>(p.enabledViews?.length ? p.enabledViews : ['board', 'list', 'calendar']);
-  const [defaultView, setDefaultView] = useState(p.defaultView || 'board');
-  const [calendarField, setCalendarField] = useState(p.calendarField || 'deadline');
-  const [listColumns, setListColumns] = useState<string[]>(p.listColumns?.length ? p.listColumns : ['title', 'assignedTo', 'status', 'deadline']);
-  const [boardFields, setBoardFields] = useState<string[]>(p.boardFields?.length ? p.boardFields : ['assignedTo', 'priority', 'deadline']);
-  const [filterFields, setFilterFields] = useState<string[]>(p.filterFields?.length ? p.filterFields : ['status', 'assignedTo', 'priority']);
+  // Presentation & Views (Step 3)
+  const pres = workType?.presentation || {};
+  const [enabledViews, setEnabledViews] = useState<string[]>(
+    pres.enabledViews?.length ? pres.enabledViews : ['list', 'board', 'calendar']
+  );
+  const [defaultView, setDefaultView] = useState(pres.defaultView || 'list');
+  const [calendarField, setCalendarField] = useState(pres.calendarField || 'deadline');
+  const [listColumns, setListColumns] = useState<string[]>(
+    pres.listColumns?.length ? pres.listColumns : ['title', 'assignedTo', 'status', 'deadline']
+  );
+  const [boardFields, setBoardFields] = useState<string[]>(
+    pres.boardFields?.length ? pres.boardFields : ['assignedTo', 'priority', 'deadline']
+  );
+  const [filterFields, setFilterFields] = useState<string[]>(
+    pres.filterFields?.length ? pres.filterFields : ['status', 'assignedTo', 'priority']
+  );
+  const [fieldLabels, setFieldLabels] = useState<Record<string, string>>(pres.fieldLabels || {});
+  const [overviewGroupFields, setOverviewGroupFields] = useState<string[]>(pres.overviewGroupFields || []);
+  const [overviewProgressFields, setOverviewProgressFields] = useState<string[]>(pres.overviewProgressFields || []);
+  const [overviewCompleteValue, setOverviewCompleteValue] = useState(pres.overviewCompleteValue || 'Done');
 
-  // Modals & Popups
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [iconPickerOpen, setIconPickerOpen] = useState(false);
-
-  // Sync state when workType prop changes
+  // Close icon popover on Escape key
   useEffect(() => {
-    if (workType) {
-      setName(workType.name || '');
-      setIcon(workType.icon || 'square-check-big');
-      setColor(workType.color || '#ea580c');
-      setOrder(workType.order || 0);
-      setKey(workType.key || '');
-      setIsActive(workType.isActive !== false);
-      if (workType.statuses?.length) {
-        setStatuses(workType.statuses.map(s => ({
-          key: s.key,
-          label: s.label,
-          color: s.color || '#64748b',
-          isTerminalWon: s.isTerminalWon,
-          isTerminalLost: s.isTerminalLost,
-        })));
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        if (iconPickerOpen) {
+          setIconPickerOpen(false);
+        }
       }
-      if (workType.fields?.length) {
-        setFields(workType.fields.map(f => ({
-          key: f.key,
-          label: f.label,
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [iconPickerOpen]);
+
+  // Sync state whenever workType prop changes
+  useEffect(() => {
+    setName(workType?.name || '');
+    setKey(workType?.key || '');
+    setIcon(workType?.icon || 'clipboard-list');
+    setColor(workType?.color || '#ea580c');
+    setOrder(workType?.order || 0);
+    setIsActive(workType?.isActive !== false);
+    setStatuses(
+      workType?.statuses?.length
+        ? workType.statuses.map(s => ({
+            key: s.key,
+            label: s.label,
+            color: s.color || '#64748b',
+            isTerminalWon: s.isTerminalWon,
+            isTerminalLost: s.isTerminalLost,
+            requiresApproval: s.requiresApproval,
+          }))
+        : DEFAULT_STATUSES
+    );
+    setFields(
+      workType?.fields?.length
+        ? workType.fields.map(f => ({
+            key: f.key,
+            label: f.label,
+            type: f.type,
+            options: f.options || [],
+            required: !!f.required,
+            placeholder: f.placeholder || '',
+            helpText: (f as any).helpText || '',
+            defaultValue: (f as any).defaultValue || '',
+            group: f.group,
+          }))
+        : []
+    );
+    const p = workType?.presentation || {};
+    setEnabledViews(p.enabledViews?.length ? p.enabledViews : ['list', 'board', 'calendar']);
+    setDefaultView(p.defaultView || 'list');
+    setCalendarField(p.calendarField || 'deadline');
+    setListColumns(p.listColumns?.length ? p.listColumns : ['title', 'assignedTo', 'status', 'deadline']);
+    setBoardFields(p.boardFields?.length ? p.boardFields : ['assignedTo', 'priority', 'deadline']);
+    setFilterFields(p.filterFields?.length ? p.filterFields : ['status', 'assignedTo', 'priority']);
+    setFieldLabels(p.fieldLabels || {});
+    setOverviewGroupFields(p.overviewGroupFields || []);
+    setOverviewProgressFields(p.overviewProgressFields || []);
+    setOverviewCompleteValue(p.overviewCompleteValue || 'Done');
+  }, [workType]);
+
+  // Filtered icons
+  const filteredIcons = useMemo(() => {
+    const q = iconSearch.trim().toLowerCase();
+    return BUSINESS_ICON_CATALOG.filter(([iconName, label, group, keywords]) => {
+      const matchSearch = !q || `${iconName} ${label} ${keywords}`.toLowerCase().includes(q);
+      const matchCat = iconCategory === 'all' || group === iconCategory || (q && iconCategory === 'recommended');
+      return matchSearch && matchCat;
+    });
+  }, [iconSearch, iconCategory]);
+
+  // All available fields for selection (core + custom)
+  const allAttributes = useMemo(() => {
+    const items = [
+      ...CORE_FIELDS.map(c => ({ key: c.key, label: fieldLabels[c.key] || c.label, isCore: true })),
+      ...fields.map(f => ({ key: `custom:${f.key}`, label: fieldLabels[`custom:${f.key}`] || f.label || f.key, isCore: false, type: f.type })),
+    ];
+    return items;
+  }, [fields, fieldLabels]);
+
+  const selectFields = useMemo<FieldDraft[]>(() => {
+    return fields.filter(f => ['select', 'multi-select'].includes(f.type));
+  }, [fields]);
+
+  // Sample records generated dynamically as a pure function of builder state
+  const sampleRecords = useMemo(() => {
+    return generatePreviewRecords(name, statuses, fields);
+  }, [name, statuses, fields]);
+
+  function handleNameChange(val: string) {
+    setName(val);
+    if (isNew) {
+      setKey(slugify(val));
+    }
+  }
+
+  function addStatus() {
+    const newIdx = statuses.length + 1;
+    setStatuses([
+      ...statuses,
+      {
+        key: `stage_${newIdx}`,
+        label: `Stage ${newIdx}`,
+        color: '#64748b',
+        isTerminalWon: false,
+        isTerminalLost: false,
+        requiresApproval: false,
+      },
+    ]);
+  }
+
+  function moveStatus(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= statuses.length) return;
+    const next = [...statuses];
+    const [item] = next.splice(index, 1);
+    next.splice(target, 0, item);
+    setStatuses(next);
+  }
+
+  // Drag and Drop handlers for Statuses
+  function handleStatusDragStart(e: React.DragEvent, index: number) {
+    setDraggedStatusIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  }
+
+  function handleStatusDragOver(e: React.DragEvent, index: number) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverStatusIdx !== index) {
+      setDragOverStatusIdx(index);
+    }
+  }
+
+  function handleStatusDrop(e: React.DragEvent, targetIndex: number) {
+    e.preventDefault();
+    if (draggedStatusIdx === null || draggedStatusIdx === targetIndex) {
+      setDraggedStatusIdx(null);
+      setDragOverStatusIdx(null);
+      return;
+    }
+    const next = [...statuses];
+    const [moved] = next.splice(draggedStatusIdx, 1);
+    next.splice(targetIndex, 0, moved);
+    setStatuses(next);
+    setDraggedStatusIdx(null);
+    setDragOverStatusIdx(null);
+  }
+
+  function addField() {
+    const newIdx = fields.length + 1;
+    setFields([
+      ...fields,
+      {
+        key: `field_${newIdx}`,
+        label: `Field ${newIdx}`,
+        type: 'text',
+        options: [],
+        required: false,
+        placeholder: '',
+      },
+    ]);
+  }
+
+  function moveField(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= fields.length) return;
+    const next = [...fields];
+    const [item] = next.splice(index, 1);
+    next.splice(target, 0, item);
+    setFields(next);
+  }
+
+  // Drag and Drop handlers for Custom Fields
+  function handleFieldDragStart(e: React.DragEvent, index: number) {
+    setDraggedFieldIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  }
+
+  function handleFieldDragOver(e: React.DragEvent, index: number) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverFieldIdx !== index) {
+      setDragOverFieldIdx(index);
+    }
+  }
+
+  function handleFieldDrop(e: React.DragEvent, targetIndex: number) {
+    e.preventDefault();
+    if (draggedFieldIdx === null || draggedFieldIdx === targetIndex) {
+      setDraggedFieldIdx(null);
+      setDragOverFieldIdx(null);
+      return;
+    }
+    const next = [...fields];
+    const [moved] = next.splice(draggedFieldIdx, 1);
+    next.splice(targetIndex, 0, moved);
+    setFields(next);
+    setDraggedFieldIdx(null);
+    setDragOverFieldIdx(null);
+  }
+
+  function toggleArrayItem(arr: string[], item: string, minLength = 0): string[] {
+    if (arr.includes(item)) {
+      if (arr.length <= minLength) return arr;
+      return arr.filter(x => x !== item);
+    }
+    return [...arr, item];
+  }
+
+  async function handleSave(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!name.trim()) {
+      setError('Please enter a module name.');
+      return;
+    }
+    if (statuses.length === 0) {
+      setError('A module must have at least one board stage.');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError('');
+
+      const cleanKey = slugify(key || name);
+      const payload = {
+        name: name.trim(),
+        key: cleanKey,
+        icon: icon || 'clipboard-list',
+        color: color || '#ea580c',
+        order: Number(order) || 0,
+        isActive,
+        statuses: statuses.map(s => ({
+          key: s.key.trim() || slugify(s.label),
+          label: s.label.trim() || 'Untitled',
+          color: s.color || '#64748b',
+          isTerminalWon: !!s.isTerminalWon,
+          isTerminalLost: !!s.isTerminalLost,
+          requiresApproval: !!s.requiresApproval,
+        })),
+        fields: fields.map(f => ({
+          key: f.key.trim() || slugify(f.label),
+          label: f.label.trim() || 'Field',
           type: f.type,
           options: f.options || [],
           required: !!f.required,
-          placeholder: f.placeholder,
-          group: f.group,
-        })));
-      }
-    }
-  }, [workType]);
+          placeholder: f.placeholder || '',
+          helpText: f.helpText || '',
+          defaultValue: f.defaultValue || '',
+          group: f.group || '',
+        })),
+        presentation: {
+          enabledViews,
+          defaultView,
+          calendarField,
+          listColumns,
+          boardFields,
+          filterFields,
+          fieldLabels,
+          overviewGroupFields,
+          overviewProgressFields,
+          overviewCompleteValue,
+        },
+      };
 
-  const customFieldKeys = fields.map(f => `custom:${f.key}`);
-  const allSelectable = [...CORE_FIELDS, ...customFieldKeys];
-  const dateFields = ['deadline', 'startDate', 'deliveredAt', ...fields.filter(f => ['date', 'datetime'].includes(f.type)).map(f => `custom:${f.key}`)];
-
-  const fieldLabel = (keyName: string) => {
-    const known: Record<string, string> = {
-      title: 'Title',
-      assignedTo: 'Owner',
-      collaborators: 'Collaborators',
-      secondaryAssignee: 'Secondary assignee',
-      relatedRecords: 'Related records',
-      status: 'Status',
-      priority: 'Priority',
-      deadline: 'Deadline',
-      startDate: 'Start date',
-      deliveredAt: 'Delivered at',
-      notes: 'Notes',
-    };
-    if (known[keyName]) return known[keyName];
-    if (keyName.startsWith('custom:')) {
-      const f = fields.find(x => `custom:${x.key}` === keyName);
-      return f ? f.label : keyName.replace('custom:', '');
-    }
-    return keyName;
-  };
-
-  const handleSave = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!name.trim()) {
-      setError('Please provide a module name.');
-      setShowSettingsModal(true);
-      return;
-    }
-    setSaving(true);
-    setError('');
-
-    const payload = {
-      name: name.trim(),
-      key: key.trim() || slugify(name),
-      icon,
-      color,
-      order,
-      isActive: isActive ? 'on' : false,
-      statuses: JSON.stringify(
-        statuses.map(s => ({
-          key: s.key || slugify(s.label),
-          label: s.label,
-          color: s.color,
-          isTerminalWon: !!s.isTerminalWon,
-          isTerminalLost: !!s.isTerminalLost,
-        }))
-      ),
-      fields: JSON.stringify(
-        fields.map(f => ({
-          key: f.key || slugify(f.label),
-          label: f.label,
-          type: f.type,
-          options: f.type === 'select' && !f.options.length ? ['Option 1'] : f.options,
-          required: f.required,
-          placeholder: f.placeholder,
-        }))
-      ),
-      presentation: JSON.stringify({
-        enabledViews,
-        defaultView,
-        calendarField,
-        listColumns,
-        boardFields,
-        filterFields,
-      }),
-    };
-
-    try {
       if (isNew) {
         await settingsApi.createWorkType(payload);
-      } else if (workType) {
+      } else {
         await settingsApi.updateWorkType(workType._id, payload);
       }
+
       onChanged();
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Could not save module');
+      setError(err.message || 'Failed to save module.');
     } finally {
       setSaving(false);
     }
-  };
+  }
 
-  const executeDelete = async () => {
+  async function handleDelete() {
     if (!workType) return;
-    setSaving(true);
-    setError('');
     try {
+      setSaving(true);
       await settingsApi.deleteWorkType(workType._id);
       onChanged();
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Could not delete module');
+      setError(err.message || 'Failed to delete module.');
     } finally {
       setSaving(false);
-      setShowDeleteConfirm(false);
     }
-  };
-
-  const addStatus = () => {
-    const defaultColors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
-    const chosenColor = defaultColors[statuses.length % defaultColors.length];
-    setStatuses([...statuses, { key: `stage_${statuses.length + 1}`, label: `Stage ${statuses.length + 1}`, color: chosenColor }]);
-  };
-
-  const addField = () => {
-    setFields([...fields, { key: '', label: '', type: 'text', options: ['Option 1'], required: false }]);
-  };
-
-  const ModuleIconComponent = ICON_MAP[icon] || SquareCheckBig;
-  const sampleMap = getSampleDataForModule(name);
-  const allSampleCards = statuses.flatMap((_, idx) => sampleMap[idx] || []);
+  }
 
   return createPortal(
-    <div className="module-builder-viewport-overlay">
-      <div className="module-builder-inner-wrap">
-        {/* Top Breadcrumb Navigation */}
-        <div className="customization-breadcrumbs" style={{ marginBottom: '1.25rem' }}>
-          <button type="button" className="bc-link-btn" onClick={onClose}>
-            Settings
-          </button>
-          <ChevronRight size={13} className="bc-sep" />
-          <button type="button" className="bc-link-btn" onClick={onClose}>
-            Custom modules
-          </button>
-          <ChevronRight size={13} className="bc-sep" />
-          <span className="bc-current">{name || 'Tasks'}</span>
-        </div>
-
-        {/* Header Bar */}
-        <div className="mod-customizer-head">
-          <div className="mod-customizer-identity">
-            <div
-              className="mod-customizer-icon-badge"
-              style={{
-                backgroundColor: 'color-mix(in srgb, var(--gold) 12%, var(--panel, #ffffff))',
-                borderColor: 'color-mix(in srgb, var(--gold) 35%, transparent)',
-                color: 'var(--gold)',
-              }}
-            >
-              <ModuleIconComponent size={24} />
-            </div>
-            <div className="mod-customizer-title-text">
-              <span className="mod-customizer-cat-tag">Customize module</span>
-              <h1>{name || 'Tasks'}</h1>
-              <p>Configure the board stages, fields and views for your team.</p>
-            </div>
+    <div
+      className="module-builder-dialog-overlay"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="module-builder-dialog-heading"
+    >
+      <div className={`module-builder-dialog-card ${isFullscreen ? 'is-fullscreen' : ''}`}>
+        {/* MODAL HEADER */}
+        <header className="module-builder-dialog-header">
+          <div className="module-builder-title">
+            <small>{isNew ? 'New sidebar module' : 'Customize module'}</small>
+            <h2 id="module-builder-dialog-heading">
+              {isNew ? (name || 'Create work module') : (name || workType.name)}
+            </h2>
           </div>
 
-          <div className="mod-customizer-actions">
-            {/* 3 dots menu */}
+          <section className="module-builder-basics" aria-label="Module Identity and Accent">
+            {/* ICON SELECTOR */}
             <div style={{ position: 'relative' }}>
               <button
                 type="button"
-                className="btn-mod-action-icon"
-                onClick={() => setShowMoreMenu(!showMoreMenu)}
-                title="More options"
+                className="icon-library-summary"
+                title="Choose sidebar icon"
+                aria-label={`Choose sidebar icon, currently selected: ${icon}`}
+                aria-haspopup="dialog"
+                aria-expanded={iconPickerOpen}
+                onClick={() => setIconPickerOpen(!iconPickerOpen)}
+                style={{ color: color || 'var(--gold)' }}
               >
-                <MoreHorizontal size={17} />
+                <Icon name={icon} size={20} />
               </button>
-              {showMoreMenu && (
-                <>
-                  <div className="auto-dropdown-backdrop" onClick={() => setShowMoreMenu(false)} />
-                  <div className="mod-action-dropdown-menu">
-                    <button
-                      type="button"
-                      className="mod-dropdown-item"
-                      onClick={() => {
-                        setShowMoreMenu(false);
-                        setStatuses(defaultStatuses);
-                      }}
+
+              {iconPickerOpen && (
+                <div
+                  ref={iconPopoverRef}
+                  className="icon-library-popover"
+                  onClick={e => e.stopPropagation()}
+                  role="dialog"
+                  aria-label="Icon Picker Library"
+                >
+                  <div className="icon-library-filters">
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <Search size={13} style={{ position: 'absolute', left: '8px', color: 'var(--muted)' }} />
+                      <input
+                        type="search"
+                        placeholder="Search 1,700+ icons…"
+                        value={iconSearch}
+                        onChange={e => setIconSearch(e.target.value)}
+                        aria-label="Search icons"
+                        autoFocus
+                      />
+                    </div>
+                    <select
+                      value={iconCategory}
+                      onChange={e => setIconCategory(e.target.value)}
+                      aria-label="Filter icons by category"
                     >
-                      <Sparkles size={14} />
-                      <span>Reset to default stages</span>
-                    </button>
-                    {!isNew && (
+                      {ICON_CATEGORIES.map(c => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Category Quick Pills */}
+                  <div className="icon-category-pills" role="tablist" aria-label="Icon categories">
+                    {ICON_CATEGORIES.map(c => (
                       <button
+                        key={c.id}
                         type="button"
-                        className="mod-dropdown-item danger"
-                        onClick={() => {
-                          setShowMoreMenu(false);
-                          setShowDeleteConfirm(true);
-                        }}
+                        className={`icon-cat-pill ${iconCategory === c.id ? 'active' : ''}`}
+                        onClick={() => setIconCategory(c.id)}
+                        role="tab"
+                        aria-selected={iconCategory === c.id}
                       >
-                        <Trash2 size={14} />
-                        <span>Delete module</span>
+                        {c.label}
                       </button>
+                    ))}
+                  </div>
+
+                  <div className="icon-library-grid" role="listbox" aria-label="Available icons">
+                    {filteredIcons.length === 0 ? (
+                      <div className="preview-empty-state" style={{ gridColumn: '1 / -1', padding: '1.25rem' }}>
+                        No matching icons found. Try another search.
+                      </div>
+                    ) : (
+                      filteredIcons.map(([ic, label]) => (
+                        <button
+                          key={ic}
+                          type="button"
+                          className={icon === ic ? 'selected' : ''}
+                          title={label}
+                          aria-label={`Select icon ${label}`}
+                          role="option"
+                          aria-selected={icon === ic}
+                          onClick={() => {
+                            setIcon(ic);
+                            setIconPickerOpen(false);
+                          }}
+                        >
+                          <Icon name={ic} size={18} />
+                        </button>
+                      ))
                     )}
                   </div>
-                </>
+                </div>
               )}
             </div>
 
-            {/* Module settings button */}
+            {/* MODULE NAME */}
+            <div className="module-name-field">
+              <input
+                type="text"
+                value={name}
+                placeholder="Module name"
+                aria-label="Module name"
+                onChange={e => handleNameChange(e.target.value)}
+                required
+              />
+            </div>
+
+            {/* COLOR PICKER */}
+            <label className="module-color-field" title="Module accent color" style={{ background: color }}>
+              <input
+                type="color"
+                value={color}
+                onChange={e => setColor(e.target.value)}
+                aria-label="Module accent color"
+              />
+            </label>
+          </section>
+
+          {/* HEADER ACTION CONTROLS */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {/* PREVIEW TOGGLE BUTTON */}
             <button
               type="button"
-              className="btn-mod-action-outline"
-              onClick={() => setShowSettingsModal(true)}
+              className={`module-builder-preview-btn ${showPreview ? 'active' : ''}`}
+              title={showPreview ? 'Exit Preview' : 'Live Preview Module'}
+              aria-label={showPreview ? 'Exit live preview mode' : 'Enter live preview mode'}
+              aria-pressed={showPreview}
+              onClick={() => setShowPreview(!showPreview)}
             >
-              <Settings size={15} />
-              <span>Module settings</span>
+              <Eye size={15} />
+              <span>{showPreview ? 'Edit Module' : 'Preview'}</span>
             </button>
 
-            {/* Save changes button */}
+            {/* ADVANCED SETTINGS */}
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="module-builder-advanced-btn"
+                title="Advanced settings"
+                aria-label="Advanced module settings"
+                aria-haspopup="true"
+                aria-expanded={showAdvanced}
+                onClick={() => setShowAdvanced(!showAdvanced)}
+              >
+                <Settings size={18} />
+              </button>
+
+              {showAdvanced && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 8px)',
+                    right: 0,
+                    zIndex: 1000,
+                    width: '280px',
+                    padding: '1rem',
+                    background: 'var(--panel)',
+                    color: 'var(--text)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '12px',
+                    boxShadow: '0 15px 40px rgba(0,0,0,0.25)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.75rem',
+                  }}
+                  role="region"
+                  aria-label="Advanced Module Configuration"
+                >
+                  <label style={{ fontSize: '0.8rem', color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    Stable URL Key
+                    <input
+                      type="text"
+                      value={key}
+                      onChange={e => setKey(slugify(e.target.value))}
+                      placeholder="e.g. graphic-posts"
+                      aria-label="Stable URL key"
+                      style={{ fontSize: '0.85rem', background: 'var(--input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px', height: '34px', padding: '0 8px' }}
+                    />
+                  </label>
+
+                  <label style={{ fontSize: '0.8rem', color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    Sidebar Position Order
+                    <input
+                      type="number"
+                      value={order}
+                      onChange={e => setOrder(Number(e.target.value) || 0)}
+                      aria-label="Sidebar position order"
+                      style={{ fontSize: '0.85rem', background: 'var(--input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '6px', height: '34px', padding: '0 8px' }}
+                    />
+                  </label>
+
+                  <label className="mini-check-label" style={{ marginTop: '4px' }}>
+                    <input
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={e => setIsActive(e.target.checked)}
+                      aria-label="Show module in sidebar"
+                    />
+                    <span>Show in sidebar</span>
+                  </label>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="module-builder-window-controls">
             <button
               type="button"
-              className="btn-mod-save-primary"
-              disabled={saving}
-              onClick={() => handleSave()}
+              className={`module-builder-maximize-btn ${isFullscreen ? 'active' : ''}`}
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              title={isFullscreen ? 'Exit full screen' : 'Full screen'}
+              aria-label={isFullscreen ? 'Exit full screen mode' : 'Enter full screen mode'}
             >
-              <Check size={16} strokeWidth={2.5} />
-              <span>{saving ? 'Saving...' : 'Save changes'}</span>
+              {isFullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
+            </button>
+
+            <button
+              type="button"
+              className="module-builder-close-btn"
+              onClick={onClose}
+              aria-label="Close module builder dialog"
+            >
+              <X size={20} />
             </button>
           </div>
-        </div>
+        </header>
 
         {error && (
-          <div className="notice danger" style={{ marginTop: '1rem', borderRadius: '10px' }}>
-            {error}
+          <div
+            role="alert"
+            aria-live="polite"
+            style={{
+              margin: '0.75rem 1.25rem 0',
+              padding: '0.65rem 0.9rem',
+              background: 'color-mix(in srgb, var(--red, #ef4444) 12%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--red, #ef4444) 30%, transparent)',
+              borderRadius: '8px',
+              color: 'var(--red, #ef4444)',
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <AlertCircle size={16} />
+            <span>{error}</span>
           </div>
         )}
 
-        {/* 3-Step Wizard Chevron Nav */}
-        <div className="mod-stepper-bar">
-          {/* Step 1 */}
-          <button
-            type="button"
-            className={`mod-step-tab ${step === 1 ? 'active' : ''}`}
-            onClick={() => setStep(1)}
-          >
-            <span className="mod-step-num">1</span>
-            <div className="mod-step-labels">
-              <span className="mod-step-title">Board stages</span>
-              <span className="mod-step-sub">Set up your columns</span>
-            </div>
-            <div className="mod-step-arrow-point" />
-          </button>
+        {/* LIVE PREVIEW WORKBENCH OR 3-STEP BUILDER */}
+        {showPreview ? (
+          <section className="module-builder-preview-wrapper" aria-label="Live Module Preview">
+            <div className="module-builder-preview-topbar">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="preview-meta-badge">
+                  <Icon name={icon || 'clipboard-list'} size={15} style={{ color }} />
+                  <span>{name || 'Custom Module'}</span>
+                  <span className="preview-sample-badge">
+                    LIVE PREVIEW
+                  </span>
+                </div>
+                <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+                  {statuses.length} {statuses.length === 1 ? 'stage' : 'stages'} • {fields.length} custom {fields.length === 1 ? 'field' : 'fields'}
+                </span>
+              </div>
 
-          {/* Step 2 */}
-          <button
-            type="button"
-            className={`mod-step-tab ${step === 2 ? 'active' : ''}`}
-            onClick={() => setStep(2)}
-          >
-            <span className="mod-step-num">2</span>
-            <div className="mod-step-labels">
-              <span className="mod-step-title">Form fields</span>
-              <span className="mod-step-sub">Add and manage fields</span>
-            </div>
-            <div className="mod-step-arrow-point" />
-          </button>
+              {/* View Switcher Tabs */}
+              <div className="preview-view-pills" role="tablist" aria-label="Preview View Modes">
+                <button
+                  type="button"
+                  id="preview-tab-board"
+                  className={`preview-view-btn ${previewTab === 'board' ? 'active' : ''}`}
+                  onClick={() => setPreviewTab('board')}
+                  role="tab"
+                  aria-selected={previewTab === 'board'}
+                  aria-controls="preview-panel-board"
+                >
+                  <Kanban size={13} />
+                  <span>Board View</span>
+                </button>
+                <button
+                  type="button"
+                  id="preview-tab-form"
+                  className={`preview-view-btn ${previewTab === 'form' ? 'active' : ''}`}
+                  onClick={() => setPreviewTab('form')}
+                  role="tab"
+                  aria-selected={previewTab === 'form'}
+                  aria-controls="preview-panel-form"
+                >
+                  <FileText size={13} />
+                  <span>Form & Record</span>
+                </button>
+                <button
+                  type="button"
+                  id="preview-tab-table"
+                  className={`preview-view-btn ${previewTab === 'table' ? 'active' : ''}`}
+                  onClick={() => setPreviewTab('table')}
+                  role="tab"
+                  aria-selected={previewTab === 'table'}
+                  aria-controls="preview-panel-table"
+                >
+                  <LayoutList size={13} />
+                  <span>List Table</span>
+                </button>
+                <button
+                  type="button"
+                  id="preview-tab-overview"
+                  className={`preview-view-btn ${previewTab === 'overview' ? 'active' : ''}`}
+                  onClick={() => setPreviewTab('overview')}
+                  role="tab"
+                  aria-selected={previewTab === 'overview'}
+                  aria-controls="preview-panel-overview"
+                >
+                  <BarChart2 size={13} />
+                  <span>Overview</span>
+                </button>
+              </div>
 
-          {/* Step 3 */}
-          <button
-            type="button"
-            className={`mod-step-tab ${step === 3 ? 'active' : ''}`}
-            onClick={() => setStep(3)}
-          >
-            <span className="mod-step-num">3</span>
-            <div className="mod-step-labels">
-              <span className="mod-step-title">Overview & views</span>
-              <span className="mod-step-sub">See it in action</span>
+              <div>
+                <button
+                  type="button"
+                  className="btn-builder-secondary"
+                  onClick={() => setShowPreview(false)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', padding: '4px 10px' }}
+                >
+                  <ArrowLeft size={13} />
+                  <span>Back to Edit</span>
+                </button>
+              </div>
             </div>
-          </button>
-        </div>
 
-        {/* Two-Column Workspace */}
-        <div className="mod-builder-grid">
-          {/* LEFT COLUMN: Controls per step */}
-          <div className="mod-builder-left-col">
-            {/* STEP 1: Board stages */}
-            {step === 1 && (
-              <div className="customization-card">
-                <div className="customization-card-header">
-                  <div className="customization-header-left">
-                    <div className="header-icon-box stage-box">
-                      <SlidersHorizontal size={18} />
+            <div className="module-builder-preview-canvas" role="region" aria-label="Preview Content">
+              {/* ================= 1. BOARD PREVIEW ================= */}
+              {previewTab === 'board' && (
+                <div id="preview-panel-board" role="tabpanel" aria-labelledby="preview-tab-board">
+                  {statuses.length === 0 ? (
+                    <div className="preview-empty-state">
+                      <p>No pipeline stages configured yet. Add stages in Step 1 to preview your Kanban board.</p>
                     </div>
-                    <div className="header-text-group">
-                      <h3>Board stages</h3>
-                      <p>These stages will appear as columns in your board.</p>
+                  ) : (
+                    <div className="preview-board-columns" role="list" aria-label="Kanban columns">
+                      {statuses.map((st) => {
+                        const colRecords = sampleRecords.filter(r => r.statusKey === st.key);
+                        return (
+                          <div key={st.key} className="preview-board-col" role="listitem">
+                            <div className="preview-board-col-header">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: st.color, display: 'inline-block' }} />
+                                <span style={{ color: 'var(--text)' }}>{st.label}</span>
+                              </div>
+                              <span style={{
+                                fontSize: '0.72rem',
+                                background: 'var(--input)',
+                                padding: '2px 7px',
+                                borderRadius: '10px',
+                                color: 'var(--muted)',
+                                border: '1px solid var(--border)',
+                              }}>
+                                {colRecords.length}
+                              </span>
+                            </div>
+
+                            <div className="preview-board-col-cards">
+                              {colRecords.length === 0 ? (
+                                <div style={{
+                                  padding: '1.25rem 0.5rem',
+                                  textAlign: 'center',
+                                  color: 'var(--muted)',
+                                  fontSize: '0.74rem',
+                                  border: '1px dashed var(--border)',
+                                  borderRadius: '6px',
+                                }}>
+                                  No items in {st.label}
+                                </div>
+                              ) : (
+                                colRecords.map((card) => (
+                                  <div key={card.id} className="preview-mock-card">
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                      <span style={{ fontSize: '0.68rem', fontWeight: 700, color: color || 'var(--gold)' }}>
+                                        {card.id}
+                                      </span>
+                                      <span className="preview-sample-badge">
+                                        Sample
+                                      </span>
+                                    </div>
+
+                                    <div className="preview-mock-card-title">
+                                      {card.title}
+                                    </div>
+
+                                    {/* Configured Board Fields */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px' }}>
+                                      {boardFields.map(fKey => {
+                                        if (fKey === 'priority') {
+                                          return (
+                                            <div key={fKey} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                              <span className={`preview-priority-badge ${card.priority}`}>
+                                                {card.priority}
+                                              </span>
+                                            </div>
+                                          );
+                                        }
+                                        if (fKey === 'assignedTo') {
+                                          return (
+                                            <span key={fKey} className="preview-card-chip">
+                                              <User size={11} /> {card.user}
+                                            </span>
+                                          );
+                                        }
+                                        if (fKey === 'deadline') {
+                                          return (
+                                            <span key={fKey} className="preview-card-chip">
+                                              <Clock size={11} /> {card.values.deadline}
+                                            </span>
+                                          );
+                                        }
+                                        if (fKey === 'startDate') {
+                                          return (
+                                            <span key={fKey} className="preview-card-chip">
+                                              <Calendar size={11} /> {card.values.startDate}
+                                            </span>
+                                          );
+                                        }
+                                        if (fKey === 'deliveredAt') {
+                                          return (
+                                            <span key={fKey} className="preview-card-chip">
+                                              <CheckCircle2 size={11} /> {card.values.deliveredAt}
+                                            </span>
+                                          );
+                                        }
+                                        if (fKey === 'customer') {
+                                          return (
+                                            <span key={fKey} className="preview-card-chip">
+                                              <Building2 size={11} /> {card.values.customer}
+                                            </span>
+                                          );
+                                        }
+                                        if (fKey.startsWith('custom:')) {
+                                          const customKey = fKey.replace('custom:', '');
+                                          const customF = fields.find(f => f.key === customKey);
+                                          const customVal = card.values[fKey];
+                                          if (!customVal) return null;
+                                          return (
+                                            <div key={fKey} className="preview-card-custom-field">
+                                              <b>{fieldLabels[fKey] || customF?.label || customKey}:</b>
+                                              <span>{customVal}</span>
+                                            </div>
+                                          );
+                                        }
+                                        return null;
+                                      })}
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ================= 2. FORM & RECORD PREVIEW ================= */}
+              {previewTab === 'form' && (
+                <div id="preview-panel-form" role="tabpanel" aria-labelledby="preview-tab-form" className="preview-form-container">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: color || 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                      <Icon name={icon || 'clipboard-list'} size={18} />
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 750, color: 'var(--text)' }}>
+                        Create New {name || 'Record'}
+                      </h3>
+                      <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--muted)' }}>
+                        Interactive preview of the record entry form.
+                      </p>
                     </div>
                   </div>
-                  <button type="button" className="btn-add-item" onClick={addStatus}>
-                    <Plus size={15} />
-                    <span>Add stage</span>
-                  </button>
-                </div>
 
-                {/* Stage Rows with HTML5 Drag & Drop */}
-                <div className="mod-stage-rows-list">
-                  {statuses.map((st, idx) => {
-                    const sampleCards = sampleMap[idx] || [];
-                    return (
+                  <div className="preview-form-grid">
+                    {/* Record Title */}
+                    <div className="preview-form-field full-width">
+                      <label>
+                        {fieldLabels['title'] || 'Record Title'} <span style={{ color: 'var(--red, #ef4444)' }}>*</span>
+                      </label>
+                      <input type="text" placeholder={`Enter ${name || 'record'} title…`} readOnly />
+                    </div>
+
+                    {/* Stage / Status */}
+                    <div className="preview-form-field">
+                      <label>{fieldLabels['status'] || 'Stage / Status'}</label>
+                      <select defaultValue={statuses[0]?.key} disabled>
+                        {statuses.map(s => (
+                          <option key={s.key} value={s.key}>{s.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Priority (if configured) */}
+                    {(boardFields.includes('priority') || filterFields.includes('priority') || listColumns.includes('priority')) && (
+                      <div className="preview-form-field">
+                        <label>{fieldLabels['priority'] || 'Priority'}</label>
+                        <select defaultValue="normal" disabled>
+                          <option value="low">Low</option>
+                          <option value="normal">Normal</option>
+                          <option value="high">High</option>
+                          <option value="urgent">Urgent</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Assigned To (if configured) */}
+                    {(boardFields.includes('assignedTo') || filterFields.includes('assignedTo') || listColumns.includes('assignedTo')) && (
+                      <div className="preview-form-field">
+                        <label>{fieldLabels['assignedTo'] || 'Assigned To'}</label>
+                        <select disabled>
+                          <option>Alex Carter (You)</option>
+                          <option>Priya Sharma</option>
+                          <option>David Miller</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Deadline (if configured) */}
+                    {(boardFields.includes('deadline') || listColumns.includes('deadline')) && (
+                      <div className="preview-form-field">
+                        <label>{fieldLabels['deadline'] || 'Due Date / Deadline'}</label>
+                        <input type="date" disabled defaultValue={new Date().toISOString().split('T')[0]} />
+                      </div>
+                    )}
+
+                    {/* Customer / Client (if configured) */}
+                    {(boardFields.includes('customer') || listColumns.includes('customer')) && (
+                      <div className="preview-form-field">
+                        <label>{fieldLabels['customer'] || 'Client / Customer'}</label>
+                        <input type="text" placeholder="e.g. Acme Corp" readOnly />
+                      </div>
+                    )}
+
+                    {/* Custom Fields Section */}
+                    {fields.length > 0 && (
+                      <div className="preview-form-field full-width" style={{ marginTop: '0.5rem', borderTop: '1px solid var(--border)', paddingTop: '0.85rem' }}>
+                        <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.84rem', fontWeight: 750, color: 'var(--gold, #ea580c)' }}>
+                          Custom Fields ({fields.length})
+                        </h4>
+                      </div>
+                    )}
+
+                    {fields.map(f => (
+                      <div key={f.key} className={`preview-form-field ${f.type === 'textarea' ? 'full-width' : ''}`}>
+                        <label>
+                          {fieldLabels[`custom:${f.key}`] || f.label || f.key}
+                          {f.required && <span style={{ color: 'var(--red, #ef4444)', marginLeft: '3px' }}>*</span>}
+                          <small style={{ color: 'var(--muted)', marginLeft: '6px', fontWeight: 500 }}>({f.type})</small>
+                        </label>
+
+                        {f.type === 'textarea' ? (
+                          <textarea rows={3} placeholder={f.placeholder || `Enter ${f.label}…`} readOnly />
+                        ) : f.type === 'select' || f.type === 'multi-select' ? (
+                          <select disabled>
+                            <option value="">{f.placeholder || `Select ${f.label}…`}</option>
+                            {f.options.map((opt, i) => (
+                              <option key={i} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        ) : f.type === 'checkbox' ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '6px' }}>
+                            <input type="checkbox" disabled style={{ width: '16px', height: '16px' }} />
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text)' }}>{f.placeholder || f.label}</span>
+                          </div>
+                        ) : f.type === 'number' || f.type === 'currency' || f.type === 'percentage' ? (
+                          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                            {f.type === 'currency' && (
+                              <span style={{ position: 'absolute', left: '10px', color: 'var(--muted)', fontSize: '0.82rem', fontWeight: 700 }}>₹</span>
+                            )}
+                            <input
+                              type="number"
+                              placeholder={f.placeholder || (f.type === 'currency' ? '0.00' : '0')}
+                              style={{ paddingLeft: f.type === 'currency' ? '24px' : undefined }}
+                              readOnly
+                            />
+                            {f.type === 'percentage' && (
+                              <span style={{ position: 'absolute', right: '10px', color: 'var(--muted)', fontSize: '0.82rem', fontWeight: 700 }}>%</span>
+                            )}
+                          </div>
+                        ) : f.type === 'date' || f.type === 'datetime' ? (
+                          <input type={f.type === 'datetime' ? 'datetime-local' : 'date'} disabled />
+                        ) : f.type === 'user-picker' ? (
+                          <select disabled>
+                            <option>Alex Carter (You)</option>
+                            <option>Priya Sharma</option>
+                            <option>David Miller</option>
+                          </select>
+                        ) : (
+                          <input type={f.type === 'email' ? 'email' : f.type === 'phone' ? 'tel' : 'text'} placeholder={f.placeholder || `Enter ${f.label}…`} readOnly />
+                        )}
+
+                        {f.helpText && (
+                          <small className="preview-field-help">
+                            {f.helpText}
+                          </small>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+                    <button type="button" className="btn-builder-secondary" disabled>Cancel</button>
+                    <button type="button" className="btn-builder-primary" style={{ background: color, borderColor: color }} disabled>
+                      Create {name || 'Record'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ================= 3. TABLE VIEW PREVIEW ================= */}
+              {previewTab === 'table' && (
+                <div id="preview-panel-table" role="tabpanel" aria-labelledby="preview-tab-table" className="preview-table-container">
+                  <table className="preview-table">
+                    <thead>
+                      <tr>
+                        {listColumns.map(colKey => {
+                          const attr = allAttributes.find(a => a.key === colKey);
+                          return (
+                            <th key={colKey}>
+                              {fieldLabels[colKey] || attr?.label || colKey}
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sampleRecords.map((rec) => (
+                        <tr key={rec.id}>
+                          {listColumns.map(colKey => {
+                            if (colKey === 'title') {
+                              return (
+                                <td key={colKey}>
+                                  <span style={{ fontWeight: 700, color: 'var(--text)' }}>
+                                    {rec.title}
+                                  </span>
+                                </td>
+                              );
+                            }
+                            if (colKey === 'status') {
+                              return (
+                                <td key={colKey}>
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    padding: '2px 8px',
+                                    borderRadius: '12px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    background: `color-mix(in srgb, ${rec.statusColor} 18%, transparent)`,
+                                    color: rec.statusColor,
+                                  }}>
+                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: rec.statusColor }} />
+                                    {rec.statusLabel}
+                                  </span>
+                                </td>
+                              );
+                            }
+                            if (colKey === 'priority') {
+                              return (
+                                <td key={colKey}>
+                                  <span className={`preview-priority-badge ${rec.priority}`}>
+                                    {rec.priority}
+                                  </span>
+                                </td>
+                              );
+                            }
+                            if (colKey === 'assignedTo') {
+                              return (
+                                <td key={colKey}>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <User size={12} style={{ color: 'var(--muted)' }} />
+                                    {rec.user}
+                                  </span>
+                                </td>
+                              );
+                            }
+                            if (colKey === 'deadline') {
+                              return (
+                                <td key={colKey} style={{ color: 'var(--muted)' }}>
+                                  {rec.values.deadline}
+                                </td>
+                              );
+                            }
+                            return (
+                              <td key={colKey}>
+                                {rec.values[colKey] !== undefined ? (
+                                  String(rec.values[colKey])
+                                ) : (
+                                  <span style={{ color: 'var(--muted)' }}>—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* ================= 4. OVERVIEW PREVIEW ================= */}
+              {previewTab === 'overview' && (
+                <div id="preview-panel-overview" role="tabpanel" aria-labelledby="preview-tab-overview" className="preview-overview-container">
+                  <div className="preview-stat-grid">
+                    <div className="preview-stat-card">
+                      <div className="preview-stat-card-label">Pipeline Stages</div>
+                      <div className="preview-stat-card-value" style={{ color: color || 'var(--gold)' }}>
+                        {statuses.length}
+                      </div>
+                      <div className="preview-stat-card-sub">
+                        {statuses.map(s => s.label).slice(0, 3).join(', ')}{statuses.length > 3 ? '…' : ''}
+                      </div>
+                    </div>
+
+                    <div className="preview-stat-card">
+                      <div className="preview-stat-card-label">Custom Fields</div>
+                      <div className="preview-stat-card-value">
+                        {fields.length}
+                      </div>
+                      <div className="preview-stat-card-sub">
+                        {fields.filter(f => f.required).length} marked required
+                      </div>
+                    </div>
+
+                    <div className="preview-stat-card">
+                      <div className="preview-stat-card-label">Active Views</div>
+                      <div className="preview-stat-card-value" style={{ color: 'var(--blue, #3b82f6)' }}>
+                        {enabledViews.length}
+                      </div>
+                      <div className="preview-stat-card-sub">
+                        Default: {defaultView.toUpperCase()}
+                      </div>
+                    </div>
+
+                    <div className="preview-stat-card">
+                      <div className="preview-stat-card-label">Target Won Stage</div>
+                      <div className="preview-stat-card-value" style={{ color: 'var(--green, #10b981)' }}>
+                        {statuses.find(s => s.isTerminalWon)?.label || statuses[statuses.length - 1]?.label || 'None'}
+                      </div>
+                      <div className="preview-stat-card-sub">
+                        Completion milestone
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stage Distribution */}
+                  <div className="preview-distribution-card">
+                    <h4 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 750, color: 'var(--text)' }}>
+                      Pipeline Stage Distribution
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {statuses.length === 0 ? (
+                        <div className="preview-empty-state">No stages defined.</div>
+                      ) : (
+                        statuses.map((st, i) => {
+                          const pct = Math.round(100 / statuses.length);
+                          return (
+                            <div key={st.key || i} className="preview-distribution-row">
+                              <div className="preview-distribution-header">
+                                <span style={{ fontWeight: 650, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: st.color }} />
+                                  {st.label}
+                                </span>
+                                <span style={{ color: 'var(--muted)' }}>{pct}%</span>
+                              </div>
+                              <div className="preview-distribution-track">
+                                <div className="preview-distribution-fill" style={{ width: `${pct}%`, background: st.color }} />
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Aggregation Settings Summary */}
+                  <div className="preview-distribution-card">
+                    <h4 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 750, color: 'var(--text)' }}>
+                      Overview Aggregations & Grouping
+                    </h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.8rem' }}>
+                      <div>
+                        <strong style={{ color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>Overview Group Fields</strong>
+                        {overviewGroupFields.length === 0 ? (
+                          <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>None configured</span>
+                        ) : (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                            {overviewGroupFields.map(k => (
+                              <span key={k} className="preview-sample-badge">{k.replace('custom:', '')}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <strong style={{ color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>Progress Tracking Fields</strong>
+                        {overviewProgressFields.length === 0 ? (
+                          <span style={{ color: 'var(--muted)', fontStyle: 'italic' }}>None configured</span>
+                        ) : (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                            {overviewProgressFields.map(k => (
+                              <span key={k} className="preview-sample-badge">{k.replace('custom:', '')}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        ) : (
+          <>
+            {/* 3-STEP TABS */}
+            <nav className="module-builder-workspace-tabs" role="tablist" aria-label="Module Configuration Steps">
+              <button
+                type="button"
+                id="step-tab-1"
+                className={step === 1 ? 'active' : ''}
+                onClick={() => setStep(1)}
+                role="tab"
+                aria-selected={step === 1}
+                aria-controls="step-tabpanel-1"
+              >
+                <span>1</span>
+                <b>Board stages</b>
+                <small>Kanban columns</small>
+              </button>
+
+              <button
+                type="button"
+                id="step-tab-2"
+                className={step === 2 ? 'active' : ''}
+                onClick={() => setStep(2)}
+                role="tab"
+                aria-selected={step === 2}
+                aria-controls="step-tabpanel-2"
+              >
+                <span>2</span>
+                <b>Form fields</b>
+                <small>Data your team enters</small>
+              </button>
+
+              <button
+                type="button"
+                id="step-tab-3"
+                className={step === 3 ? 'active' : ''}
+                onClick={() => setStep(3)}
+                role="tab"
+                aria-selected={step === 3}
+                aria-controls="step-tabpanel-3"
+              >
+                <span>3</span>
+                <b>Overview & views</b>
+                <small>What each view shows</small>
+              </button>
+            </nav>
+
+            {/* MODAL CONTENT BODY */}
+            <div className="module-builder-content-wrap">
+              {/* ================= STEP 1: BOARD STAGES ================= */}
+              {step === 1 && (
+                <div id="step-tabpanel-1" role="tabpanel" aria-labelledby="step-tab-1" className="module-builder-section-inner">
+                  <div className="module-builder-section-head">
+                    <h3>Overall record status</h3>
+                    <button
+                      type="button"
+                      className="btn-builder-secondary"
+                      onClick={addStatus}
+                      aria-label="Add new pipeline stage"
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      <Plus size={14} />
+                      <span>Add stage</span>
+                    </button>
+                  </div>
+
+                  <p>Drag to arrange or use arrow controls. These become columns on your Board.</p>
+
+                  {/* Stage Flow Guide Pill */}
+                  <div className="stage-flow-guide-bar" aria-label="Current stage progression flow">
+                    <strong>Flow:</strong>
+                    {statuses.map((st, i) => (
+                      <React.Fragment key={i}>
+                        <span style={{ color: st.color, fontWeight: 750, whiteSpace: 'nowrap' }}>{st.label || 'Stage'}</span>
+                        {i < statuses.length - 1 && <i>→</i>}
+                      </React.Fragment>
+                    ))}
+                  </div>
+
+                  {/* Status List Rows with Drag-and-Drop */}
+                  <div className="module-builder-grid-rows" role="list" aria-label="Configured pipeline stages">
+                    {statuses.map((st, idx) => (
                       <div
                         key={idx}
-                        className={`mod-stage-row-item ${dragIndex === idx ? 'dragging' : ''}`}
+                        className={`module-builder-item-row status-builder-grid-row ${draggedStatusIdx === idx ? 'is-dragging' : ''} ${dragOverStatusIdx === idx ? 'is-drag-over' : ''}`}
+                        role="listitem"
                         draggable
-                        onDragStart={() => setDragIndex(idx)}
-                        onDragOver={e => e.preventDefault()}
-                        onDrop={() => {
-                          if (dragIndex === null || dragIndex === idx) return;
-                          const next = [...statuses];
-                          const [dragged] = next.splice(dragIndex, 1);
-                          next.splice(idx, 0, dragged);
-                          setStatuses(next);
-                          setDragIndex(null);
-                        }}
+                        onDragStart={(e) => handleStatusDragStart(e, idx)}
+                        onDragOver={(e) => handleStatusDragOver(e, idx)}
+                        onDragEnd={() => { setDraggedStatusIdx(null); setDragOverStatusIdx(null); }}
+                        onDrop={(e) => handleStatusDrop(e, idx)}
                       >
-                        <span className="mod-stage-drag-handle" title="Drag to reorder">
-                          <GripVertical size={16} />
-                        </span>
+                        {/* Drag Handle */}
+                        <div className="drag-handle-btn" title="Drag to reorder" aria-label="Drag to reorder stage">
+                          <GripVertical size={15} />
+                        </div>
 
-                        {/* Clickable Color Dot with Hidden Color Input */}
-                        <label className="mod-stage-color-dot-wrap" title="Change stage color">
-                          <span
-                            className="mod-stage-color-dot"
-                            style={{ backgroundColor: st.color || '#64748b' }}
-                          />
+                        {/* Stage Color Dot */}
+                        <label className="status-color-circle-btn" title={`Change color for ${st.label}`} style={{ background: st.color }}>
                           <input
                             type="color"
                             value={st.color}
-                            className="mod-hidden-color-input"
                             onChange={e => {
                               const next = [...statuses];
                               next[idx] = { ...next[idx], color: e.target.value };
                               setStatuses(next);
                             }}
+                            aria-label={`Color for stage ${st.label}`}
                           />
                         </label>
 
-                        {/* Label Input */}
-                        <div className="mod-stage-name-wrap">
+                        {/* Stage Label */}
+                        <input
+                          type="text"
+                          value={st.label}
+                          placeholder="Stage label (e.g. In Progress)"
+                          aria-label={`Label for stage ${idx + 1}`}
+                          onChange={e => {
+                            const next = [...statuses];
+                            next[idx] = {
+                              ...next[idx],
+                              label: e.target.value,
+                              key: isNew ? slugify(e.target.value) : next[idx].key || slugify(e.target.value),
+                            };
+                            setStatuses(next);
+                          }}
+                        />
+
+                        {/* Won Flag */}
+                        <label className="mini-check-label">
                           <input
-                            type="text"
-                            value={st.label}
-                            className="mod-stage-name-input"
-                            placeholder="Stage name"
+                            type="checkbox"
+                            checked={!!st.isTerminalWon}
                             onChange={e => {
                               const next = [...statuses];
-                              next[idx] = {
-                                ...next[idx],
-                                label: e.target.value,
-                                key: next[idx].key || slugify(e.target.value),
-                              };
+                              next[idx] = { ...next[idx], isTerminalWon: e.target.checked, isTerminalLost: false };
                               setStatuses(next);
                             }}
+                            aria-label={`Mark ${st.label} as Won / Completed stage`}
                           />
-                        </div>
+                          <span>Won / Completed</span>
+                        </label>
 
-                        {/* Slug / Key Box */}
-                        <div className="mod-stage-key-wrap">
+                        {/* Lost Flag */}
+                        <label className="mini-check-label">
                           <input
-                            type="text"
-                            value={st.key}
-                            className="mod-stage-key-input"
-                            placeholder="key"
+                            type="checkbox"
+                            checked={!!st.isTerminalLost}
                             onChange={e => {
                               const next = [...statuses];
-                              next[idx] = { ...next[idx], key: slugify(e.target.value) };
+                              next[idx] = { ...next[idx], isTerminalLost: e.target.checked, isTerminalWon: false };
                               setStatuses(next);
                             }}
+                            aria-label={`Mark ${st.label} as Lost / Cancelled stage`}
                           />
-                        </div>
+                          <span>Lost / Cancelled</span>
+                        </label>
 
-                        {/* Count Badge */}
-                        <span className="mod-stage-count-badge">{sampleCards.length}</span>
+                        {/* Lock / Requires Approval Flag */}
+                        <label className="mini-check-label">
+                          <input
+                            type="checkbox"
+                            checked={!!st.requiresApproval}
+                            onChange={e => {
+                              const next = [...statuses];
+                              next[idx] = { ...next[idx], requiresApproval: e.target.checked };
+                              setStatuses(next);
+                            }}
+                            aria-label={`Lock ${st.label} - only managers can move it further`}
+                          />
+                          <span>Lock stage (Managers only)</span>
+                        </label>
 
-                        {/* Row Actions */}
-                        <div className="mod-stage-action-btns">
+                        {/* Reorder & Delete */}
+                        <div className="builder-row-btn-actions">
                           <button
                             type="button"
-                            className="btn-mod-row-icon danger"
-                            title="Delete stage"
-                            onClick={() => {
-                              if (statuses.length <= 1) {
-                                setError('A module must have at least one stage.');
-                                return;
-                              }
-                              setStatuses(statuses.filter((_, i) => i !== idx));
-                            }}
+                            className="btn-move-row"
+                            onClick={() => moveStatus(idx, -1)}
+                            disabled={idx === 0}
+                            title="Move stage up"
+                            aria-label={`Move stage ${st.label} up`}
+                          >
+                            <ChevronUp size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-move-row"
+                            onClick={() => moveStatus(idx, 1)}
+                            disabled={idx === statuses.length - 1}
+                            title="Move stage down"
+                            aria-label={`Move stage ${st.label} down`}
+                          >
+                            <ChevronDown size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-delete-row"
+                            onClick={() => setStatuses(statuses.filter((_, i) => i !== idx))}
+                            disabled={statuses.length <= 1}
+                            title="Remove stage"
+                            aria-label={`Delete stage ${st.label}`}
                           >
                             <Trash2 size={13} />
                           </button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-
-                {/* Advanced options accordion */}
-                <div className="mod-advanced-accordion">
-                  <button
-                    type="button"
-                    className="mod-advanced-accordion-toggle"
-                    onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
-                  >
-                    <ChevronDown
-                      size={15}
-                      style={{
-                        transform: showAdvancedOptions ? 'rotate(0deg)' : 'rotate(-90deg)',
-                        transition: 'transform 0.2s ease',
-                      }}
-                    />
-                    <span>Advanced options</span>
-                  </button>
-
-                  {showAdvancedOptions && (
-                    <div className="mod-advanced-accordion-content">
-                      <p className="mod-accordion-hint">
-                        Configure pipeline outcome flags for automated reporting.
-                      </p>
-                      <div className="mod-advanced-stage-flags-list">
-                        {statuses.map((st, idx) => (
-                          <div key={idx} className="mod-advanced-stage-flag-row">
-                            <span className="flag-stage-title" style={{ color: st.color }}>
-                              ● {st.label || 'Untitled'}
-                            </span>
-                            <div className="flag-checks-group">
-                              <label className="mod-checkbox-label">
-                                <input
-                                  type="checkbox"
-                                  checked={!!st.isTerminalWon}
-                                  onChange={e => {
-                                    const next = [...statuses];
-                                    next[idx] = {
-                                      ...next[idx],
-                                      isTerminalWon: e.target.checked,
-                                      isTerminalLost: e.target.checked ? false : next[idx].isTerminalLost,
-                                    };
-                                    setStatuses(next);
-                                  }}
-                                />
-                                <span>Completed / Won</span>
-                              </label>
-                              <label className="mod-checkbox-label">
-                                <input
-                                  type="checkbox"
-                                  checked={!!st.isTerminalLost}
-                                  onChange={e => {
-                                    const next = [...statuses];
-                                    next[idx] = {
-                                      ...next[idx],
-                                      isTerminalLost: e.target.checked,
-                                      isTerminalWon: e.target.checked ? false : next[idx].isTerminalWon,
-                                    };
-                                    setStatuses(next);
-                                  }}
-                                />
-                                <span>Cancelled / Lost</span>
-                              </label>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* STEP 2: Form fields */}
-            {step === 2 && (
-              <div className="customization-card">
-                <div className="customization-card-header">
-                  <div className="customization-header-left">
-                    <div className="header-icon-box stage-box">
-                      <Layers size={18} />
-                    </div>
-                    <div className="header-text-group">
-                      <h3>Form fields</h3>
-                      <p>Add and manage custom fields captured for each record.</p>
-                    </div>
-                  </div>
-                  <button type="button" className="btn-add-item" onClick={addField}>
-                    <Plus size={15} />
-                    <span>Add field</span>
-                  </button>
-                </div>
-
-                <div className="mod-stage-rows-list">
-                  {fields.map((f, idx) => (
-                    <div key={idx} className="mod-field-card-item">
-                      <div className="mod-field-top-row">
-                        <div className="mod-field-input-group">
-                          <label>Field Label</label>
-                          <input
-                            type="text"
-                            value={f.label}
-                            placeholder="e.g. Budget Range"
-                            className="mod-field-input"
-                            onChange={e => {
-                              const next = [...fields];
-                              next[idx] = {
-                                ...next[idx],
-                                label: e.target.value,
-                                key: next[idx].key || slugify(e.target.value),
-                              };
-                              setFields(next);
-                            }}
-                          />
-                        </div>
-
-                        <div className="mod-field-input-group">
-                          <label>Field Type</label>
-                          <select
-                            value={f.type}
-                            className="mod-field-select"
-                            onChange={e => {
-                              const next = [...fields];
-                              const newType = e.target.value;
-                              next[idx] = {
-                                ...next[idx],
-                                type: newType,
-                                options: newType === 'select' && !next[idx].options.length ? ['Option 1'] : next[idx].options,
-                              };
-                              setFields(next);
-                            }}
-                          >
-                            {FIELD_TYPES.map(t => (
-                              <option key={t} value={t}>
-                                {t}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <button
-                          type="button"
-                          className="btn-mod-row-icon danger"
-                          style={{ alignSelf: 'flex-end', height: '36px' }}
-                          title="Delete field"
-                          onClick={() => setFields(fields.filter((_, i) => i !== idx))}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-
-                      {f.type === 'select' && (
-                        <div className="mod-field-options-row">
-                          <label>Options (comma-separated)</label>
-                          <input
-                            type="text"
-                            value={f.options.join(', ')}
-                            placeholder="Under 25k, 25k-50k, 50k-1L, 1L+"
-                            className="mod-field-input"
-                            onChange={e => {
-                              const next = [...fields];
-                              next[idx] = {
-                                ...next[idx],
-                                options: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
-                              };
-                              setFields(next);
-                            }}
-                          />
-                        </div>
-                      )}
-
-                      <div className="mod-field-bottom-meta">
-                        <label className="mod-checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={f.required}
-                            onChange={e => {
-                              const next = [...fields];
-                              next[idx] = { ...next[idx], required: e.target.checked };
-                              setFields(next);
-                            }}
-                          />
-                          <span>Required field</span>
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Placeholder text"
-                          value={f.placeholder || ''}
-                          className="mod-field-input small"
-                          style={{ maxWidth: '200px' }}
-                          onChange={e => {
-                            const next = [...fields];
-                            next[idx] = { ...next[idx], placeholder: e.target.value };
-                            setFields(next);
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-
-                  {fields.length === 0 && (
-                    <div className="mod-empty-hint-card">
-                      <p>No custom fields yet. Click <b>+ Add field</b> to capture custom data.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* STEP 3: Overview & views */}
-            {step === 3 && (
-              <div className="customization-card">
-                <div className="customization-card-header">
-                  <div className="customization-header-left">
-                    <div className="header-icon-box stage-box">
-                      <Columns3 size={18} />
-                    </div>
-                    <div className="header-text-group">
-                      <h3>Overview & views</h3>
-                      <p>Configure default views, columns, and visible fields.</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mod-view-settings-stack">
-                  {/* Enabled Views */}
-                  <div className="mod-settings-subcard">
-                    <h4>1. Enabled Views</h4>
-                    <p>Select the views available to your team:</p>
-                    <div className="mod-checkbox-pill-grid">
-                      {VIEWS.map(v => (
-                        <label
-                          key={v}
-                          className={`mod-pill-checkbox ${enabledViews.includes(v) ? 'active' : ''}`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={enabledViews.includes(v)}
-                            onChange={e => {
-                              const on = e.target.checked;
-                              let next = on
-                                ? [...new Set([...enabledViews, v])]
-                                : enabledViews.filter(item => item !== v);
-                              if (next.length === 0) next = [v];
-                              setEnabledViews(next);
-                              if (!next.includes(defaultView)) setDefaultView(next[0]);
-                            }}
-                          />
-                          <span style={{ textTransform: 'capitalize' }}>{v}</span>
-                        </label>
-                      ))}
-                    </div>
-
-                    <div style={{ marginTop: '1rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-                      <div className="mod-field-input-group" style={{ flex: 1, minWidth: '180px' }}>
-                        <label>Default View</label>
-                        <select
-                          value={defaultView}
-                          className="mod-field-select"
-                          onChange={e => setDefaultView(e.target.value)}
-                        >
-                          {enabledViews.map(v => (
-                            <option key={v} value={v}>
-                              {v.toUpperCase()}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="mod-field-input-group" style={{ flex: 1, minWidth: '180px' }}>
-                        <label>Calendar Date Field</label>
-                        <select
-                          value={calendarField}
-                          className="mod-field-select"
-                          onChange={e => setCalendarField(e.target.value)}
-                        >
-                          {dateFields.map(df => (
-                            <option key={df} value={df}>
-                              {fieldLabel(df)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* List View Columns */}
-                  <div className="mod-settings-subcard">
-                    <h4>2. List View Columns</h4>
-                    <p>Choose columns visible in table view:</p>
-                    <div className="mod-checkbox-pill-grid">
-                      {allSelectable.map(keyName => (
-                        <label
-                          key={keyName}
-                          className={`mod-pill-checkbox ${listColumns.includes(keyName) ? 'active' : ''}`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={listColumns.includes(keyName)}
-                            onChange={e =>
-                              setListColumns(
-                                e.target.checked
-                                  ? [...listColumns, keyName]
-                                  : listColumns.filter(x => x !== keyName)
-                              )
-                            }
-                          />
-                          <span>{fieldLabel(keyName)}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Board Card Badges */}
-                  <div className="mod-settings-subcard">
-                    <h4>3. Board Card Details</h4>
-                    <p>Details displayed on Kanban cards:</p>
-                    <div className="mod-checkbox-pill-grid">
-                      {allSelectable
-                        .filter(name => name !== 'status')
-                        .map(keyName => (
-                          <label
-                            key={keyName}
-                            className={`mod-pill-checkbox ${boardFields.includes(keyName) ? 'active' : ''}`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={boardFields.includes(keyName)}
-                              onChange={e =>
-                                setBoardFields(
-                                  e.target.checked
-                                    ? [...boardFields, keyName]
-                                    : boardFields.filter(x => x !== keyName)
-                                )
-                              }
-                            />
-                            <span>{fieldLabel(keyName)}</span>
-                          </label>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* RIGHT COLUMN: Interactive Live Preview */}
-          <div className="mod-builder-right-col">
-            <div className="customization-card mod-live-preview-card">
-              <div className="customization-card-header">
-                <div className="customization-header-left">
-                  <div
-                    className="header-icon-box"
-                    style={{
-                      background: 'color-mix(in srgb, var(--gold) 14%, var(--panel, #ffffff))',
-                      color: 'var(--gold)',
-                      borderRadius: '50%',
-                    }}
-                  >
-                    <Eye size={17} />
-                  </div>
-                  <div className="header-text-group">
-                    <h3>Live preview</h3>
-                    <p>See how your module will look to your team.</p>
-                  </div>
-                </div>
-
-                <div className="mod-preview-header-controls">
-                  <div className="mod-preview-view-pills">
-                    <button
-                      type="button"
-                      className={`btn-preview-view-tab ${previewView === 'board' ? 'active' : ''}`}
-                      onClick={() => setPreviewView('board')}
-                    >
-                      <Columns3 size={14} />
-                      <span>Board</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn-preview-view-tab ${previewView === 'list' ? 'active' : ''}`}
-                      onClick={() => setPreviewView('list')}
-                    >
-                      <ListIcon size={14} />
-                      <span>List</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn-preview-view-tab ${previewView === 'calendar' ? 'active' : ''}`}
-                      onClick={() => setPreviewView('calendar')}
-                    >
-                      <CalendarIcon size={14} />
-                      <span>Calendar</span>
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="btn-mod-expand-icon"
-                    title="Fullscreen preview"
-                    onClick={() => setIsFullscreenPreview(true)}
-                  >
-                    <Maximize2 size={14} />
-                  </button>
-                </div>
-              </div>
-
-              {/* LIVE BOARD PREVIEW */}
-              {previewView === 'board' && (
-                <div className="mod-live-board-container">
-                  <div className="mod-live-board-scroll">
-                    {statuses.map((st, idx) => {
-                      const sampleCards = sampleMap[idx] || [];
-                      return (
-                        <div key={idx} className="mod-preview-kanban-col">
-                          {/* Column Header */}
-                          <div className="mod-preview-col-head">
-                            <div className="mod-preview-col-head-left">
-                              <span
-                                className="mod-preview-col-dot"
-                                style={{ backgroundColor: st.color || '#64748b' }}
-                              />
-                              <span className="mod-preview-col-title">{st.label || 'Stage'}</span>
-                              <span className="mod-preview-col-badge">{sampleCards.length}</span>
-                            </div>
-                            <button type="button" className="btn-preview-col-plus" title="Add record">
-                              <Plus size={13} />
-                            </button>
-                          </div>
-
-                          {/* Cards List */}
-                          <div className="mod-preview-col-cards">
-                            {sampleCards.map(c => (
-                              <div key={c.id} className="mod-preview-kanban-card">
-                                <div className="mod-preview-card-title">{c.title}</div>
-                                <div className="mod-preview-card-footer">
-                                  <div
-                                    className="mod-preview-avatar-circle"
-                                    style={{ background: c.avatarBg }}
-                                  >
-                                    {c.avatar}
-                                  </div>
-                                  <span
-                                    className="mod-preview-priority-badge"
-                                    style={{
-                                      backgroundColor:
-                                        c.priority === 'High'
-                                          ? '#ffedd5'
-                                          : c.priority === 'Medium'
-                                          ? '#e0f2fe'
-                                          : '#dcfce7',
-                                      color:
-                                        c.priority === 'High'
-                                          ? '#ea580c'
-                                          : c.priority === 'Medium'
-                                          ? '#0284c7'
-                                          : '#16a34a',
-                                    }}
-                                  >
-                                    {c.priority}
-                                  </span>
-                                </div>
-                                <div className="mod-preview-card-date">
-                                  <CalendarIcon size={12} />
-                                  <span>{c.date}</span>
-                                </div>
-                              </div>
-                            ))}
-
-                            <button type="button" className="btn-preview-add-task">
-                              <Plus size={13} />
-                              <span>Add task</span>
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* LIVE LIST PREVIEW */}
-              {previewView === 'list' && (
-                <div className="mod-live-list-container">
-                  <table className="mod-preview-table">
-                    <thead>
-                      <tr>
-                        {listColumns.slice(0, 5).map(col => (
-                          <th key={col}>{fieldLabel(col)}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allSampleCards.slice(0, 6).map((c, i) => (
-                        <tr key={i}>
-                          {listColumns.slice(0, 5).map(col => (
-                            <td key={col}>
-                              {col === 'title' ? (
-                                <span className="mod-table-title">{c.title}</span>
-                              ) : col === 'assignedTo' ? (
-                                <div className="mod-table-user">
-                                  <span className="mod-mini-avatar" style={{ background: c.avatarBg }}>
-                                    {c.avatar}
-                                  </span>
-                                  <span>{c.avatar === 'AK' ? 'Aisha Khan' : c.avatar === 'RK' ? 'Rahul Kumar' : 'Vikram D'}</span>
-                                </div>
-                              ) : col === 'status' ? (
-                                <span
-                                  className="mod-table-status-pill"
-                                  style={{
-                                    backgroundColor: (statuses[i % statuses.length]?.color || '#64748b') + '1a',
-                                    color: statuses[i % statuses.length]?.color || '#64748b',
-                                    borderColor: statuses[i % statuses.length]?.color || '#64748b',
-                                  }}
-                                >
-                                  {statuses[i % statuses.length]?.label || 'Open'}
-                                </span>
-                              ) : col === 'priority' ? (
-                                <span className="mod-table-priority">{c.priority}</span>
-                              ) : col === 'deadline' ? (
-                                <span className="mod-table-date">{c.date}</span>
-                              ) : (
-                                '—'
-                              )}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* LIVE CALENDAR PREVIEW */}
-              {previewView === 'calendar' && (
-                <div className="mod-live-calendar-container">
-                  <div className="mod-cal-header-bar">
-                    <span>September 2026</span>
-                  </div>
-                  <div className="mod-cal-grid">
-                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
-                      <div key={d} className="mod-cal-day-head">{d}</div>
-                    ))}
-                    {Array.from({ length: 14 }).map((_, i) => (
-                      <div key={i} className="mod-cal-cell">
-                        <span className="mod-cal-day-num">{10 + i}</span>
-                        {i === 2 && (
-                          <div className="mod-cal-event" style={{ borderLeftColor: statuses[0]?.color || '#ea580c' }}>
-                            Design launch
-                          </div>
-                        )}
-                        {i === 4 && (
-                          <div className="mod-cal-event" style={{ borderLeftColor: statuses[1]?.color || '#10b981' }}>
-                            Edit video
-                          </div>
-                        )}
-                        {i === 6 && (
-                          <div className="mod-cal-event" style={{ borderLeftColor: statuses[2]?.color || '#f59e0b' }}>
-                            Blog content
-                          </div>
-                        )}
-                      </div>
                     ))}
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Module Settings Modal */}
-      {showSettingsModal && (
-        <div className="auto-modal-overlay">
-          <div className="auto-modal-backdrop" onClick={() => setShowSettingsModal(false)} />
-          <div className="auto-modal-card" style={{ maxWidth: '480px' }}>
-            <div className="auto-modal-header">
-              <div className="auto-modal-header-titles">
-                <span className="auto-modal-badge">CONFIGURATION</span>
-                <h3>Module Settings</h3>
-                <p>Customize the module identity, icon, and sidebar options.</p>
-              </div>
-              <button
-                type="button"
-                className="btn-auto-modal-close"
-                onClick={() => setShowSettingsModal(false)}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="auto-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {/* Module Name */}
-              <div className="mod-field-input-group">
-                <label>Module Name *</label>
-                <input
-                  type="text"
-                  value={name}
-                  required
-                  placeholder="e.g. Tasks, Projects, Video Production"
-                  className="mod-field-input"
-                  onChange={e => {
-                    setName(e.target.value);
-                    if (isNew && !key) setKey(slugify(e.target.value));
-                  }}
-                />
-              </div>
-
-              {/* URL Key */}
-              <div className="mod-field-input-group">
-                <label>URL Slug / Key</label>
-                <input
-                  type="text"
-                  value={key}
-                  placeholder="tasks"
-                  readOnly={!isNew}
-                  className="mod-field-input"
-                  onChange={e => setKey(slugify(e.target.value))}
-                />
-                <span className="mod-accordion-hint">Used in URLs: /work/{key || 'module-key'}</span>
-              </div>
-
-              {/* Icon & Color Row */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                {/* Icon selector */}
-                <div className="mod-field-input-group">
-                  <label>Icon</label>
-                  <div style={{ position: 'relative' }}>
+              {/* ================= STEP 2: FORM FIELDS ================= */}
+              {step === 2 && (
+                <div id="step-tabpanel-2" role="tabpanel" aria-labelledby="step-tab-2" className="module-builder-section-inner">
+                  <div className="module-builder-section-head">
+                    <h3>Custom fields for this module</h3>
                     <button
                       type="button"
-                      className="mod-field-input"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                      }}
-                      onClick={() => setIconPickerOpen(!iconPickerOpen)}
+                      className="btn-builder-secondary"
+                      onClick={addField}
+                      aria-label="Add new custom field"
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
                     >
-                      <ModuleIconComponent size={16} style={{ color }} />
-                      <span style={{ fontSize: '0.85rem' }}>{icon}</span>
+                      <Plus size={14} />
+                      <span>Add field</span>
                     </button>
+                  </div>
 
-                    {iconPickerOpen && (
-                      <div className="mod-icon-picker-popover">
-                        {ICON_OPTIONS.map(ic => {
-                          const IconComp = ICON_MAP[ic] || SquareCheckBig;
-                          return (
-                            <button
-                              key={ic}
-                              type="button"
-                              className={`mod-icon-grid-btn ${ic === icon ? 'active' : ''}`}
-                              onClick={() => {
-                                setIcon(ic);
-                                setIconPickerOpen(false);
+                  <p>Drag to arrange or configure field types and options. These appear on your record forms.</p>
+
+                  {fields.length === 0 ? (
+                    <div className="preview-empty-state">
+                      <p style={{ margin: '0 0 0.75rem' }}>No custom fields added yet.</p>
+                      <button type="button" className="btn-builder-primary" onClick={addField}>
+                        + Add first custom field
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="module-builder-grid-rows" role="list" aria-label="Configured custom fields">
+                      {fields.map((f, idx) => (
+                        <div
+                          key={idx}
+                          className={`module-builder-item-row ${draggedFieldIdx === idx ? 'is-dragging' : ''} ${dragOverFieldIdx === idx ? 'is-drag-over' : ''}`}
+                          style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
+                          role="listitem"
+                          draggable
+                          onDragStart={(e) => handleFieldDragStart(e, idx)}
+                          onDragOver={(e) => handleFieldDragOver(e, idx)}
+                          onDragEnd={() => { setDraggedFieldIdx(null); setDragOverFieldIdx(null); }}
+                          onDrop={(e) => handleFieldDrop(e, idx)}
+                        >
+                          <div className="field-builder-grid-row">
+                            {/* Drag Handle */}
+                            <div className="drag-handle-btn" title="Drag to reorder" aria-label="Drag to reorder field">
+                              <GripVertical size={15} />
+                            </div>
+
+                            {/* Field Type Selector */}
+                            <select
+                              value={f.type}
+                              onChange={e => {
+                                const next = [...fields];
+                                next[idx] = { ...next[idx], type: e.target.value };
+                                setFields(next);
                               }}
+                              aria-label={`Field type for ${f.label || 'field'}`}
                             >
-                              <IconComp size={16} />
-                            </button>
-                          );
-                        })}
+                              {SUPPORTED_FIELD_TYPES.map(t => (
+                                <option key={t.id} value={t.id}>{t.label}</option>
+                              ))}
+                            </select>
+
+                            {/* Field Label */}
+                            <input
+                              type="text"
+                              value={f.label}
+                              placeholder="Field label (e.g. Design File URL)"
+                              aria-label={`Label for field ${idx + 1}`}
+                              onChange={e => {
+                                const next = [...fields];
+                                next[idx] = {
+                                  ...next[idx],
+                                  label: e.target.value,
+                                  key: isNew ? slugify(e.target.value) : next[idx].key || slugify(e.target.value),
+                                };
+                                setFields(next);
+                              }}
+                            />
+
+                            {/* Required Toggle */}
+                            <label className="mini-check-label">
+                              <input
+                                type="checkbox"
+                                checked={f.required}
+                                onChange={e => {
+                                  const next = [...fields];
+                                  next[idx] = { ...next[idx], required: e.target.checked };
+                                  setFields(next);
+                                }}
+                                aria-label={`Mark field ${f.label || 'field'} as required`}
+                              />
+                              <span>Required</span>
+                            </label>
+
+                            {/* Reorder & Delete Field */}
+                            <div className="builder-row-btn-actions">
+                              <button
+                                type="button"
+                                className="btn-move-row"
+                                onClick={() => moveField(idx, -1)}
+                                disabled={idx === 0}
+                                title="Move field up"
+                                aria-label={`Move field ${f.label} up`}
+                              >
+                                <ChevronUp size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-move-row"
+                                onClick={() => moveField(idx, 1)}
+                                disabled={idx === fields.length - 1}
+                                title="Move field down"
+                                aria-label={`Move field ${f.label} down`}
+                              >
+                                <ChevronDown size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-delete-row"
+                                onClick={() => setFields(fields.filter((_, i) => i !== idx))}
+                                title="Remove field"
+                                aria-label={`Delete field ${f.label}`}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Optional Dropdown Options editor */}
+                          {['select', 'multi-select'].includes(f.type) && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', marginTop: '0.2rem', paddingLeft: '28px' }}>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--muted)', width: '80px', flexShrink: 0 }}>Options:</span>
+                              <input
+                                type="text"
+                                value={(f.options || []).join(', ')}
+                                placeholder="Option 1, Option 2, Option 3 (comma-separated)"
+                                aria-label={`Options for ${f.label}`}
+                                onChange={e => {
+                                  const next = [...fields];
+                                  next[idx] = {
+                                    ...next[idx],
+                                    options: e.target.value.split(',').map(o => o.trim()).filter(Boolean),
+                                  };
+                                  setFields(next);
+                                }}
+                                style={{ flex: 1 }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ================= STEP 3: OVERVIEW & VIEWS ================= */}
+              {step === 3 && (
+                <div id="step-tabpanel-3" role="tabpanel" aria-labelledby="step-tab-3" className="module-builder-section-inner">
+                  <div className="module-builder-section-head">
+                    <h3>View Settings & Presentation</h3>
+                  </div>
+
+                  {/* 1. Enabled Views */}
+                  <div style={{ padding: '1rem', background: 'var(--panel-muted)', border: '1px solid var(--border)', borderRadius: '10px' }}>
+                    <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.86rem', fontWeight: 750, color: 'var(--text)' }}>Enabled Views</h4>
+                    <p style={{ margin: '0 0 0.75rem', fontSize: '0.78rem', color: 'var(--muted)' }}>Select the views available in this module's navigation.</p>
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }} role="group" aria-label="Enabled views">
+                      {[
+                        { id: 'list', label: 'List Table' },
+                        { id: 'board', label: 'Board (Kanban)' },
+                        { id: 'calendar', label: 'Calendar' },
+                      ].map(v => (
+                        <label
+                          key={v.id}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            background: enabledViews.includes(v.id) ? 'var(--gold-dim, rgba(234,88,12,0.18))' : 'var(--input)',
+                            border: `1px solid ${enabledViews.includes(v.id) ? 'var(--gold)' : 'var(--border)'}`,
+                            color: enabledViews.includes(v.id) ? 'var(--gold)' : 'var(--text)',
+                            fontSize: '0.82rem',
+                            fontWeight: 650,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={enabledViews.includes(v.id)}
+                            onChange={() => setEnabledViews(toggleArrayItem(enabledViews, v.id, 1))}
+                            aria-label={`Enable ${v.label} view`}
+                            style={{ display: 'none' }}
+                          />
+                          <span>{v.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 2. Grouping and Progress */}
+                  <div style={{ padding: '1rem', background: 'var(--panel-muted)', border: '1px solid var(--border)', borderRadius: '10px' }}>
+                    <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.86rem', fontWeight: 750, color: 'var(--text)' }}>Overview & Aggregation</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>Overview Group Fields</label>
+                        {selectFields.length === 0 ? (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontStyle: 'italic' }}>No select/dropdown fields created in Step 2 yet.</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '4px' }}>
+                            {selectFields.map(sf => (
+                              <button
+                                key={sf.key}
+                                type="button"
+                                className="btn-builder-secondary"
+                                onClick={() => setOverviewGroupFields(toggleArrayItem(overviewGroupFields, `custom:${sf.key}`))}
+                                aria-pressed={overviewGroupFields.includes(`custom:${sf.key}`)}
+                                aria-label={`Toggle overview grouping by ${sf.label}`}
+                                style={{
+                                  background: overviewGroupFields.includes(`custom:${sf.key}`) ? 'var(--gold-dim, rgba(234,88,12,0.18))' : 'var(--input)',
+                                  borderColor: overviewGroupFields.includes(`custom:${sf.key}`) ? 'var(--gold)' : 'var(--border)',
+                                  color: overviewGroupFields.includes(`custom:${sf.key}`) ? 'var(--gold)' : 'var(--text)',
+                                  fontSize: '0.75rem',
+                                  padding: '3px 8px',
+                                }}
+                              >
+                                {sf.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
+
+                      <div>
+                        <label style={{ fontSize: '0.78rem', color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>Overview Progress Tracking Fields</label>
+                        {selectFields.length === 0 ? (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontStyle: 'italic' }}>No select/dropdown fields created in Step 2 yet.</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '4px' }}>
+                            {selectFields.map(sf => (
+                              <button
+                                key={sf.key}
+                                type="button"
+                                className="btn-builder-secondary"
+                                onClick={() => setOverviewProgressFields(toggleArrayItem(overviewProgressFields, `custom:${sf.key}`))}
+                                aria-pressed={overviewProgressFields.includes(`custom:${sf.key}`)}
+                                aria-label={`Toggle progress tracking by ${sf.label}`}
+                                style={{
+                                  background: overviewProgressFields.includes(`custom:${sf.key}`) ? 'var(--gold-dim, rgba(234,88,12,0.18))' : 'var(--input)',
+                                  borderColor: overviewProgressFields.includes(`custom:${sf.key}`) ? 'var(--gold)' : 'var(--border)',
+                                  color: overviewProgressFields.includes(`custom:${sf.key}`) ? 'var(--gold)' : 'var(--text)',
+                                  fontSize: '0.75rem',
+                                  padding: '3px 8px',
+                                }}
+                              >
+                                {sf.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. Table Columns & Board Cards */}
+                  <div style={{
+                    padding: '1rem',
+                    background: 'var(--panel-muted)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '10px',
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '1rem',
+                  }}>
+                    <div>
+                      <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.86rem', fontWeight: 750, color: 'var(--text)' }}>List Columns</h4>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }} role="group" aria-label="Visible list columns">
+                        {allAttributes.map(attr => (
+                          <button
+                            key={attr.key}
+                            type="button"
+                            className="btn-builder-secondary"
+                            onClick={() => setListColumns(toggleArrayItem(listColumns, attr.key, 1))}
+                            aria-pressed={listColumns.includes(attr.key)}
+                            aria-label={`Toggle list column ${attr.label}`}
+                            style={{
+                              background: listColumns.includes(attr.key) ? 'var(--gold-dim, rgba(234,88,12,0.18))' : 'var(--input)',
+                              borderColor: listColumns.includes(attr.key) ? 'var(--gold)' : 'var(--border)',
+                              color: listColumns.includes(attr.key) ? 'var(--gold)' : 'var(--text)',
+                              fontSize: '0.75rem',
+                              padding: '3px 8px',
+                            }}
+                          >
+                            {attr.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.86rem', fontWeight: 750, color: 'var(--text)' }}>Board Cards</h4>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }} role="group" aria-label="Visible board card fields">
+                        {allAttributes.map(attr => (
+                          <button
+                            key={attr.key}
+                            type="button"
+                            className="btn-builder-secondary"
+                            onClick={() => setBoardFields(toggleArrayItem(boardFields, attr.key))}
+                            aria-pressed={boardFields.includes(attr.key)}
+                            aria-label={`Toggle board card field ${attr.label}`}
+                            style={{
+                              background: boardFields.includes(attr.key) ? 'var(--gold-dim, rgba(234,88,12,0.18))' : 'var(--input)',
+                              borderColor: boardFields.includes(attr.key) ? 'var(--gold)' : 'var(--border)',
+                              color: boardFields.includes(attr.key) ? 'var(--gold)' : 'var(--text)',
+                              fontSize: '0.75rem',
+                              padding: '3px 8px',
+                            }}
+                          >
+                            {attr.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
-
-                {/* Color */}
-                <div className="mod-field-input-group">
-                  <label>Brand Color</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <input
-                      type="color"
-                      value={color}
-                      className="mod-stage-color-dot"
-                      style={{ width: '38px', height: '38px', padding: '2px', cursor: 'pointer', borderRadius: '8px' }}
-                      onChange={e => setColor(e.target.value)}
-                    />
-                    <input
-                      type="text"
-                      value={color}
-                      className="mod-field-input"
-                      style={{ flex: 1 }}
-                      onChange={e => setColor(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Sidebar Order & Active */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'center' }}>
-                <div className="mod-field-input-group">
-                  <label>Sidebar Position Order</label>
-                  <input
-                    type="number"
-                    value={order}
-                    className="mod-field-input"
-                    onChange={e => setOrder(Number(e.target.value) || 0)}
-                  />
-                </div>
-
-                <label className="mod-checkbox-label" style={{ marginTop: '1.25rem' }}>
-                  <input
-                    type="checkbox"
-                    checked={isActive}
-                    onChange={e => setIsActive(e.target.checked)}
-                  />
-                  <span>Show in CRM Sidebar</span>
-                </label>
-              </div>
+              )}
             </div>
+          </>
+        )}
 
-            <div className="auto-modal-footer">
+        {/* MODAL FOOTER */}
+        <footer className="module-builder-dialog-footer">
+          <div>
+            {!isNew && (
               <button
                 type="button"
-                className="btn-auto-modal-secondary"
-                onClick={() => setShowSettingsModal(false)}
+                className="btn-builder-danger"
+                onClick={() => setShowDeleteConfirm(true)}
+                aria-label="Delete module"
               >
-                Close
+                Delete module
               </button>
-              <button
-                type="button"
-                className="btn-auto-modal-primary"
-                onClick={() => setShowSettingsModal(false)}
-              >
-                Done
-              </button>
-            </div>
+            )}
           </div>
-        </div>
-      )}
 
-      {/* Fullscreen Live Preview Modal */}
-      {isFullscreenPreview && (
-        <div className="mod-fullscreen-preview-overlay">
-          <div className="mod-fullscreen-preview-backdrop" onClick={() => setIsFullscreenPreview(false)} />
-          <div className="mod-fullscreen-preview-content">
-            <div className="mod-fullscreen-preview-header">
-              <div className="mod-preview-head-info">
-                <span className="mod-preview-dot" style={{ backgroundColor: color }} />
-                <span className="mod-preview-name">{name || 'Tasks'}</span>
-                <span className="mod-preview-badge">LIVE INTERACTIVE PREVIEW</span>
-              </div>
-              <div className="mod-preview-head-controls">
-                <div className="mod-preview-view-tabs">
-                  <button
-                    type="button"
-                    className={`btn-preview-view-tab ${previewView === 'board' ? 'active' : ''}`}
-                    onClick={() => setPreviewView('board')}
-                  >
-                    <Columns3 size={14} />
-                    <span>Board</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn-preview-view-tab ${previewView === 'list' ? 'active' : ''}`}
-                    onClick={() => setPreviewView('list')}
-                  >
-                    <ListIcon size={14} />
-                    <span>List</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn-preview-view-tab ${previewView === 'calendar' ? 'active' : ''}`}
-                    onClick={() => setPreviewView('calendar')}
-                  >
-                    <CalendarIcon size={14} />
-                    <span>Calendar</span>
-                  </button>
-                </div>
+          <div className="module-builder-footer-nav-actions">
+            {showPreview ? (
+              <>
                 <button
                   type="button"
-                  className="btn-auto-modal-close"
-                  title="Close fullscreen preview"
-                  onClick={() => setIsFullscreenPreview(false)}
+                  className="btn-builder-secondary"
+                  onClick={() => setShowPreview(false)}
                 >
-                  <X size={16} />
+                  Back to editing
                 </button>
-              </div>
-            </div>
-            <div className="mod-fullscreen-preview-body">
-              {previewView === 'board' && (
-                <div className="mod-live-board-container" style={{ minHeight: '600px', height: '100%' }}>
-                  <div className="mod-live-board-scroll">
-                    {statuses.map((st, idx) => {
-                      const sampleCards = sampleMap[idx] || [];
-                      return (
-                        <div key={idx} className="mod-preview-kanban-col">
-                          <div className="mod-preview-col-head">
-                            <div className="mod-preview-col-head-left">
-                              <span className="mod-preview-col-dot" style={{ backgroundColor: st.color || '#64748b' }} />
-                              <span className="mod-preview-col-title">{st.label || 'Stage'}</span>
-                              <span className="mod-preview-col-badge">{sampleCards.length}</span>
-                            </div>
-                            <button type="button" className="btn-preview-col-plus" title="Add record">
-                              <Plus size={13} />
-                            </button>
-                          </div>
-                          <div className="mod-preview-col-cards">
-                            {sampleCards.map(c => (
-                              <div key={c.id} className="mod-preview-kanban-card">
-                                <div className="mod-preview-card-title">{c.title}</div>
-                                <div className="mod-preview-card-footer">
-                                  <div className="mod-preview-avatar-circle" style={{ background: c.avatarBg }}>
-                                    {c.avatar}
-                                  </div>
-                                  <span
-                                    className="mod-preview-priority-badge"
-                                    style={{
-                                      backgroundColor: c.priority === 'High' ? '#ffedd5' : c.priority === 'Medium' ? '#e0f2fe' : '#dcfce7',
-                                      color: c.priority === 'High' ? '#ea580c' : c.priority === 'Medium' ? '#0284c7' : '#16a34a',
-                                    }}
-                                  >
-                                    {c.priority}
-                                  </span>
-                                </div>
-                                <div className="mod-preview-card-date">
-                                  <CalendarIcon size={12} />
-                                  <span>{c.date}</span>
-                                </div>
-                              </div>
-                            ))}
-                            <button type="button" className="btn-preview-add-task">
-                              <Plus size={13} />
-                              <span>Add record</span>
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {previewView === 'list' && (
-                <div className="mod-live-list-container" style={{ minHeight: '600px' }}>
-                  <table className="mod-preview-table">
-                    <thead>
-                      <tr>
-                        {listColumns.slice(0, 6).map(col => (
-                          <th key={col}>{fieldLabel(col)}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allSampleCards.map((c, i) => (
-                        <tr key={i}>
-                          {listColumns.slice(0, 6).map(col => (
-                            <td key={col}>
-                              {col === 'title' ? (
-                                <span className="mod-table-title">{c.title}</span>
-                              ) : col === 'assignedTo' ? (
-                                <div className="mod-table-user">
-                                  <span className="mod-mini-avatar" style={{ background: c.avatarBg }}>{c.avatar}</span>
-                                  <span>{c.avatar === 'AK' ? 'Aisha Khan' : c.avatar === 'RK' ? 'Rahul Kumar' : 'Vikram D'}</span>
-                                </div>
-                              ) : col === 'status' ? (
-                                <span
-                                  className="mod-table-status-pill"
-                                  style={{
-                                    backgroundColor: (statuses[i % statuses.length]?.color || '#64748b') + '1a',
-                                    color: statuses[i % statuses.length]?.color || '#64748b',
-                                    borderColor: statuses[i % statuses.length]?.color || '#64748b',
-                                  }}
-                                >
-                                  {statuses[i % statuses.length]?.label || 'Open'}
-                                </span>
-                              ) : col === 'priority' ? (
-                                <span className="mod-table-priority">{c.priority}</span>
-                              ) : col === 'deadline' ? (
-                                <span className="mod-table-date">{c.date}</span>
-                              ) : (
-                                '—'
-                              )}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {previewView === 'calendar' && (
-                <div className="mod-live-calendar-container" style={{ minHeight: '600px' }}>
-                  <div className="mod-cal-header-bar">
-                    <span>September 2026</span>
-                  </div>
-                  <div className="mod-cal-grid">
-                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
-                      <div key={d} className="mod-cal-day-head">{d}</div>
-                    ))}
-                    {Array.from({ length: 14 }).map((_, i) => (
-                      <div key={i} className="mod-cal-cell" style={{ minHeight: '100px' }}>
-                        <span className="mod-cal-day-num">{10 + i}</span>
-                        {i === 2 && (
-                          <div className="mod-cal-event" style={{ borderLeftColor: statuses[0]?.color || '#ea580c' }}>
-                            Sample Card 1
-                          </div>
-                        )}
-                        {i === 4 && (
-                          <div className="mod-cal-event" style={{ borderLeftColor: statuses[1]?.color || '#10b981' }}>
-                            Sample Card 2
-                          </div>
-                        )}
-                        {i === 6 && (
-                          <div className="mod-cal-event" style={{ borderLeftColor: statuses[2]?.color || '#f59e0b' }}>
-                            Sample Card 3
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+                <button
+                  type="button"
+                  className="btn-builder-primary"
+                  disabled={saving}
+                  onClick={handleSave}
+                >
+                  {saving ? 'Saving…' : (isNew ? 'Create module' : 'Save changes')}
+                </button>
+              </>
+            ) : (
+              <>
+                {step > 1 && (
+                  <button
+                    type="button"
+                    className="btn-builder-secondary"
+                    onClick={() => setStep((step - 1) as any)}
+                  >
+                    Previous
+                  </button>
+                )}
 
-      {/* Delete Confirmation */}
+                {step < 3 ? (
+                  <button
+                    type="button"
+                    className="btn-builder-primary"
+                    onClick={() => setStep((step + 1) as any)}
+                  >
+                    Next
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-builder-primary"
+                    disabled={saving}
+                    onClick={handleSave}
+                  >
+                    {saving ? 'Saving…' : (isNew ? 'Create module' : 'Save changes')}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </footer>
+      </div>
+
+      {/* Delete confirmation dialog */}
       <ConfirmDialog
         open={showDeleteConfirm}
-        title="Delete Module"
-        message={`Are you sure you want to delete module "${workType?.name || name}" and all of its associated records? This action cannot be undone.`}
+        title="Delete Custom Module"
+        message={`Are you sure you want to delete the "${name}" module? All records and workflow data for this module will be permanently removed.`}
         confirmText="Delete Module"
         variant="danger"
-        loading={saving}
-        onConfirm={executeDelete}
+        onConfirm={handleDelete}
         onCancel={() => setShowDeleteConfirm(false)}
       />
     </div>,

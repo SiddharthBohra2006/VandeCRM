@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 
 export function TableSkeleton({ rows = 6, cols = 5 }: { rows?: number; cols?: number }) {
   return (
@@ -25,6 +25,96 @@ export function TableSkeleton({ rows = 6, cols = 5 }: { rows?: number; cols?: nu
         ))}
       </div>
     </div>
+  );
+}
+
+export function TableSkeletonRows({
+  rows = 8,
+  hasSelect = true,
+  visibleColumns
+}: {
+  rows?: number;
+  hasSelect?: boolean;
+  visibleColumns?: Record<string, boolean>;
+}) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, r) => (
+        <tr key={`skel-row-${r}`} className="skeleton-table-tr" style={{ opacity: 1 - r * 0.06 }}>
+          {hasSelect && (
+            <td className="select-col">
+              <div className="skeleton-box" style={{ width: 16, height: 16, borderRadius: 4 }} />
+            </td>
+          )}
+          {(!visibleColumns || visibleColumns.name) && (
+            <td>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div className="skeleton-box" style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0 }} />
+                <div style={{ display: 'grid', gap: 5, flex: 1, minWidth: 110 }}>
+                  <div className="skeleton-box" style={{ width: `${Math.max(50, 85 - (r % 4) * 12)}%`, height: 13 }} />
+                  <div className="skeleton-box" style={{ width: `${Math.max(35, 55 - (r % 3) * 10)}%`, height: 10 }} />
+                </div>
+              </div>
+            </td>
+          )}
+          {(!visibleColumns || visibleColumns.phone) && (
+            <td>
+              <div className="skeleton-box" style={{ width: 95, height: 13 }} />
+            </td>
+          )}
+          {(!visibleColumns || visibleColumns.email) && (
+            <td>
+              <div className="skeleton-box" style={{ width: 130, height: 13 }} />
+            </td>
+          )}
+          {(!visibleColumns || visibleColumns.course || visibleColumns.company) && (
+            <td>
+              <div className="skeleton-box" style={{ width: 85, height: 13 }} />
+            </td>
+          )}
+          {(!visibleColumns || visibleColumns.source) && (
+            <td>
+              <div className="skeleton-box" style={{ width: 65, height: 13 }} />
+            </td>
+          )}
+          {(!visibleColumns || visibleColumns.stage) && (
+            <td>
+              <div className="skeleton-box" style={{ width: 95, height: 24, borderRadius: 999 }} />
+            </td>
+          )}
+          {(!visibleColumns || visibleColumns.priority) && (
+            <td>
+              <div className="skeleton-box" style={{ width: 50, height: 18, borderRadius: 999 }} />
+            </td>
+          )}
+          {(!visibleColumns || visibleColumns.value) && (
+            <td>
+              <div className="skeleton-box" style={{ width: 65, height: 13 }} />
+            </td>
+          )}
+          {(!visibleColumns || visibleColumns.followup) && (
+            <td>
+              <div className="skeleton-box" style={{ width: 80, height: 13 }} />
+            </td>
+          )}
+          {(!visibleColumns || visibleColumns.lastActivity) && (
+            <td>
+              <div className="skeleton-box" style={{ width: 70, height: 13 }} />
+            </td>
+          )}
+          {(!visibleColumns || visibleColumns.labels) && (
+            <td>
+              <div className="skeleton-box" style={{ width: 55, height: 18, borderRadius: 999 }} />
+            </td>
+          )}
+          {(!visibleColumns || visibleColumns.actions) && (
+            <td style={{ textAlign: 'center' }}>
+              <div className="skeleton-box" style={{ width: 16, height: 16, borderRadius: 4, margin: '0 auto' }} />
+            </td>
+          )}
+        </tr>
+      ))}
+    </>
   );
 }
 

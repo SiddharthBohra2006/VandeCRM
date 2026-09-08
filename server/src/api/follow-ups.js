@@ -18,13 +18,13 @@ function workspace(req, res) {
   return null;
 }
 
-function buildCustomerFilter(req, activeWorkspace) {
+function buildCustomerFilter(req, activeWorkspace, scheduledOnly = true) {
   const organization = req.user.organization._id;
   const filter = {
     organization,
     clientCompany: activeWorkspace,
-    nextFollowUpAt: { $ne: null },
   };
+  if (scheduledOnly) filter.nextFollowUpAt = { $ne: null };
   if (isRestrictedUser(req.user)) filter.assignedTo = req.user._id;
   return filter;
 }
@@ -39,8 +39,10 @@ router.get('/', async (req, res, next) => {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    const endOfWeek = new Date(now);
-    endOfWeek.setDate(endOfWeek.getDate() + 7);
+    const nextSevenDays = new Date(now);
+    nextSevenDays.setDate(nextSevenDays.getDate() + 7);
+    const startOfWeek = new Date(startOfToday);
+    startOfWeek.setDate(startOfWeek.getDate() - ((startOfWeek.getDay() + 6) % 7));
 
     const view = req.query.filter || req.query.view || 'due';
     const filter = buildCustomerFilter(req, activeWorkspace);
@@ -48,34 +50,42 @@ router.get('/', async (req, res, next) => {
     if (view === 'today') {
       filter.nextFollowUpAt = { $gte: startOfToday, $lt: startOfTomorrow };
     } else if (view === 'upcoming') {
-      filter.nextFollowUpAt = { $gte: startOfTomorrow, $lte: endOfWeek };
-    } else if (view === 'all') {
+      filter.nextFollowUpAt = { $gte: startOfTomorrow, $lte: nextSevenDays };
+    } else if (view === 'all' || view === 'all-scheduled') {
       filter.nextFollowUpAt = { $ne: null };
+    } else if (view === 'overdue' || view === 'due') {
+      filter.nextFollowUpAt = { $lte: now };
+    } else if (view === 'completed') {
+      filter._id = { $in: [] };
     } else {
-      // 'due' (overdue and due now)
+      // Default: due/overdue
       filter.nextFollowUpAt = { $lte: now };
     }
 
-    const baseFilter = buildCustomerFilter(req, activeWorkspace);
-    const accessibleCustomers = await Customer.find(baseFilter).select('_id').lean();
+    const accessFilter = buildCustomerFilter(req, activeWorkspace, false);
+    const scheduledFilter = buildCustomerFilter(req, activeWorkspace);
+    const accessibleCustomers = await Customer.find(accessFilter).select('_id').lean();
     const customerIds = accessibleCustomers.map(c => c._id);
+    const completedFilter = {
+      organization,
+      customer: { $in: customerIds },
+      type: 'task',
+      $or: [{ followUpAction: 'completed' }, { note: /^Follow-up completed/ }],
+      createdAt: { $gte: startOfWeek },
+    };
 
-    const [followUps, allFollowups, completedActivities] = await Promise.all([
+    const [followUps, allFollowups, completedActivities, completedCount] = await Promise.all([
       Customer.find(filter)
         .populate('stage assignedTo clientCompany campaign')
         .sort({ nextFollowUpAt: 1 })
         .lean(),
-      Customer.find(baseFilter).select('nextFollowUpAt').lean(),
-      Activity.find({
-        organization,
-        customer: { $in: customerIds },
-        type: 'task',
-        $or: [{ followUpAction: 'completed' }, { note: /^Follow-up completed/ }],
-      })
+      Customer.find(scheduledFilter).select('nextFollowUpAt').lean(),
+      Activity.find(completedFilter)
         .populate('customer user')
         .sort({ createdAt: -1 })
         .limit(20)
         .lean(),
+      Activity.countDocuments(completedFilter),
     ]);
 
     const stats = {
@@ -83,7 +93,9 @@ router.get('/', async (req, res, next) => {
       today: allFollowups.filter(
         c => c.nextFollowUpAt && new Date(c.nextFollowUpAt) >= startOfToday && new Date(c.nextFollowUpAt) < startOfTomorrow
       ).length,
-      upcoming: allFollowups.filter(c => c.nextFollowUpAt && new Date(c.nextFollowUpAt) >= startOfTomorrow).length,
+      upcoming: allFollowups.filter(c => c.nextFollowUpAt && new Date(c.nextFollowUpAt) >= startOfTomorrow && new Date(c.nextFollowUpAt) <= nextSevenDays).length,
+      overdue: allFollowups.filter(c => c.nextFollowUpAt && new Date(c.nextFollowUpAt) < startOfToday).length,
+      completed: completedCount,
       all: allFollowups.length,
     };
 
@@ -116,6 +128,9 @@ router.post('/:id/complete', async (req, res, next) => {
 
     const completedAt = customer.nextFollowUpAt;
     const comment = String(req.body.comment || '').trim().slice(0, 1000);
+    if (!comment) {
+      return res.status(400).json({ ok: false, error: 'Add a comment before completing the follow-up.' });
+    }
     customer.nextFollowUpAt = null;
     customer.lastContactedAt = new Date();
     await customer.save();
@@ -165,6 +180,9 @@ router.post('/:id/reschedule', async (req, res, next) => {
 
     if (!nextFollowUpAt || Number.isNaN(nextFollowUpAt.getTime())) {
       return res.status(400).json({ ok: false, error: 'Please choose a valid follow-up date and time.' });
+    }
+    if (!comment) {
+      return res.status(400).json({ ok: false, error: 'Add a comment explaining the schedule change.' });
     }
 
     customer.nextFollowUpAt = nextFollowUpAt;

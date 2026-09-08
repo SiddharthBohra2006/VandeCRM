@@ -124,7 +124,7 @@ export default function CustomerImportPage() {
   };
 
   return (
-    <div className="page-container">
+    <div className="page-container experience-page customer-import-page">
       <section className="page-head">
         <div>
           <p className="eyebrow">Database</p>

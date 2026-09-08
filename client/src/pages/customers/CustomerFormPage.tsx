@@ -114,7 +114,7 @@ export default function CustomerFormPage() {
     : options.stages.filter(s => s.isActive);
 
   return (
-    <div className="page-container">
+    <div className="page-container experience-page customer-form-page">
       <section className="page-head">
         <div>
           <Link to={backUrl} className="back-link">← Back to {isClientScope ? crmTerms.recordPlural : crmTerms.leadPlural}</Link>

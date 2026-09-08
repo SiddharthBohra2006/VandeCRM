@@ -30,6 +30,8 @@ export interface Attachment {
   category: string;
   size: number;
   notes?: string;
+  storageProvider?: 'crm' | 'google_drive';
+  externalUrl?: string;
   uploadedBy?: { _id: string; name: string };
   createdAt: string;
 }
@@ -51,6 +53,7 @@ export interface CustomerDetailResponse {
   activities: Activity[];
   attachments: Attachment[];
   relatedWork: RelatedWork[];
+  fileStorage: { provider: 'crm' | 'google_drive'; ready: boolean; folderUrl?: string; missing: string[] };
   stages: Stage[];
   labels: Label[];
   users: { _id: string; name: string; role?: string }[];
@@ -84,6 +87,7 @@ export interface ImportResult {
   imported: number;
   updated: number;
   skipped: number;
+  batchId?: string;
 }
 
 export interface ImportPreviewPayload {
@@ -145,6 +149,9 @@ export const customersApi = {
   import: (data: ImportPayload) =>
     api.post<ImportResult>('/customers/import', data),
 
+  revertImport: (batchId: string) =>
+    api.post<{ ok: true; message: string; deletedCount: number; restoredCount: number }>('/customers/import/revert', { batchId }),
+
   getDuplicates: () => api.get<{ ok: true; duplicateGroups: any[] }>('/customers/duplicates'),
   mergeDuplicate: (primaryId: string, duplicateId: string) =>
     api.post<{ ok: true }>('/customers/duplicates/merge', { primaryId, duplicateId }),
@@ -152,8 +159,22 @@ export const customersApi = {
   addActivity: (id: string, data: { type: string; note: string; nextFollowUpAt?: string; callRecordingUrl?: string }) =>
     api.post<{ ok: true; data: Activity }>(`/customers/${id}/activity`, data),
 
-  updateStage: (id: string, stageId: string) =>
-    api.post<{ ok: true; stage: Stage }>(`/customers/${id}/stage`, { stageId }),
+  updateStage: (
+    id: string,
+    payload:
+      | string
+      | {
+          stageId: string;
+          note?: string;
+          type?: string;
+          callRecordingUrl?: string;
+          nextFollowUpAt?: string;
+          nextFollowUpNote?: string;
+        }
+  ) => {
+    const body = typeof payload === 'string' ? { stageId: payload } : payload;
+    return api.post<{ ok: true; stage: Stage; customer?: Customer }>(`/customers/${id}/stage`, body);
+  },
 
   transferLead: (id: string, assignedTo: string | null) =>
     api.post<{ ok: true; assignedTo: any }>(`/customers/${id}/transfer`, { assignedTo }),

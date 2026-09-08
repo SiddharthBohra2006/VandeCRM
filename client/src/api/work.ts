@@ -33,6 +33,7 @@ export interface WorkTypeStatus {
   color?: string;
   isTerminalWon?: boolean;
   isTerminalLost?: boolean;
+  requiresApproval?: boolean;
 }
 
 export interface WorkType {

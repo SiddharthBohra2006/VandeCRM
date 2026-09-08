@@ -63,7 +63,7 @@ function normalizeGa4PropertyId(value) {
   return String(value || '').trim().replace(/^properties\//i, '');
 }
 
-function generateJwt(clientEmail, privateKey) {
+function generateJwt(clientEmail, privateKey, scope = 'https://www.googleapis.com/auth/analytics.readonly') {
   const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
   
   const now = Math.floor(Date.now() / 1000);
@@ -71,7 +71,7 @@ function generateJwt(clientEmail, privateKey) {
     iss: clientEmail,
     sub: clientEmail,
     aud: 'https://oauth2.googleapis.com/token',
-    scope: 'https://www.googleapis.com/auth/analytics.readonly',
+    scope,
     iat: now,
     exp: now + 3600
   })).toString('base64url');
@@ -83,16 +83,16 @@ function generateJwt(clientEmail, privateKey) {
   return `${header}.${payload}.${signature}`;
 }
 
-async function getAccessToken(clientEmail, privateKey) {
-  const jwtToken = generateJwt(clientEmail, privateKey);
+async function getGoogleAccessToken(clientEmail, privateKey, scope) {
+  const jwtToken = generateJwt(clientEmail, privateKey, scope);
   const tokenUrl = 'https://oauth2.googleapis.com/token';
-  const body = JSON.stringify({
+  const body = new URLSearchParams({
     grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
     assertion: jwtToken
-  });
+  }).toString();
   
   const response = await makePostRequest(tokenUrl, body, {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/x-www-form-urlencoded'
   });
   return response.access_token;
 }
@@ -173,7 +173,7 @@ async function syncGoogleAnalytics(clientCompany, options = {}) {
 
   try {
     // 1. Authenticate with Google
-    const accessToken = await getAccessToken(serviceAccount.client_email, serviceAccount.private_key);
+    const accessToken = await getGoogleAccessToken(serviceAccount.client_email, serviceAccount.private_key);
 
     // 2. Fetch GA4 Data Report
     const propertyId = normalizeGa4PropertyId(clientCompany.ga4PropertyId);
@@ -259,4 +259,4 @@ async function syncGoogleAnalytics(clientCompany, options = {}) {
   }
 }
 
-module.exports = { normalizeGa4PropertyId, syncGoogleAnalytics };
+module.exports = { getGoogleAccessToken, normalizeGa4PropertyId, syncGoogleAnalytics };

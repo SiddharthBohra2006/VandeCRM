@@ -54,7 +54,7 @@ const canAccessWorkType = (userOrRole, workType) => {
   const key = workTypeKey(workType);
   return (ROLE_DEFINITIONS[role]?.workTypes || []).includes(key);
 };
-const canAssignRole = (actor, targetRole) => actor?.role === 'admin' || targetRole !== 'admin';
+const canAssignRole = (actor, targetRole) => actor?.role === 'admin' || (!['admin', 'manager'].includes(targetRole));
 const canManageUser = (actor, target) => actor?.role === 'admin' || target?.role !== 'admin';
 const hasPermission = (user, permission) => {
   if (!user) return false;
@@ -74,7 +74,6 @@ const hasPermission = (user, permission) => {
 const moduleForWorkType = workType => `work:${workTypeId(workType)}`;
 const canEditWorkField = (user, workType, field) => {
   if (!hasWorkPermission(user, workType, 'update')) return false;
-  if (field === 'status') return true;
   if (user.role === 'admin' || user.role === 'manager') return true;
   const dynamic = customWorkPermission(user, workType);
   if (dynamic) return Array.isArray(dynamic.editableFieldKeys) && dynamic.editableFieldKeys.includes(field);
@@ -94,6 +93,18 @@ const canEditWorkField = (user, workType, field) => {
   return !allowed || allowed.includes(field);
 };
 
+const canChangeWorkStatus = (user, workType, currentStatusKey) => {
+  if (!user) return false;
+  if (['admin', 'manager'].includes(user.role)) return true;
+  if (currentStatusKey && Array.isArray(workType?.statuses)) {
+    const currentStatus = workType.statuses.find(s => s.key === currentStatusKey);
+    if (currentStatus?.requiresApproval) {
+      return false;
+    }
+  }
+  return canEditWorkField(user, workType, 'status');
+};
+
 const canAccessLeadField = (user, field, action = 'view') => {
   if (!user || user.role === 'admin' || user.role === 'manager' || !user.customRole) return true;
   const access = user.customRole.leadFieldPermissions;
@@ -103,4 +114,4 @@ const canAccessLeadField = (user, field, action = 'view') => {
     : (access.visible || []).includes(field) || (access.editable || []).includes(field);
 };
 
-module.exports = { ROLE_DEFINITIONS, INTERNAL_ROLES, SPECIALIST_ROLES, PERMISSION_MODULES, PERMISSION_ACTIONS, ALL_PERMISSIONS, WORK_FIELD_GROUPS, WORK_FIELDS, isRestrictedRole, isRestrictedUser, recordScope, canAccessWorkType, canAssignRole, canManageUser, hasPermission, hasWorkPermission, moduleForWorkType, canEditWorkField, canAccessLeadField };
+module.exports = { ROLE_DEFINITIONS, INTERNAL_ROLES, SPECIALIST_ROLES, PERMISSION_MODULES, PERMISSION_ACTIONS, ALL_PERMISSIONS, WORK_FIELD_GROUPS, WORK_FIELDS, isRestrictedRole, isRestrictedUser, recordScope, canAccessWorkType, canAssignRole, canManageUser, hasPermission, hasWorkPermission, moduleForWorkType, canEditWorkField, canChangeWorkStatus, canAccessLeadField };

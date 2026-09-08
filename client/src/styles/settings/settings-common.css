@@ -1,0 +1,330 @@
+/* =========================================================
+   Settings Common Layout & Navigation
+   ========================================================= */
+
+/* =========================================================
+   CRM Customization Page Styles (Pixel-matched Luxury UI)
+   ========================================================= */
+
+.customization-page-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.5rem 2rem 3rem;
+  max-width: 1440px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Breadcrumbs */
+.customization-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--muted, #64748b);
+  font-weight: 500;
+}
+.customization-breadcrumbs .bc-link {
+  color: var(--muted, #64748b);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.customization-breadcrumbs .bc-link:hover {
+  color: var(--gold, #f59e0b);
+}
+.customization-breadcrumbs .bc-sep {
+  color: var(--border, #cbd5e1);
+  font-size: 0.85rem;
+}
+.customization-breadcrumbs .bc-current {
+  color: var(--text, #1e293b);
+  font-weight: 600;
+}
+
+/* Header & Actions */
+.customization-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.customization-head-text h1 {
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: var(--text, #0f172a);
+  margin: 0 0 0.4rem;
+  letter-spacing: -0.025em;
+  font-family: var(--font-display, inherit);
+}
+.customization-head-text p {
+  color: var(--muted, #64748b);
+  font-size: 0.88rem;
+  margin: 0;
+  line-height: 1.45;
+  max-width: 680px;
+}
+
+.customization-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.btn-company-setup {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1rem;
+  border-radius: 9px;
+  background: var(--panel, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  color: var(--text, #1e293b);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.btn-company-setup:hover {
+  background: var(--hover, #f8fafc);
+  border-color: var(--border-strong, #cbd5e1);
+}
+
+.btn-save-changes {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 9px;
+  background: var(--gold, #ea580c);
+  border: 1px solid color-mix(in srgb, var(--gold, #ea580c) 80%, black);
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--gold, #ea580c) 35%, transparent);
+  transition: all 0.15s ease;
+}
+.btn-save-changes:hover {
+  background: var(--gold-hover, color-mix(in srgb, var(--gold, #ea580c) 85%, black));
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--gold, #ea580c) 45%, transparent);
+}
+.btn-save-changes:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Category Navigation Pill Tabs */
+.customization-tabs-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.3rem 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+}
+.customization-tabs-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.customization-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1.05rem;
+  border-radius: 9999px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--sub, #475569);
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+.customization-tab-btn:hover {
+  background: var(--hover, #f1f5f9);
+  color: var(--text, #0f172a);
+}
+.customization-tab-btn.active {
+  background: color-mix(in srgb, var(--gold, #ea580c) 10%, var(--panel, #ffffff));
+  border-color: color-mix(in srgb, var(--gold, #ea580c) 35%, transparent);
+  color: var(--gold, #ea580c);
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+.customization-tab-btn svg {
+  flex-shrink: 0;
+}
+
+/* Main Grid Layout */
+.customization-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.95fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+@media (max-width: 1180px) {
+  .customization-main-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Left Column Cards */
+.customization-left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.customization-card {
+  background: var(--panel, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 14px;
+  padding: 1.4rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02), 0 4px 12px rgba(0, 0, 0, 0.015);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.customization-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.customization-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.customization-header-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--gold, #ea580c) 12%, transparent);
+  color: var(--gold, #ea580c);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.customization-header-titles h2 {
+  font-size: 1.05rem;
+  font-weight: 750;
+  color: var(--text, #0f172a);
+  margin: 0 0 0.2rem;
+}
+.customization-header-titles p {
+  color: var(--muted, #64748b);
+  font-size: 0.8rem;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.customization-header-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: 7px;
+  background: var(--bg-soft, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  color: var(--sub, #475569);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.customization-header-action-btn:hover {
+  color: var(--gold, #ea580c);
+  border-color: var(--border-strong, #cbd5e1);
+  background: var(--hover, #f1f5f9);
+}
+
+@media (max-width: 768px) {
+  /* Stage Form & Actions on Mobile */
+  .stage-input-color-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  .stage-color-wrap {
+    width: 100% !important;
+  }
+
+  .stage-color-picker-pill {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+
+  .stage-flags-actions-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.85rem !important;
+  }
+
+  .stage-flags-group {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.65rem !important;
+  }
+
+  .stage-add-btns {
+    width: 100% !important;
+    justify-content: flex-end !important;
+    margin-left: 0 !important;
+  }
+
+  .btn-stage-cancel,
+  .btn-stage-submit {
+    flex: 1 !important;
+    text-align: center !important;
+    justify-content: center !important;
+  }
+
+  /* Tables & Lists Touch Scroll */
+  .stage-table-container,
+  .field-table-container,
+  .label-table-container,
+  .custom-table-container {
+    -webkit-overflow-scrolling: touch !important;
+    overflow-x: auto !important;
+    max-width: 100% !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  /* Work Type Builder Modal */
+  .mod-builder-box,
+  .work-type-builder-modal {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    max-height: 90vh !important;
+    padding: 1rem !important;
+    border-radius: 12px !important;
+  }
+
+  .mod-stepper-bar {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: 0.5rem !important;
+  }
+
+  /* Mobile Input & Select zoom prevention */
+  .customization-page-wrap input[type="text"],
+  .customization-page-wrap input[type="number"],
+  .customization-page-wrap select {
+    font-size: 16px !important;
+  }
+}

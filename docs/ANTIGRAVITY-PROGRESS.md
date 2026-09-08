@@ -186,7 +186,35 @@
 - **Lead & Client Details Page Parity Complete (`CustomerDetailPage.tsx`):**
   - Restored `.lead-record-ui .lead-profile-grid` 2-column structure (Left: Overview facts, KPI metrics, Activity composer & timeline, Work items, Files; Right: `.lead-stage-card`, `.lead-owner-card`, `.lead-followup-panel`, `.lead-quick-card`).
   - Fixed dark mode sidebar bleed and active sidebar navigation highlight when navigating from clients (`?from=clients`).
-- **ALL 11 FUNCTIONAL DOMAINS + VISUAL PARITY 100% COMPLETE & VERIFIED (tsc exit 0, vite build exit 0, node syntax exit 0).**
+- **Work Center Navigation Consolidation & Status Standardization:**
+  - Consolidated scattered flat Work items into a single collapsible "Work" group item (`nav-work-group`) containing Work Center (`/work`), Team Chat (`/work/threads`), and all accessible WorkType boards (`/work/:type`).
+  - Standardized open/closed status logic across all pages via `utils/workStatus.ts` (`isWorkItemClosed`, `isWorkItemOpen`).
+  - Extracted reusable `BulkCreateModal.tsx` for cross-page bulk record creation.
+- **Work-Status Review Lock & Permission Sync Fix (SEC-01 & AUTH-03):**
+  - **Task 1 — Schema: lockable statuses (`server/src/models/WorkType.js`):** Added `requiresApproval: { type: Boolean, default: false }` to `statusSchema`.
+  - **Task 2 — WorkTypeBuilder UI (`client/src/pages/settings/WorkTypeBuilder.tsx`, `auth.ts`, `work.ts`):** Added "Lock stage (Managers only)" checkbox toggle per status next to Won/Lost terminal flags, wired to `requiresApproval` in draft state, loading, saving, and API types.
+  - **Task 3 — Permission engine (`server/src/config/roles.js`):**
+    - Removed hardcoded `if (field === 'status') return true;` so status honors role field permissions and `editableFieldKeys`.
+    - Added and exported `canChangeWorkStatus(user, workType, currentStatusKey)` blocking non-admin/non-manager users when current status has `requiresApproval: true`.
+    - Updated `canAssignRole(actor, targetRole)` ensuring only `admin` can assign `admin` or `manager`.
+  - **Task 4 — Server-side enforcement (`server/src/api/work.js`):**
+    - `POST /api/work/:type` (AUTH-03): Enforced `canEditWorkField` on creation for all submitted fields.
+    - `PUT /api/work/:type/:id`: Enforced `canChangeWorkStatus` before modifying `item.status`.
+    - `POST /api/work/:type/:id/status`: Enforced `canChangeWorkStatus`, returning `403` with `{ ok: false, error: 'This item is locked for review — only a manager can change its status.' }` when unauthorized.
+  - **Task 5 — Client permission sync (`client/src/utils/permissions.ts`):**
+    - Rewrote `hasWorkPermission` to match `server/src/config/roles.js` with first-class `user.customRole.workTypePermissions` support and dynamic custom work types fallback.
+    - Added and exported `canEditWorkField` and `canChangeWorkStatus` mirroring server rules.
+  - **Task 6 — Status UI gating (`WorkDetailPage.tsx`, `WorkListPage.tsx`):**
+    - Gated `WorkDetailPage.tsx` status `CustomSelect` and "Mark as complete" / "Reopen" buttons with `canChangeWorkStatus`.
+    - Gated `WorkListPage.tsx` table status `CustomSelect` and Kanban board card dragging with `canChangeWorkStatus`.
+  - **Task 7 — SEC-01 Lock down role administration (`server/src/api/team.js`):**
+    - Restricted `POST /roles`, `PUT /roles/:id`, `DELETE /roles/:id` to administrators (`req.user.role === 'admin'`).
+    - Guarded CSV import role assignments and custom role creation.
+- **Verification:**
+  - `cd client && npx tsc --noEmit` → Exit 0 (0 errors).
+  - `cd client && npm run build` → Exit 0 (Vite build successful).
+  - `node --check` over all `server/src/**/*.js` → Exit 0 (0 syntax errors).
+
 
 
 

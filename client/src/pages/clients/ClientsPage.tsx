@@ -8,6 +8,8 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import CustomizeColumnsModal, { ColumnDefinition } from '../../components/CustomizeColumnsModal';
 import CustomSelect from '../../components/CustomSelect';
 import DatePicker from '../../components/DatePicker';
+import FilterModal from '../../components/FilterModal';
+import { TableSkeletonRows } from '../../components/SkeletonLoader';
 
 const CLIENT_COLUMNS: ColumnDefinition[] = [
   { key: 'name', label: 'Client', icon: 'user', defaultVisible: true },
@@ -59,6 +61,21 @@ function formatRelativeTime(dateStr?: string | Date) {
   return { time: new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }), label: '' };
 }
 
+const PAGE_SIZE_OPTIONS = [
+  { value: '10', label: '10 / page' },
+  { value: '25', label: '25 / page' },
+  { value: '50', label: '50 / page' },
+  { value: '100', label: '100 / page' },
+  { value: 'all', label: 'All records' },
+];
+
+function getPaginationRange(current: number, total: number): (number | string)[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  if (current <= 4) return [1, 2, 3, 4, 5, '...', total];
+  if (current >= total - 3) return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+  return [1, '...', current - 1, current, current + 1, '...', total];
+}
+
 export default function ClientsPage() {
   const { crmTerms, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -73,6 +90,7 @@ export default function ClientsPage() {
 
   // Column visibility & order
   const [showColumnsModal, setShowColumnsModal] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
   const [columnOrder, setColumnOrder] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem('crm_client_cols_order');
@@ -377,7 +395,7 @@ export default function ClientsPage() {
               <span className="lead-kpi-subtext">Won in last 7 days</span>
             </div>
             <div className="lead-kpi-num-stack">
-              <span className="lead-kpi-number">{clientStats.newClients}</span>
+              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : clientStats.newClients}</span>
               <span className="lead-kpi-trend trend-up">↑ {clientStats.newClients}</span>
             </div>
           </div>
@@ -394,7 +412,7 @@ export default function ClientsPage() {
               <span className="lead-kpi-subtext">Active relationships</span>
             </div>
             <div className="lead-kpi-num-stack">
-              <span className="lead-kpi-number">{clientStats.totalClients}</span>
+              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : clientStats.totalClients}</span>
             </div>
           </div>
         </a>
@@ -410,7 +428,7 @@ export default function ClientsPage() {
               <span className="lead-kpi-subtext">Converted client value</span>
             </div>
             <div className="lead-kpi-num-stack">
-              <span className="lead-kpi-number" style={{ fontSize: '1.15rem' }}>Rs. {(clientStats.totalValue || 0).toLocaleString('en-IN')}</span>
+              <span className="lead-kpi-number" style={{ fontSize: '1.15rem' }}>{loading ? <div className="skeleton-box" style={{ width: 80, height: 26, borderRadius: 6, display: 'inline-block' }} /> : `Rs. ${(clientStats.totalValue || 0).toLocaleString('en-IN')}`}</span>
             </div>
           </div>
         </a>
@@ -426,7 +444,7 @@ export default function ClientsPage() {
               <span className="lead-kpi-subtext">VIP accounts</span>
             </div>
             <div className="lead-kpi-num-stack">
-              <span className="lead-kpi-number">{clientStats.highPriorityCount || 0}</span>
+              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : (clientStats.highPriorityCount || 0)}</span>
             </div>
           </div>
         </a>
@@ -496,95 +514,25 @@ export default function ClientsPage() {
             Columns
           </button>
 
-          <details className="advanced-filters">
-            <summary className="btn secondary outline advanced-filters-summary">
-              <Filter size={13} />
-              <span>More filters</span>
-              {advancedFilterCount > 0 && (
-                <span className="advanced-filter-badge">
-                  {advancedFilterCount}
-                </span>
-              )}
-              <ChevronDown size={13} className="advanced-filter-caret" />
-            </summary>
-            <div className="advanced-filter-popover">
-              <header>
-                <strong>Filter {crmTerms.recordPlural.toLowerCase()}</strong>
-                <small>Narrow this workspace</small>
-              </header>
-              <div className="advanced-filter-fields">
-                <CustomSelect
-                  value={searchParams.get('label') || ''}
-                  onChange={val => handleFilterChange('label', val)}
-                  placeholder="All labels"
-                  options={[
-                    { value: '', label: 'All labels' },
-                    ...labels.map(l => ({ value: l._id, label: l.name }))
-                  ]}
-                />
-                <CustomSelect
-                  value={searchParams.get('campaign') || ''}
-                  onChange={val => handleFilterChange('campaign', val)}
-                  placeholder="All Campaigns"
-                  options={[
-                    { value: '', label: 'All Campaigns' },
-                    ...campaigns.map(c => ({ value: c._id, label: `${c.name}${c.platform ? ` (${c.platform})` : ''}` }))
-                  ]}
-                />
-                <CustomSelect
-                  value={searchParams.get('sortBy') || 'recent'}
-                  onChange={val => handleFilterChange('sortBy', val)}
-                  options={[
-                    { value: 'recent', label: 'Recently Updated' },
-                    { value: 'old', label: `Oldest ${crmTerms.recordPlural.toLowerCase()}` },
-                    { value: 'highest-value', label: 'Highest Value' },
-                    { value: 'lowest-value', label: 'Lowest Value' },
-                    { value: 'name', label: `${crmTerms.recordSingular} name` },
-                  ]}
-                />
-                <DatePicker
-                  aria-label="From date"
-                  placeholder="From date"
-                  value={searchParams.get('dateFrom') || ''}
-                  onChange={val => handleFilterChange('dateFrom', val)}
-                />
-                <DatePicker
-                  aria-label="To date"
-                  placeholder="To date"
-                  value={searchParams.get('dateTo') || ''}
-                  onChange={val => handleFilterChange('dateTo', val)}
-                />
-              </div>
-              <footer>
-                <a href="#clear" onClick={e => { e.preventDefault(); clearAdvancedFilters(); }}>Clear</a>
-              </footer>
-            </div>
-          </details>
+          <button
+            type="button"
+            className={`btn secondary outline ${advancedFilterCount > 0 ? 'active' : ''}`}
+            onClick={() => setShowFilterModal(true)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 38 }}
+            title="Open advanced filter options"
+          >
+            <Filter size={13} />
+            <span>More filters</span>
+            {advancedFilterCount > 0 && (
+              <span className="advanced-filter-badge">
+                {advancedFilterCount}
+              </span>
+            )}
+          </button>
         </div>
 
         <div className="leads-toolbar-right">
-          {viewBeingSaved && (
-            <input
-              type="text"
-              className="saved-view-name-input"
-              placeholder="Name this view…"
-              autoFocus
-              style={{ width: 130, height: 38, padding: '0 0.6rem', fontSize: '0.78rem', background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 8 }}
-              onKeyDown={e => { if (e.key === 'Enter') void saveCurrentView(); if (e.key === 'Escape') setViewBeingSaved(false); }}
-            />
-          )}
-          <button className="btn secondary outline" type="button" disabled={savingView} onClick={() => void saveCurrentView()} title="Save the current filters and columns as a reusable view">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            {viewBeingSaved ? 'Save view' : 'Save current view'}
-          </button>
-          <div className="view-toggle-group">
-            <Link to="/clients" className="view-toggle-btn active" title="List view">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-            </Link>
-            <Link to="/pipeline" className="view-toggle-btn" title="Kanban view">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg>
-            </Link>
-          </div>
+
 
           {isManager && (
             <Link className="btn secondary outline" to="/customers/duplicates">
@@ -698,9 +646,8 @@ export default function ClientsPage() {
             {/* Deselect All */}
             <button
               type="button"
-              className="btn small ghost"
+              className="bulk-dismiss-btn"
               title="Clear selection"
-              style={{ borderRadius: '50%', width: 34, height: 34, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
               onClick={() => {
                 setSelectedIds(new Set());
                 setBulkAction('');
@@ -719,39 +666,56 @@ export default function ClientsPage() {
           <span>
             Showing {clients.length ? ((pagination.page - 1) * pagination.pageSize) + 1 : 0}-{Math.min(pagination.page * pagination.pageSize, pagination.totalResults)} of {pagination.totalResults} results
           </span>
-          <div className="leads-quick-page-arrows">
-            {pagination.page > 1 ? (
-              <a
-                href={`#/clients?page=${pagination.page - 1}`}
-                onClick={e => {
-                  e.preventDefault();
-                  const params = new URLSearchParams(searchParams);
-                  params.set('page', String(pagination.page - 1));
-                  setSearchParams(params);
-                }}
-                aria-label="Previous page"
-              >
-                ‹
-              </a>
-            ) : (
-              <span className="disabled">‹</span>
-            )}
-            {pagination.page < pagination.totalPages ? (
-              <a
-                href={`#/clients?page=${pagination.page + 1}`}
-                onClick={e => {
-                  e.preventDefault();
-                  const params = new URLSearchParams(searchParams);
-                  params.set('page', String(pagination.page + 1));
-                  setSearchParams(params);
-                }}
-                aria-label="Next page"
-              >
-                ›
-              </a>
-            ) : (
-              <span className="disabled">›</span>
-            )}
+          {pagination.totalPages > 1 && (
+            <div className="leads-quick-page-arrows">
+              {pagination.page > 1 ? (
+                <a
+                  href={`#/clients?page=${pagination.page - 1}`}
+                  onClick={e => {
+                    e.preventDefault();
+                    const params = new URLSearchParams(searchParams);
+                    params.set('page', String(pagination.page - 1));
+                    setSearchParams(params);
+                  }}
+                  aria-label="Previous page"
+                >
+                  ‹
+                </a>
+              ) : (
+                <span className="disabled">‹</span>
+              )}
+              {pagination.page < pagination.totalPages ? (
+                <a
+                  href={`#/clients?page=${pagination.page + 1}`}
+                  onClick={e => {
+                    e.preventDefault();
+                    const params = new URLSearchParams(searchParams);
+                    params.set('page', String(pagination.page + 1));
+                    setSearchParams(params);
+                  }}
+                  aria-label="Next page"
+                >
+                  ›
+                </a>
+              ) : (
+                <span className="disabled">›</span>
+              )}
+            </div>
+          )}
+          <div className="leads-page-size-selector">
+            <span className="leads-page-size-label">Per page:</span>
+            <CustomSelect
+              variant="compact"
+              options={PAGE_SIZE_OPTIONS}
+              value={searchParams.get('pageSize') || String(pagination.pageSize || 50)}
+              onChange={val => {
+                const params = new URLSearchParams(searchParams);
+                params.set('pageSize', val);
+                params.set('page', '1');
+                setSearchParams(params);
+              }}
+              aria-label="Select page size"
+            />
           </div>
         </div>
       </div>
@@ -782,229 +746,282 @@ export default function ClientsPage() {
               {visibleColumns.value && <th>VALUE</th>}
               {visibleColumns.followup && <th>NEXT FOLLOW-UP</th>}
               {visibleColumns.lastActivity && <th>LAST ACTIVITY</th>}
-              {visibleColumns.labels && <th>LABELS</th>}
+            {visibleColumns.labels && <th>LABELS</th>}
               {visibleColumns.actions && <th style={{ width: 36, textAlign: 'center' }}></th>}
             </tr>
           </thead>
           <tbody>
-            {clients.map(client => {
-              const pal = getAvatarColor(client.name);
-              const initials = initialsOf(client.name);
-              const cleanPhone = (client.phone || '').replace(/\D/g, '');
-              const priority = (client.priority || 'medium').toLowerCase();
-              const relActivity = formatRelativeTime(client.updatedAt);
-              const companyName = client.company || (client.clientCompany as { name?: string })?.name || 'Direct Account';
-
-              return (
-                <tr key={client._id}>
-                  {isManager && (
-                    <td className="select-col">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(client._id)}
-                        onChange={() => toggleSelect(client._id)}
-                        aria-label={`Select ${client.name}`}
-                      />
-                    </td>
-                  )}
-
-                  {/* Column: Client Name */}
-                  {visibleColumns.name && (
-                    <td>
-                      <div className="lead-name-cell" style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-                        <span className="lead-avatar-pill" style={{ background: pal.bg, color: pal.color }} aria-hidden="true">
-                          {initials}
-                        </span>
-                        <div className="lead-name-text-stack">
-                          <Link to={`/customers/${client._id}?from=clients`} className="lead-name-link">
-                            {client.name}
-                          </Link>
-                        </div>
-                      </div>
-                    </td>
-                  )}
-
-                  {/* Column: Phone */}
-                  {visibleColumns.phone && (
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      {client.phone ? (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          <a href={`tel:${client.phone}`} style={{ color: 'var(--text)', textDecoration: 'none', fontWeight: 500, fontSize: '0.78rem' }}>
-                            {client.phone}
-                          </a>
-                          {cleanPhone && (
-                            <a
-                              href={`https://wa.me/${cleanPhone}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              title="Message on WhatsApp"
-                              style={{ color: '#10b981', display: 'inline-flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 700, textDecoration: 'none' }}
-                            >
-                              WA
-                            </a>
-                          )}
-                        </div>
-                      ) : (
-                        <span style={{ color: 'var(--muted, #94a3b8)', fontSize: '0.76rem' }}>—</span>
-                      )}
-                    </td>
-                  )}
-
-                  {/* Column: Email */}
-                  {visibleColumns.email && (
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      {client.email ? (
-                        <a href={`mailto:${client.email}`} style={{ color: 'var(--muted)', textDecoration: 'none', fontSize: '0.76rem' }}>
-                          {client.email}
-                        </a>
-                      ) : (
-                        <span style={{ color: 'var(--muted, #94a3b8)', fontSize: '0.76rem' }}>—</span>
-                      )}
-                    </td>
-                  )}
-
-                  {/* Column: Company / Business */}
-                  {visibleColumns.company && (
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <span style={{ fontWeight: 600, color: 'var(--text)', fontSize: '0.78rem' }}>
-                        {companyName}
-                      </span>
-                    </td>
-                  )}
-
-                  {/* Column: Source */}
-                  {visibleColumns.source && (
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <span style={{ color: 'var(--muted)', fontSize: '0.74rem' }}>
-                        {client.source || (client.campaign && client.campaign.platform) || 'Direct'}
-                      </span>
-                    </td>
-                  )}
-
-                  {/* Column: Status */}
-                  {visibleColumns.stage && (
-                    <td>
-                      <span
-                        className="stage-badge"
-                        style={{
-                          backgroundColor: client.stage?.color || '#059669',
-                          color: '#fff',
-                          padding: '3px 8px',
-                          borderRadius: 6,
-                          fontSize: '0.72rem',
-                          fontWeight: 700,
-                        }}
-                      >
-                        {client.stage?.name || 'Won'}
-                      </span>
-                    </td>
-                  )}
-
-                  {/* Column: Priority */}
-                  {visibleColumns.priority && (
-                    <td>
-                      <span className={`priority-badge priority-${priority}`}>
-                        {priority.charAt(0).toUpperCase() + priority.slice(1)}
-                      </span>
-                    </td>
-                  )}
-
-                  {/* Column: Value */}
-                  {visibleColumns.value && (
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <span className="lead-value-text">Rs. {(client.value || 0).toLocaleString('en-IN')}</span>
-                    </td>
-                  )}
-
-                  {/* Column: Next Follow-up */}
-                  {visibleColumns.followup && (
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      {client.nextFollowUpAt ? (
-                        <span style={{ fontWeight: 600, color: 'var(--text)', fontSize: '0.74rem' }}>
-                          {new Date(client.nextFollowUpAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}, {new Date(client.nextFollowUpAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--muted, #94a3b8)', fontSize: '0.74rem' }}>—</span>
-                      )}
-                    </td>
-                  )}
-
-                  {/* Column: Last Activity */}
-                  {visibleColumns.lastActivity && (
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <span style={{ fontWeight: 600, color: 'var(--text)', fontSize: '0.74rem' }}>
-                        {relActivity.time}
-                      </span>
-                    </td>
-                  )}
-
-                  {/* Column: Labels */}
-                  {visibleColumns.labels && (
-                    <td>
-                      <div className="label-row" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {(client.labels || []).map(lbl => (
-                          <span
-                            key={lbl._id}
-                            className="pill"
-                            style={{
-                              backgroundColor: `${lbl.color}18`,
-                              color: lbl.color,
-                              fontSize: '0.64rem',
-                              padding: '2px 6px',
-                              borderRadius: 4,
-                              fontWeight: 700
-                            }}
-                          >
-                            {lbl.name}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                  )}
-
-                  {/* Column: Actions */}
-                  {visibleColumns.actions && (
-                    <td style={{ textAlign: 'center' }}>
-                      <Link className="lead-action-menu-btn" to={`/customers/${client._id}?from=clients`} title="View details">
-                        ⋮
-                      </Link>
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-
-            {clients.length === 0 && (
+            {loading ? (
+              <TableSkeletonRows
+                rows={8}
+                hasSelect={Boolean(isManager)}
+                visibleColumns={visibleColumns}
+              />
+            ) : clients.length === 0 ? (
               <tr>
                 <td colSpan={13} className="empty-state" style={{ textAlign: 'center', padding: '3rem 1rem' }}>
                   No {crmTerms.recordPlural.toLowerCase()} found.
                 </td>
               </tr>
+            ) : (
+              clients.map(client => {
+                const pal = getAvatarColor(client.name);
+                const initials = initialsOf(client.name);
+                const cleanPhone = (client.phone || '').replace(/\D/g, '');
+                const priority = (client.priority || 'medium').toLowerCase();
+                const relActivity = formatRelativeTime(client.updatedAt);
+                const companyName = client.company || (client.clientCompany as { name?: string })?.name || 'Direct Account';
+
+                return (
+                  <tr key={client._id}>
+                    {isManager && (
+                      <td className="select-col">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(client._id)}
+                          onChange={() => toggleSelect(client._id)}
+                          aria-label={`Select ${client.name}`}
+                        />
+                      </td>
+                    )}
+
+                    {/* Column: Client Name */}
+                    {visibleColumns.name && (
+                      <td>
+                        <div className="lead-name-cell" style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+                          <span className="lead-avatar-pill" style={{ background: pal.bg, color: pal.color }} aria-hidden="true">
+                            {initials}
+                          </span>
+                          <div className="lead-name-text-stack">
+                            <Link to={`/customers/${client._id}?from=clients`} className="lead-name-link">
+                              {client.name}
+                            </Link>
+                          </div>
+                        </div>
+                      </td>
+                    )}
+
+                    {/* Column: Phone */}
+                    {visibleColumns.phone && (
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {client.phone ? (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <a href={`tel:${client.phone}`} style={{ color: 'var(--text)', textDecoration: 'none', fontWeight: 500, fontSize: '0.78rem' }}>
+                              {client.phone}
+                            </a>
+                            {cleanPhone && (
+                              <a
+                                href={`https://wa.me/${cleanPhone}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="Message on WhatsApp"
+                                style={{ color: '#10b981', display: 'inline-flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 700, textDecoration: 'none' }}
+                              >
+                                WA
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--muted, #94a3b8)', fontSize: '0.76rem' }}>—</span>
+                        )}
+                      </td>
+                    )}
+
+                    {/* Column: Email */}
+                    {visibleColumns.email && (
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {client.email ? (
+                          <a href={`mailto:${client.email}`} style={{ color: 'var(--muted)', textDecoration: 'none', fontSize: '0.76rem' }}>
+                            {client.email}
+                          </a>
+                        ) : (
+                          <span style={{ color: 'var(--muted, #94a3b8)', fontSize: '0.76rem' }}>—</span>
+                        )}
+                      </td>
+                    )}
+
+                    {/* Column: Company / Business */}
+                    {visibleColumns.company && (
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text)', fontSize: '0.78rem' }}>
+                          {companyName}
+                        </span>
+                      </td>
+                    )}
+
+                    {/* Column: Source */}
+                    {visibleColumns.source && (
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <span style={{ color: 'var(--muted)', fontSize: '0.74rem' }}>
+                          {client.source || (client.campaign && client.campaign.platform) || 'Direct'}
+                        </span>
+                      </td>
+                    )}
+
+                    {/* Column: Status */}
+                    {visibleColumns.stage && (
+                      <td>
+                        <span
+                          className="stage-badge"
+                          style={{
+                            backgroundColor: client.stage?.color || '#059669',
+                            color: '#fff',
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {client.stage?.name || 'Won'}
+                        </span>
+                      </td>
+                    )}
+
+                    {/* Column: Priority */}
+                    {visibleColumns.priority && (
+                      <td>
+                        <span className={`priority-badge priority-${priority}`}>
+                          {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                        </span>
+                      </td>
+                    )}
+
+                    {/* Column: Value */}
+                    {visibleColumns.value && (
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <span className="lead-value-text">Rs. {(client.value || 0).toLocaleString('en-IN')}</span>
+                      </td>
+                    )}
+
+                    {/* Column: Next Follow-up */}
+                    {visibleColumns.followup && (
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {client.nextFollowUpAt ? (
+                          <span style={{ fontWeight: 600, color: 'var(--text)', fontSize: '0.74rem' }}>
+                            {new Date(client.nextFollowUpAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}, {new Date(client.nextFollowUpAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--muted, #94a3b8)', fontSize: '0.74rem' }}>—</span>
+                        )}
+                      </td>
+                    )}
+
+                    {/* Column: Last Activity */}
+                    {visibleColumns.lastActivity && (
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text)', fontSize: '0.74rem' }}>
+                          {relActivity.time}
+                        </span>
+                      </td>
+                    )}
+
+                    {/* Column: Labels */}
+                    {visibleColumns.labels && (
+                      <td>
+                        <div className="label-row" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {(client.labels || []).map(lbl => (
+                            <span
+                              key={lbl._id}
+                              className="pill"
+                              style={{
+                                backgroundColor: `${lbl.color}18`,
+                                color: lbl.color,
+                                fontSize: '0.64rem',
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                fontWeight: 700
+                              }}
+                            >
+                              {lbl.name}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    )}
+
+                    {/* Column: Actions */}
+                    {visibleColumns.actions && (
+                      <td style={{ textAlign: 'center' }}>
+                        <Link className="lead-action-menu-btn" to={`/customers/${client._id}?from=clients`} title="View details">
+                          ⋮
+                        </Link>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </section>
 
       {/* 7. Bottom Pagination Footer */}
-      {pagination.totalPages > 1 && (
+      {pagination.totalResults > 0 && (
         <div className="leads-table-footer">
           <span className="leads-total-count">
             Page {pagination.page} of {pagination.totalPages} ({pagination.totalResults} total {crmTerms.recordPlural.toLowerCase()})
           </span>
-          <div className="leads-pagination-nav">
-            {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map(page => (
-              <button
-                key={page}
-                className={`page-btn page-num ${page === pagination.page ? 'active' : ''}`}
-                onClick={() => {
-                  const params = new URLSearchParams(searchParams);
-                  params.set('page', String(page));
-                  setSearchParams(params);
-                }}
-              >
-                {page}
-              </button>
-            ))}
+          {pagination.totalPages > 1 && (
+            <div className="leads-pagination-nav">
+              {pagination.page > 1 && (
+                <button
+                  className="page-btn page-nav-arrow"
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams);
+                    params.set('page', String(pagination.page - 1));
+                    setSearchParams(params);
+                  }}
+                  aria-label="Previous page"
+                >
+                  ‹
+                </button>
+              )}
+              {getPaginationRange(pagination.page, pagination.totalPages).map((page, idx) =>
+                typeof page === 'number' ? (
+                  <button
+                    key={page}
+                    className={`page-btn page-num ${page === pagination.page ? 'active' : ''}`}
+                    onClick={() => {
+                      const params = new URLSearchParams(searchParams);
+                      params.set('page', String(page));
+                      setSearchParams(params);
+                    }}
+                  >
+                    {page}
+                  </button>
+                ) : (
+                  <span key={`ellipsis-${idx}`} className="page-ellipsis">…</span>
+                )
+              )}
+              {pagination.page < pagination.totalPages && (
+                <button
+                  className="page-btn page-nav-arrow"
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams);
+                    params.set('page', String(pagination.page + 1));
+                    setSearchParams(params);
+                  }}
+                  aria-label="Next page"
+                >
+                  ›
+                </button>
+              )}
+            </div>
+          )}
+          <div className="leads-footer-page-size">
+            <span className="leads-page-size-label">Rows per page:</span>
+            <CustomSelect
+              variant="compact"
+              options={PAGE_SIZE_OPTIONS}
+              value={searchParams.get('pageSize') || String(pagination.pageSize || 50)}
+              onChange={val => {
+                const params = new URLSearchParams(searchParams);
+                params.set('pageSize', val);
+                params.set('page', '1');
+                setSearchParams(params);
+              }}
+              aria-label="Select page size"
+            />
           </div>
         </div>
       )}
@@ -1017,6 +1034,42 @@ export default function ClientsPage() {
         loading={applyingBulk}
         onCancel={() => setConfirmBulkDelete(false)}
         onConfirm={() => { setConfirmBulkDelete(false); void handleBulkAction(true); }}
+      />
+
+      <FilterModal
+        isOpen={showFilterModal}
+        onClose={() => setShowFilterModal(false)}
+        title="Filter clients"
+        subtitle="Narrow this workspace to find the right clients"
+        recordType="clients"
+        labelValue={searchParams.get('label') || ''}
+        campaignValue={searchParams.get('campaign') || ''}
+        sortByValue={searchParams.get('sortBy') || 'recent'}
+        dateFromValue={searchParams.get('dateFrom') || ''}
+        dateToValue={searchParams.get('dateTo') || ''}
+        labelOptions={[
+          { value: '', label: 'All labels' },
+          ...labels.map(l => ({ value: l._id, label: l.name }))
+        ]}
+        campaignOptions={[
+          { value: '', label: 'All Campaigns' },
+          ...campaigns.map(c => ({ value: c._id, label: `${c.name}${c.platform ? ` (${c.platform})` : ''}` }))
+        ]}
+        onApply={filters => {
+          const params = new URLSearchParams(searchParams);
+          for (const [key, val] of Object.entries(filters)) {
+            if (val && !(key === 'sortBy' && val === 'recent')) {
+              params.set(key, val);
+            } else if (key === 'sortBy' && val === 'recent') {
+              params.delete('sortBy');
+            } else {
+              params.delete(key);
+            }
+          }
+          params.delete('page');
+          setSearchParams(params);
+        }}
+        onClear={clearAdvancedFilters}
       />
 
       {/* Columns Customization Modal */}

@@ -94,10 +94,22 @@ router.get('/', async (req, res, next) => {
         : [],
     ]);
 
-    const { q, status, role } = req.query;
+    const { q, status, role, company } = req.query;
     const query = String(q || '').toLowerCase().trim();
 
-    const users = allUsers.filter(member => {
+    // Enrich users with their assigned companies/workspaces
+    const usersWithCompanies = allUsers.map(member => {
+      const userCompanies = companies
+        .filter(c => (c.assignedUsers || []).some(u => String(u._id || u) === String(member._id)))
+        .map(c => ({ _id: c._id, name: c.name, isMain: c.isMain }));
+      return {
+        ...member,
+        assignedCompanies: userCompanies,
+        assignedCompanyIds: userCompanies.map(c => String(c._id)),
+      };
+    });
+
+    const users = usersWithCompanies.filter(member => {
       const matchesQuery =
         !query ||
         [member.name, member.email, member.customRole?.name, ROLE_DEFINITIONS[member.role]?.label].some(v =>
@@ -110,7 +122,12 @@ router.get('/', async (req, res, next) => {
         (role.startsWith('custom:')
           ? String(member.customRole?._id || '') === role.slice(7)
           : member.role === role);
-      return matchesQuery && matchesStatus && matchesRole;
+      const matchesCompany =
+        !company ||
+        (company === 'unassigned'
+          ? member.assignedCompanies.length === 0
+          : member.assignedCompanyIds.includes(String(company)));
+      return matchesQuery && matchesStatus && matchesRole && matchesCompany;
     });
 
     res.json({
@@ -458,6 +475,10 @@ router.post('/import', teamImportLimiter, async (req, res, next) => {
         continue;
       }
       if (customRoleName && !customRole) {
+        if (req.user.role !== 'admin') {
+          skipped += 1;
+          continue;
+        }
         const template = customRoleTemplates[permissionTemplate];
         if (!template) {
           skipped += 1;
@@ -470,7 +491,7 @@ router.post('/import', teamImportLimiter, async (req, res, next) => {
       if (user) {
         const isSelf = String(user._id) === String(req.user._id);
         if (name) user.name = name;
-        if (!isSelf) user.role = role;
+        if (!isSelf && canAssignRole(req.user, role)) user.role = role;
         if (!isSelf && importsCustomRole) user.customRole = customRole?._id || null;
         if (!isSelf) user.isActive = isActive;
         if (password) {
@@ -539,6 +560,10 @@ router.get('/roles', async (req, res, next) => {
 // POST /api/team/roles — Create custom role
 router.post('/roles', async (req, res, next) => {
   try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ ok: false, error: 'Only administrators can manage custom roles.' });
+    }
+
     const organization = req.user.organization._id;
     const { name, permissions, scope, leadFieldPermissions, fieldPermissions, workTypePermissions } = req.body;
 
@@ -574,6 +599,10 @@ router.post('/roles', async (req, res, next) => {
 // PUT /api/team/roles/:id — Update custom role
 router.put('/roles/:id', async (req, res, next) => {
   try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ ok: false, error: 'Only administrators can manage custom roles.' });
+    }
+
     const organization = req.user.organization._id;
     const role = await CustomRole.findOne({ _id: req.params.id, organization });
 
@@ -609,6 +638,10 @@ router.put('/roles/:id', async (req, res, next) => {
 // DELETE /api/team/roles/:id — Delete custom role
 router.delete('/roles/:id', async (req, res, next) => {
   try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ ok: false, error: 'Only administrators can manage custom roles.' });
+    }
+
     const organization = req.user.organization._id;
     const role = await CustomRole.findOne({ _id: req.params.id, organization });
 

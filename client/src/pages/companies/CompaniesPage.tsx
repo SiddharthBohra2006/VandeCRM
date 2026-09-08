@@ -1,446 +1,287 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { LayoutGrid, List, Search, Plus, Users, ArrowRight, X } from 'lucide-react';
 import { companiesApi, Company, AssignedUser } from '../../api/companies';
 import { useAuth } from '../../contexts/AuthContext';
+import { hasPermission } from '../../utils/permissions';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import CustomSelect from '../../components/CustomSelect';
+import '../../styles/companies.css';
 
-const AVATAR_COLORS = ['#0f766e', '#b58d00', '#2563eb', '#dc2626', '#16a34a', '#7c3aed'];
+const BUSINESS_TYPES = { service: 'Service', consumer: 'Consumer', commerce: 'Commerce', other: 'Other' };
+const COLORS = ['#2563eb', '#7c3aed', '#059669', '#c2410c'];
 
 export default function CompaniesPage() {
-  const { user, activeCompany, switchCompany } = useAuth();
+  const { user, activeCompany, switchCompany, refreshUser } = useAuth();
+  const navigate = useNavigate();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [users, setUsers] = useState<AssignedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
-  // New company form state
+  const [statusTab, setStatusTab] = useState('all');
+  const [search, setSearch] = useState('');
+  const [businessType, setBusinessType] = useState('');
+  const [sort, setSort] = useState('updated');
+  const [view, setView] = useState('grid');
   const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newModuleSetup, setNewModuleSetup] = useState('agency');
+  const [name, setName] = useState('');
+  const [newType, setNewType] = useState('service');
+  const [template, setTemplate] = useState('agency');
   const [creating, setCreating] = useState(false);
-
-  // Access modal state
-  const [accessModalCompany, setAccessModalCompany] = useState<Company | null>(null);
-  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [opening, setOpening] = useState('');
+  const [statusCompany, setStatusCompany] = useState<Company | null>(null);
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [accessCompany, setAccessCompany] = useState<Company | null>(null);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [accessError, setAccessError] = useState('');
   const [savingAccess, setSavingAccess] = useState(false);
+  const accessDialog = useRef<HTMLDialogElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const canCreate = hasPermission(user, 'businesses.create');
+  const canUpdate = hasPermission(user, 'businesses.update');
 
+  useEffect(() => { void loadCompanies(); }, []);
   useEffect(() => {
-    loadCompanies();
-  }, []);
+    if (showCreate) {
+      nameInput.current?.focus();
+      nameInput.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [showCreate]);
+  useEffect(() => {
+    if (accessCompany) accessDialog.current?.showModal();
+    else accessDialog.current?.close();
+  }, [accessCompany]);
 
   async function loadCompanies() {
+    setLoading(true);
+    setError('');
     try {
-      setLoading(true);
-      setError('');
-      const res = await companiesApi.list();
-      setCompanies(res.data || []);
-      setUsers(res.users || []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load workspaces');
-    } finally {
-      setLoading(false);
-    }
+      const response = await companiesApi.list();
+      setCompanies(response.data);
+      setUsers(response.users);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load CRMs. Please try again.');
+    } finally { setLoading(false); }
   }
 
-  async function handleCreateCompany(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newName.trim()) return;
+  function resetFilters() {
+    setSearch('');
+    setBusinessType('');
+    setStatusTab('all');
+  }
+
+  async function createCompany(event: React.FormEvent) {
+    event.preventDefault();
+    if (creating || !name.trim()) return;
+    setCreating(true);
+    setError('');
+    setSuccess('');
     try {
-      setCreating(true);
-      setError('');
-      const res = await companiesApi.create({
-        name: newName.trim(),
-        moduleSetup: newModuleSetup,
-      });
-      setSuccess(`Workspace "${res.data.name}" created successfully.`);
-      setNewName('');
+      const response = await companiesApi.create({ name: name.trim(), businessType: newType, moduleSetup: template });
+      setCompanies(previous => [response.data, ...previous]);
+      resetFilters();
+      setSort('updated');
       setShowCreate(false);
+      setName('');
+      setNewType('service');
+      setTemplate('agency');
+      setSuccess(`“${response.data.name}” is ready. Select Open CRM to start working.`);
       await loadCompanies();
-    } catch (err: any) {
-      setError(err.message || 'Failed to create workspace');
-    } finally {
-      setCreating(false);
-    }
+      await refreshUser();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create CRM. Please try again.');
+    } finally { setCreating(false); }
   }
 
-  async function handleSetMain(companyId: string) {
+  async function openCompany(company: Company) {
+    if (opening) return;
+    setOpening(company._id);
+    setError('');
+    setSuccess('');
     try {
-      await companiesApi.setMain(companyId);
-      setSuccess('Main workspace updated.');
-      await loadCompanies();
-    } catch (err: any) {
-      setError(err.message || 'Failed to set main workspace');
-    }
+      if (activeCompany?._id !== company._id) await switchCompany(company._id);
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not open this CRM. Please try again.');
+    } finally { setOpening(''); }
   }
 
-  function openAccessModal(company: Company) {
-    setAccessModalCompany(company);
-    setSelectedUserIds((company.assignedUsers || []).map(u => u._id));
-    setUserSearchQuery('');
-  }
-
-  async function handleSaveAccess(e: React.FormEvent) {
-    e.preventDefault();
-    if (!accessModalCompany) return;
+  async function changeStatus() {
+    if (!statusCompany || savingStatus) return;
+    setSavingStatus(true);
+    setError('');
+    setSuccess('');
     try {
-      setSavingAccess(true);
-      await companiesApi.updateCollaborators(accessModalCompany._id, selectedUserIds);
-      setSuccess(`Access updated for ${accessModalCompany.name}.`);
-      setAccessModalCompany(null);
+      const status = statusCompany.status === 'inactive' ? 'active' : 'inactive';
+      const response = await companiesApi.setStatus(statusCompany._id, status);
+      setCompanies(previous => previous.map(company => company._id === response.data._id ? { ...company, ...response.data } : company));
+      setSuccess(`“${statusCompany.name}” ${status === 'active' ? 'restored' : 'archived'}.`);
+      setStatusCompany(null);
+      await refreshUser();
+    } catch (err) {
+      setStatusCompany(null);
+      setError(err instanceof Error ? err.message : 'Could not update CRM. Please try again.');
+    } finally { setSavingStatus(false); }
+  }
+
+  async function saveAccess(event: React.FormEvent) {
+    event.preventDefault();
+    if (!accessCompany || savingAccess) return;
+    setSavingAccess(true);
+    setAccessError('');
+    setSuccess('');
+    try {
+      await companiesApi.updateCollaborators(accessCompany._id, selectedUsers);
+      setSuccess(`Team access saved for “${accessCompany.name}”.`);
+      setAccessCompany(null);
       await loadCompanies();
-    } catch (err: any) {
-      setError(err.message || 'Failed to update access');
-    } finally {
-      setSavingAccess(false);
-    }
+      await refreshUser();
+    } catch (err) {
+      setAccessError(err instanceof Error ? err.message : 'Could not save access. Please try again.');
+    } finally { setSavingAccess(false); }
   }
 
-  function getAvatar(name: string) {
-    const initials = name
-      .split(' ')
-      .map(n => n[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase();
-    const colorIndex = (initials.charCodeAt(0) || 0) % AVATAR_COLORS.length;
-    return { initials, color: AVATAR_COLORS[colorIndex] };
-  }
+  const filtered = useMemo(() => companies.filter(company => {
+    if (statusTab === 'active' && company.status === 'inactive') return false;
+    if (statusTab === 'archived' && company.status !== 'inactive') return false;
+    if (businessType && (company.businessType || 'service') !== businessType) return false;
+    const query = search.trim().toLowerCase();
+    return [company.name, company.businessType || 'service', company.category, company.accountOwner?.name]
+      .some(value => value?.toLowerCase().includes(query));
+  }).sort((a, b) => {
+    if (sort === 'name') return a.name.localeCompare(b.name);
+    if (sort === 'leads') return (b.leadCount || 0) - (a.leadCount || 0);
+    return new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime();
+  }), [companies, statusTab, search, businessType, sort]);
+  const archivedCount = companies.filter(company => company.status === 'inactive').length;
+  const matchingUsers = users.filter(member => ['admin', 'manager', 'agent'].includes(member.role || '') &&
+    `${member.name} ${member.email || ''}`.toLowerCase().includes(userSearch.trim().toLowerCase()));
 
-  const canCreate = user?.role === 'admin' || user?.role === 'manager';
+  return <div className="crms-page-shell">
+    <header className="crms-header">
+      <div><div className="crms-eyebrow">WORKSPACES</div><h1>CRMs</h1>
+        <p>Choose a workspace to manage its leads, work, and team.</p></div>
+      {canCreate && <button className="crms-primary" disabled={creating} aria-expanded={showCreate} aria-controls="create-crm"
+        onClick={() => setShowCreate(!showCreate)}>{showCreate ? <X size={17} /> : <Plus size={17} />}{showCreate ? 'Cancel' : 'New CRM'}</button>}
+    </header>
+    {error && <div className="crms-notice crms-error" role="alert">{error}<button onClick={() => void loadCompanies()} disabled={loading}>Reload CRMs</button></div>}
+    {success && <div className="crms-notice crms-success" role="status">{success}</div>}
 
-  if (loading) {
-    return <div className="loading" style={{ padding: '2rem', textAlign: 'center' }}>Loading workspaces...</div>;
-  }
+    {showCreate && <form id="create-crm" className="crms-create" onSubmit={createCompany}>
+      <h2>Create a CRM</h2><p>Give it a name. You can change the details later.</p>
+      <fieldset disabled={creating}>
+        <label>Workspace name<input ref={nameInput} required maxLength={160} value={name} onChange={event => setName(event.target.value)} placeholder="e.g. MedLife Clinics" /></label>
+        <label>Business type
+          <CustomSelect
+            value={newType}
+            onChange={val => setNewType(val)}
+            options={Object.entries(BUSINESS_TYPES).map(([value, label]) => ({ value, label }))}
+          />
+        </label>
+        <label>Starting setup
+          <CustomSelect
+            value={template}
+            onChange={val => setTemplate(val)}
+            options={[
+              { value: 'agency', label: 'Agency starter' },
+              { value: 'blank', label: 'Basic CRM + tasks' }
+            ]}
+          />
+        </label>
+      </fieldset>
+      <p className="crms-hint">{template === 'agency' ? 'Includes tasks, meetings, videos, designs, websites, content, and payments.' : 'Start with leads and tasks. Add more work types in Settings when needed.'}</p>
+      <button type="submit" className="crms-primary" disabled={creating || !name.trim()}>{creating ? 'Creating…' : 'Create CRM'}</button>
+    </form>}
 
-  return (
-    <div className="page-container">
-      {error && <div className="auth-error" style={{ marginBottom: '1.5rem' }}>{error}</div>}
-      {success && <div className="notice success" style={{ marginBottom: '1.5rem' }}>{success}</div>}
-
-      <section className="page-head">
-        <div>
-          <p className="eyebrow">Agency Portfolio</p>
-          <h1>CRMs</h1>
-          <p className="page-subtitle">Manage independent workspaces for your leads, clients, work, campaigns, and team.</p>
-        </div>
-        {canCreate && (
-          <button
-            type="button"
-            className="btn primary"
-            onClick={() => setShowCreate(!showCreate)}
-          >
-            {showCreate ? 'Cancel' : 'New CRM'}
-          </button>
-        )}
-      </section>
-
-      {/* Create CRM Drawer */}
-      {showCreate && (
-        <form
-          onSubmit={handleCreateCompany}
-          style={{
-            marginBottom: '2rem',
-            padding: '1.5rem',
-            border: '1px solid var(--border)',
-            borderRadius: '12px',
-            background: 'var(--panel)',
-            boxShadow: 'var(--shadow-soft)',
-          }}
-        >
-          <h2 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '1.25rem' }}>Create a new CRM</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              CRM Name *
-              <input
-                required
-                placeholder="e.g. Notes Ninja"
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-              />
-            </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-              Starting modules (optional)
-              <select
-                value={newModuleSetup}
-                onChange={e => setNewModuleSetup(e.target.value)}
-              >
-                <option value="agency">Agency starter (Tasks, Videos, Designs, Websites, Content)</option>
-                <option value="blank">Start blank</option>
-              </select>
-            </label>
-          </div>
-          <button className="btn primary" type="submit" disabled={creating}>
-            {creating ? 'Creating...' : 'Create CRM'}
-          </button>
-        </form>
-      )}
-
-      {/* Grid of Workspaces */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.5rem' }}>
-        {companies.length === 0 ? (
-          <p className="empty" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem', color: 'var(--muted)' }}>
-            No CRMs created yet.
-          </p>
-        ) : (
-          companies.map(company => {
-            const { initials, color } = getAvatar(company.name);
-            const isCurrentActive = activeCompany?._id === company._id;
-            const assignedList = company.assignedUsers || [];
-
-            return (
-              <div
-                key={company._id}
-                className="profile-panel"
-                style={{
-                  padding: '1.5rem',
-                  border: isCurrentActive ? '2px solid var(--teal)' : '1px solid var(--border)',
-                  borderRadius: '12px',
-                  background: 'var(--panel)',
-                  boxShadow: 'var(--shadow-soft)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  gap: '1.25rem',
-                }}
-              >
-                <div>
-                  {/* Brand Header */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                    <div
-                      style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '10px',
-                        background: color,
-                        color: '#fff',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 800,
-                        fontSize: '1.15rem',
-                      }}
-                    >
-                      {initials}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <Link to={`/companies/${company._id}`} style={{ textDecoration: 'none' }}>
-                        <h2 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {company.name}
-                        </h2>
-                      </Link>
-                      <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: 'var(--muted)' }}>
-                        {company.website ? (
-                          <a href={company.website} target="_blank" rel="noreferrer" style={{ color: 'var(--teal)' }}>
-                            {company.website}
-                          </a>
-                        ) : (
-                          'No website URL'
-                        )}
-                      </p>
-                    </div>
-                    <span
-                      className="stage-badge"
-                      style={{
-                        backgroundColor: company.status === 'active' ? 'var(--green, #16a34a)' : 'var(--red, #dc2626)',
-                        color: '#fff',
-                        fontSize: '0.65rem',
-                        padding: '2px 6px',
-                      }}
-                    >
-                      {company.status.toUpperCase()}
-                    </span>
-                  </div>
-
-                  {/* Badges */}
-                  <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginBottom: '0.8rem' }}>
-                    {company.isMain && <span className="pill" style={{ borderColor: 'var(--gold)' }}>MAIN CRM</span>}
-                    {isCurrentActive && <span className="pill" style={{ borderColor: 'var(--teal)', color: 'var(--teal)' }}>ACTIVE WORKSPACE</span>}
-                    <span className="pill">{(company.businessType || 'service').toUpperCase()}</span>
-                    <span className="pill">Health: {(company.healthStatus || 'healthy').toUpperCase()}</span>
-                    <span className="pill">Owner: {company.accountOwner ? company.accountOwner.name : 'Unassigned'}</span>
-                  </div>
-
-                  {user?.role === 'admin' && !company.isMain && company.status !== 'inactive' && (
-                    <button
-                      type="button"
-                      className="btn small"
-                      style={{ marginBottom: '0.8rem' }}
-                      onClick={() => handleSetMain(company._id)}
-                    >
-                      Make Main CRM
-                    </button>
-                  )}
-
-                  {/* Metrics Box */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', background: 'var(--bg-soft, rgba(255,255,255,0.03))', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <span style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase' }}>Campaigns</span>
-                      <strong style={{ fontSize: '0.95rem', color: 'var(--text)' }}>{company.campaignCount || 0} active</strong>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <span style={{ fontSize: '0.68rem', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase' }}>Total Leads</span>
-                      <strong style={{ fontSize: '0.95rem', color: 'var(--text)' }}>{company.leadCount || 0} leads</strong>
-                    </div>
-                  </div>
-
-                  {/* Assigned Team */}
-                  <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginBottom: '0.5rem' }}>
-                    Assigned team: <strong>{assignedList.length} {assignedList.length === 1 ? 'member' : 'members'}</strong>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    {!isCurrentActive ? (
-                      <button
-                        type="button"
-                        className="btn small primary"
-                        style={{ flex: 1, fontWeight: 700 }}
-                        onClick={() => switchCompany(company._id)}
-                      >
-                        Switch to this CRM
-                      </button>
-                    ) : (
-                      <span className="btn small disabled" style={{ flex: 1, textAlign: 'center', opacity: 0.7 }}>
-                        Current Active
-                      </span>
-                    )}
-                    <Link
-                      to={`/companies/${company._id}`}
-                      className="btn small outline"
-                      style={{ flex: 1, textAlign: 'center', fontWeight: 700 }}
-                    >
-                      View Details →
-                    </Link>
-                  </div>
-
-                  {canCreate && (
-                    <button
-                      type="button"
-                      className="btn small"
-                      style={{ width: '100%' }}
-                      onClick={() => openAccessModal(company)}
-                    >
-                      Manage workspace access
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })
-        )}
+    <section className="crms-toolbar" aria-label="Filter CRMs">
+      <div className="crms-tabs">
+        {[['all', 'All CRMs', companies.length], ['active', 'Active', companies.length - archivedCount], ['archived', 'Archived', archivedCount]].map(([value, label, count]) =>
+          <button key={value} aria-pressed={statusTab === value} onClick={() => setStatusTab(String(value))}>{label}<span>{count}</span></button>)}
       </div>
+      <div className="crms-controls">
+        <label className="crms-search"><Search size={16} /><input aria-label="Search CRMs" type="search" placeholder="Search CRMs…" value={search} onChange={event => setSearch(event.target.value)} /></label>
+        <CustomSelect
+          aria-label="Business type filter"
+          value={businessType}
+          onChange={val => setBusinessType(val)}
+          options={[
+            { value: '', label: 'All business types' },
+            ...Object.entries(BUSINESS_TYPES).map(([value, label]) => ({ value, label }))
+          ]}
+          variant="compact"
+        />
+        <CustomSelect
+          aria-label="Sort CRMs"
+          value={sort}
+          onChange={val => setSort(val)}
+          options={[
+            { value: 'updated', label: 'Last updated' },
+            { value: 'name', label: 'Name (A–Z)' },
+            { value: 'leads', label: 'Most leads' }
+          ]}
+          variant="compact"
+        />
+        <div className="crms-view"><button aria-label="Grid view" aria-pressed={view === 'grid'} onClick={() => setView('grid')}><LayoutGrid size={17} /></button>
+          <button aria-label="List view" aria-pressed={view === 'list'} onClick={() => setView('list')}><List size={17} /></button></div>
+      </div>
+    </section>
 
-      {/* Workspace Access Modal */}
-      {accessModalCompany && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '1rem',
-          }}
-        >
-          <div
-            style={{
-              background: 'var(--panel)',
-              border: '1px solid var(--border)',
-              borderRadius: '12px',
-              maxWidth: '500px',
-              width: '100%',
-              padding: '1.5rem',
-              boxShadow: 'var(--shadow-hard)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: '1.1rem' }}>Workspace Access</h2>
-                <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: 'var(--muted)' }}>
-                  {accessModalCompany.name} · Choose who can open this CRM
-                </p>
-              </div>
-              <button
-                type="button"
-                className="btn small"
-                onClick={() => setAccessModalCompany(null)}
-              >
-                &times;
-              </button>
-            </div>
+    {loading && <p role="status">Loading CRMs…</p>}
+    {!loading && !error && filtered.length === 0 && <section className="crms-empty"><h2>{companies.length ? 'No matching CRMs' : 'Create your first CRM'}</h2>
+      <p>{companies.length ? 'Try another search or clear the filters.' : 'Keep your leads and team together in one workspace.'}</p>
+      {companies.length > 0 ? <button onClick={resetFilters}>Clear filters</button> : canCreate && <button className="crms-primary" onClick={() => setShowCreate(true)}>New CRM</button>}</section>}
 
-            <input
-              type="search"
-              placeholder="Search team members…"
-              value={userSearchQuery}
-              onChange={e => setUserSearchQuery(e.target.value)}
-              style={{ width: '100%', marginBottom: '1rem' }}
-            />
-
-            <form onSubmit={handleSaveAccess}>
-              <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
-                {users
-                  .filter(u => u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) || (u.email && u.email.toLowerCase().includes(userSearchQuery.toLowerCase())))
-                  .map(u => {
-                    const isChecked = selectedUserIds.includes(u._id);
-                    return (
-                      <label
-                        key={u._id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.75rem',
-                          padding: '0.5rem',
-                          border: '1px solid var(--border)',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={e => {
-                            if (e.target.checked) {
-                              setSelectedUserIds(prev => [...prev, u._id]);
-                            } else {
-                              setSelectedUserIds(prev => prev.filter(id => id !== u._id));
-                            }
-                          }}
-                        />
-                        <div>
-                          <strong>{u.name}</strong>
-                          {u.email && <small style={{ display: 'block', color: 'var(--muted)' }}>{u.email}</small>}
-                        </div>
-                      </label>
-                    );
-                  })}
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setAccessModalCompany(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn primary"
-                  disabled={savingAccess}
-                >
-                  {savingAccess ? 'Saving...' : 'Save Access'}
-                </button>
-              </div>
-            </form>
+    <div className={`crms-grid ${view === 'list' ? 'crms-list' : ''}`} aria-busy={loading}>
+      {filtered.map(company => {
+        const current = company._id === activeCompany?._id;
+        const archived = company.status === 'inactive';
+        const members = company.assignedUsers || [];
+        const initials = company.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+        const color = COLORS[Array.from(company.name).reduce((sum, char) => sum + char.charCodeAt(0), 0) % COLORS.length];
+        return <article key={company._id} className={`crms-card ${current ? 'is-current' : ''}`} aria-label={company.name}>
+          <div className="crms-card-main"><div className="crms-card-head">
+            <div className="crms-avatar" style={{ background: color }} aria-hidden="true">{initials}</div>
+            <div className="crms-card-title"><h2><Link to={`/companies/${company._id}`}>{company.name}</Link></h2>
+              <span>{BUSINESS_TYPES[company.businessType || 'service'] || 'Other'}{company.accountOwner ? ` · ${company.accountOwner.name}` : ''}</span></div>
           </div>
-        </div>
-      )}
+          <div className="crms-badges"><span className={`crms-badge ${archived ? '' : 'active'}`}>{archived ? 'Archived' : company.status === 'onboarding' ? 'Onboarding' : 'Active'}</span>
+            {current && <span className="crms-badge current">Current workspace</span>}{company.isMain && <span className="crms-badge">Main CRM</span>}</div>
+          </div>
+          <div className="crms-metrics"><div><strong>{company.leadCount || 0}</strong><span>Leads</span></div><div><strong>{company.campaignCount || 0}</strong><span>Active campaigns</span></div>
+            <div><strong>{members.length}</strong><span>Team members</span></div></div>
+          <div className="crms-card-actions">
+            {!archived && <button className="crms-primary" disabled={!!opening} onClick={() => void openCompany(company)}>{opening === company._id ? 'Opening…' : 'Open CRM'}<ArrowRight size={15} /></button>}
+            <Link className="crms-button" to={`/companies/${company._id}`}>Details</Link>
+            {canUpdate && <button onClick={() => { setAccessCompany(company); setSelectedUsers(members.map(member => member._id)); setUserSearch(''); setAccessError(''); }}><Users size={15} />Team access</button>}
+            {canUpdate && <button className="crms-archive" disabled={!archived && (current || company.isMain)}
+              title={current ? 'Open another CRM before archiving this one.' : company.isMain ? 'The main CRM cannot be archived.' : undefined}
+              onClick={() => setStatusCompany(company)}>{archived ? 'Restore' : 'Archive'}</button>}
+          </div>
+        </article>;
+      })}
     </div>
-  );
+    {companies.length > 0 && <p className="crms-results" aria-live="polite">Showing {filtered.length} of {companies.length} CRMs</p>}
+
+    <dialog ref={accessDialog} className="crms-dialog" aria-labelledby="crm-access-title" onCancel={event => { event.preventDefault(); if (!savingAccess) setAccessCompany(null); }}>
+      <form onSubmit={saveAccess}><header><h2 id="crm-access-title">Team access</h2><button type="button" aria-label="Close team access" disabled={savingAccess} onClick={() => setAccessCompany(null)}><X size={18} /></button></header>
+        <p>{accessCompany?.name}</p><p className="crms-hint">Admins and managers already have access to all CRMs. Select the agents who should access this workspace.</p>
+        {accessError && <div role="alert" className="crms-notice crms-error">{accessError}</div>}
+        <input type="search" aria-label="Search team members" placeholder="Search team members…" value={userSearch} onChange={event => setUserSearch(event.target.value)} />
+        <fieldset disabled={savingAccess} className="crms-members">
+          {matchingUsers.map(member => <label key={member._id}><input type="checkbox" checked={['admin', 'manager'].includes(member.role || '') || selectedUsers.includes(member._id)}
+            disabled={['admin', 'manager'].includes(member.role || '') || member._id === user?._id}
+            onChange={event => setSelectedUsers(previous => event.target.checked ? [...previous, member._id] : previous.filter(id => id !== member._id))} />
+            <span><strong>{member.name}</strong><small>{member.email} · {member.role}</small></span></label>)}
+          {!matchingUsers.length && <p>No team members match your search.</p>}
+        </fieldset>
+        <footer><button type="button" disabled={savingAccess} onClick={() => setAccessCompany(null)}>Cancel</button><button className="crms-primary" disabled={savingAccess}>{savingAccess ? 'Saving…' : 'Save access'}</button></footer>
+      </form>
+    </dialog>
+    <ConfirmDialog open={!!statusCompany} title={statusCompany?.status === 'inactive' ? 'Restore CRM?' : 'Archive CRM?'}
+      message={statusCompany?.status === 'inactive' ? `Restore “${statusCompany.name}” so its team can open it again.` : `Archive “${statusCompany?.name}”? Its data is kept, but its team cannot open it until you restore it.`}
+      confirmText={statusCompany?.status === 'inactive' ? 'Restore CRM' : 'Archive CRM'} variant="warning" loading={savingStatus}
+      onConfirm={() => void changeStatus()} onCancel={() => setStatusCompany(null)} />
+  </div>;
 }
