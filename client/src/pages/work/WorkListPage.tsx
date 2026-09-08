@@ -9,6 +9,7 @@ import DatePicker from '../../components/DatePicker';
 import CustomSelect from '../../components/CustomSelect';
 import BulkCreateModal from '../../components/work/BulkCreateModal';
 import WorkTypeBuilder from '../settings/WorkTypeBuilder';
+import Icon from '../../components/Icons';
 import { Settings as SettingsIcon } from 'lucide-react';
 
 type ViewMode = 'list' | 'board' | 'calendar' | 'overview';
@@ -985,58 +986,90 @@ function setParam(key: string, value: string) {
       )}
       {/* Import CSV Modal */}
       {showImport && (
-        <div className="simple-dialog work-form-dialog" style={{ position: 'fixed', inset: 0, margin: 'auto', zIndex: 60, boxShadow: '0 24px 70px rgba(0,0,0,.35)', maxHeight: '85vh', overflowY: 'auto' }}>
-          <form onSubmit={handleConfirmImport} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Import {workType?.name || type} CSV</h2>
-              <button className="modal-close" type="button" onClick={() => setShowImport(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--muted)' }}>&times;</button>
-            </div>
-            <p className="page-subtitle" style={{ margin: 0, color: 'var(--muted)', fontSize: '0.82rem' }}>
-              Use headers: <code>title</code>, <code>status</code>, <code>assignedTo</code>, <code>priority</code>, <code>deadline</code>, <code>notes</code>, plus each custom-field key.
-            </p>
-            
-            <input
-              type="file"
-              accept=".xlsx,.xls,.csv,text/csv"
-              onChange={handleFileChange}
-              style={{ border: '1px dashed var(--border)', padding: '1rem', borderRadius: '8px', background: 'var(--panel-muted)' }}
-            />
-
-            {importHeaders.length > 0 && (
-              <div style={{ marginTop: '0.5rem', border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
-                <div style={{ padding: '0.5rem 0.75rem', background: 'var(--panel-muted)', borderBottom: '1px solid var(--border)', fontSize: '0.78rem', fontWeight: 800 }}>
-                  CSV Preview ({importPreviewRows.length} sample row{importPreviewRows.length === 1 ? '' : 's'})
+        <div className="modal-overlay" onClick={() => setShowImport(false)} style={{ zIndex: 100050 }}>
+          <div
+            className="modal-card"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '600px', width: '90%', padding: '1.5rem', borderRadius: '14px' }}
+          >
+            <form onSubmit={handleConfirmImport} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h2 style={{ margin: '0 0 0.2rem', fontSize: '1.2rem', fontWeight: 800 }}>
+                    Import {workType?.name || type} CSV
+                  </h2>
+                  <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.78rem' }}>
+                    Supported headers: <code>title</code>, <code>status</code>, <code>assignedTo</code>, <code>priority</code>, <code>deadline</code>, <code>notes</code>
+                  </p>
                 </div>
-                <div style={{ overflowX: 'auto', maxHeight: '200px' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--panel-muted)', borderBottom: '1px solid var(--border)' }}>
-                        {importHeaders.map((h, i) => (
-                          <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 700 }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {importPreviewRows.map((r, ri) => (
-                        <tr key={ri} style={{ borderBottom: '1px solid var(--border)' }}>
-                          {importHeaders.map((_, ci) => (
-                            <td key={ci} style={{ padding: '6px 10px' }}>{r[ci] || '—'}</td>
+                <button
+                  type="button"
+                  className="btn small outline"
+                  onClick={() => setShowImport(false)}
+                  style={{ padding: '4px 8px', borderRadius: '6px' }}
+                  aria-label="Close"
+                >
+                  <Icon name="x" size={16} />
+                </button>
+              </div>
+
+              <div style={{
+                border: '1px dashed var(--border)',
+                borderRadius: '10px',
+                padding: '1.25rem',
+                background: 'var(--bg-soft, rgba(0,0,0,0.02))',
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}>
+                <Icon name="upload" size={24} style={{ color: 'var(--muted)', opacity: 0.8 }} />
+                <span style={{ fontSize: '0.8rem', color: 'var(--text)', fontWeight: 600 }}>Choose a CSV or Excel spreadsheet</span>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv,text/csv"
+                  onChange={handleFileChange}
+                  style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '4px' }}
+                />
+              </div>
+
+              {importHeaders.length > 0 && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+                  <div style={{ padding: '0.5rem 0.75rem', background: 'var(--bg-soft, #f8fafc)', borderBottom: '1px solid var(--border)', fontSize: '0.76rem', fontWeight: 800 }}>
+                    CSV Preview ({importPreviewRows.length} sample row{importPreviewRows.length === 1 ? '' : 's'})
+                  </div>
+                  <div style={{ overflowX: 'auto', maxHeight: '180px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--bg-soft, #f8fafc)', borderBottom: '1px solid var(--border)' }}>
+                          {importHeaders.map((h, i) => (
+                            <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 700, color: 'var(--muted)' }}>{h}</th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {importPreviewRows.map((r, ri) => (
+                          <tr key={ri} style={{ borderBottom: '1px solid var(--border)' }}>
+                            {importHeaders.map((_, ci) => (
+                              <td key={ci} style={{ padding: '6px 10px' }}>{r[ci] || '—'}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div className="form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <button className="btn" type="button" onClick={() => setShowImport(false)}>Cancel</button>
-              <button className="btn primary" type="submit" disabled={!importCsvText || importing}>
-                {importing ? 'Importing…' : 'Confirm Import'}
-              </button>
-            </div>
-          </form>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button className="btn small outline" type="button" onClick={() => setShowImport(false)}>Cancel</button>
+                <button className="btn primary small" type="submit" disabled={!importCsvText || importing}>
+                  {importing ? 'Importing…' : 'Confirm Import'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
