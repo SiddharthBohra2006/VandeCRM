@@ -172,7 +172,7 @@ router.post('/', async (req, res, next) => {
     }
 
     const role = canAssignRole(req.user, requestedRole) ? requestedRole : 'agent';
-    const customRole = customRoleId ? await CustomRole.findOne({ _id: customRoleId, organization }) : null;
+    const customRole = (customRoleId && req.user.role === 'admin') ? await CustomRole.findOne({ _id: customRoleId, organization }) : null;
 
     const passwordHash = await hashPassword(rawPassword);
     const user = await User.create({
@@ -232,7 +232,7 @@ router.put('/:id', async (req, res, next) => {
       user.role = requestedRole;
     }
 
-    if (!isSelf && customRoleId !== undefined) {
+    if (!isSelf && customRoleId !== undefined && req.user.role === 'admin') {
       if (customRoleId) {
         const cRole = await CustomRole.findOne({ _id: customRoleId, organization });
         user.customRole = cRole ? cRole._id : null;
@@ -492,7 +492,7 @@ router.post('/import', teamImportLimiter, async (req, res, next) => {
         const isSelf = String(user._id) === String(req.user._id);
         if (name) user.name = name;
         if (!isSelf && canAssignRole(req.user, role)) user.role = role;
-        if (!isSelf && importsCustomRole) user.customRole = customRole?._id || null;
+        if (!isSelf && importsCustomRole && req.user.role === 'admin') user.customRole = customRole?._id || null;
         if (!isSelf) user.isActive = isActive;
         if (password) {
           if (password.length < 8) {
@@ -510,7 +510,7 @@ router.post('/import', teamImportLimiter, async (req, res, next) => {
           email,
           passwordHash: await hashPassword(password),
           role,
-          customRole: customRole?._id || null,
+          customRole: (req.user.role === 'admin' && customRole) ? customRole._id : null,
           isActive
         });
         created += 1;

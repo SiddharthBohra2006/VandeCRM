@@ -661,18 +661,20 @@ export default function TeamPage() {
                   </select>
                 </label>
 
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-                  Custom Role (Optional)
-                  <select
-                    value={newMember.customRole || ''}
-                    onChange={e => setNewMember({ ...newMember, customRole: e.target.value || null })}
-                  >
-                    <option value="">No custom role (use system role)</option>
-                    {customRoles.map(cr => (
-                      <option key={cr._id} value={cr._id}>{cr.name}</option>
-                    ))}
-                  </select>
-                </label>
+                {user?.role === 'admin' && (
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
+                    Custom Role (Optional)
+                    <select
+                      value={newMember.customRole || ''}
+                      onChange={e => setNewMember({ ...newMember, customRole: e.target.value || null })}
+                    >
+                      <option value="">No custom role (use system role)</option>
+                      {customRoles.map(cr => (
+                        <option key={cr._id} value={cr._id}>{cr.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
@@ -1587,18 +1589,20 @@ export default function TeamPage() {
                 </select>
               </label>
 
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
-                Custom Role
-                <select
-                  value={editForm.customRole || ''}
-                  onChange={e => setEditForm({ ...editForm, customRole: e.target.value || null })}
-                >
-                  <option value="">No custom role (use system role)</option>
-                  {customRoles.map(cr => (
-                    <option key={cr._id} value={cr._id}>{cr.name}</option>
-                  ))}
-                </select>
-              </label>
+              {user?.role === 'admin' && (
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 800, color: 'var(--muted)' }}>
+                  Custom Role
+                  <select
+                    value={editForm.customRole || ''}
+                    onChange={e => setEditForm({ ...editForm, customRole: e.target.value || null })}
+                  >
+                    <option value="">No custom role (use system role)</option>
+                    {customRoles.map(cr => (
+                      <option key={cr._id} value={cr._id}>{cr.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
 
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', marginTop: '0.5rem' }}>
                 <input

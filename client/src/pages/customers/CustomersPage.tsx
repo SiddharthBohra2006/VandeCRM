@@ -187,6 +187,7 @@ export default function CustomersPage() {
   const isManager = Boolean(user);
 
   useEffect(() => {
+    setSelectedIds(new Set());
     loadData();
   }, [searchParams.toString()]);
 
@@ -202,6 +203,14 @@ export default function CustomersPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function escapeCsvValue(val: unknown): string {
+    let text = String(val ?? '');
+    if (/^[=+\-@\t\r]/.test(text)) {
+      text = `'${text}`;
+    }
+    return `"${text.replace(/"/g, '""')}"`;
   }
 
   async function handleDirectBulk(action: string, value: string) {
@@ -249,24 +258,26 @@ export default function CustomersPage() {
     if (!selectedCustomers.length) return;
     const headers = ['Name', 'Phone', 'Email', 'Company', 'Stage', 'Priority', 'Value', 'Source', 'Course'];
     const rows = selectedCustomers.map(c => [
-      `"${(c.name || '').replace(/"/g, '""')}"`,
-      `"${(c.phone || '').replace(/"/g, '""')}"`,
-      `"${(c.email || '').replace(/"/g, '""')}"`,
-      `"${(c.company || '').replace(/"/g, '""')}"`,
-      `"${(c.stage?.name || '').replace(/"/g, '""')}"`,
-      `"${(c.priority || '').replace(/"/g, '""')}"`,
-      `"${c.value || 0}"`,
-      `"${(c.source || '').replace(/"/g, '""')}"`,
-      `"${(c.campaign?.name || (c.customData?.specialization_course as string) || '').toString().replace(/"/g, '""')}"`,
+      escapeCsvValue(c.name),
+      escapeCsvValue(c.phone),
+      escapeCsvValue(c.email),
+      escapeCsvValue(c.company),
+      escapeCsvValue(c.stage?.name),
+      escapeCsvValue(c.priority),
+      escapeCsvValue(c.value || 0),
+      escapeCsvValue(c.source),
+      escapeCsvValue(c.campaign?.name || (c.customData?.specialization_course as string)),
     ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.setAttribute('href', url);
     link.setAttribute('download', `selected_leads_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   function handleBulkApply() {
@@ -387,8 +398,9 @@ export default function CustomersPage() {
   }
 
   function selectAll() {
-    if (!data) return;
-    if (selectedIds.size === data.data.length) {
+    if (!data || !data.data.length) return;
+    const isAllSelected = data.data.every(c => selectedIds.has(c._id));
+    if (isAllSelected) {
       setSelectedIds(new Set());
     } else {
       setSelectedIds(new Set(data.data.map(c => c._id)));
@@ -871,7 +883,7 @@ export default function CustomersPage() {
             </button>
 
             {/* Select All on Page / Deselect */}
-            {selectedIds.size < customers.length ? (
+            {!customers.every(c => selectedIds.has(c._id)) ? (
               <button
                 type="button"
                 className="btn small outline"
@@ -969,7 +981,7 @@ export default function CustomersPage() {
                 <th className="select-col" style={{ width: 36 }}>
                   <input
                     type="checkbox"
-                    checked={selectedIds.size === customers.length && customers.length > 0}
+                    checked={customers.length > 0 && customers.every(c => selectedIds.has(c._id))}
                     onChange={selectAll}
                     disabled={customers.length === 0}
                     aria-label="Select all leads"
