@@ -544,6 +544,14 @@ export default function WorkCenterPage() {
           <Icon name="calendar" size={16} />
           <span>Calendar</span>
         </button>
+
+        <Link
+          to="/work/threads"
+          className="work-view-tab"
+        >
+          <Icon name="message-square" size={16} />
+          <span>Team Chat</span>
+        </Link>
       </nav>
 
       {/* 3. Work Area Pills Filter */}
