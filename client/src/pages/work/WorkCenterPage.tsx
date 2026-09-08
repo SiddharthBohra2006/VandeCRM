@@ -549,7 +549,7 @@ export default function WorkCenterPage() {
           to="/work/threads"
           className="work-view-tab"
         >
-          <Icon name="message-square" size={16} />
+          <Icon name="send" size={16} />
           <span>Team Chat</span>
         </Link>
       </nav>
