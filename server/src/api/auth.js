@@ -251,10 +251,20 @@ router.post('/forgot-password', authRateLimit, async (req, res, next) => {
             subject,
             body: `We received a request to reset your password. Use this link within one hour:\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`,
           });
+          console.info('Password reset email accepted by SMTP.');
         } catch (emailError) {
-          console.error(`Password reset email failed for user ${user._id}:`, emailError.message);
+          user.passwordResetTokenHash = '';
+          user.passwordResetExpiresAt = null;
+          await user.save().catch(clearError => {
+            console.error('Failed to clear undelivered password reset token:', clearError.message);
+          });
+          console.error('Password reset email failed:', emailError.message);
         }
+      } else {
+        console.warn('Password reset skipped: no active SMTP account for user organization.');
       }
+    } else {
+      console.info('Password reset skipped: no active user matched.');
     }
 
     res.json({ ok: true, message: 'If an active account matches that email, we sent a password reset link.' });

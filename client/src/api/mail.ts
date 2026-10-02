@@ -48,7 +48,7 @@ export interface MailResponse {
 export const mailApi = {
   get: () => api.get<MailResponse>('/mail'),
   send: (data: { customerId: string; templateId?: string; subject: string; body: string }) =>
-    api.post<{ ok: true; data: EmailMessage }>('/mail/send', data),
+    api.post<{ ok: true; data: EmailMessage | null; warning?: string }>('/mail/send', data),
   createTemplate: (data: Partial<EmailTemplate>) =>
     api.post<{ ok: true; data: EmailTemplate }>('/mail/templates', data),
   updateTemplate: (id: string, data: Partial<EmailTemplate>) =>

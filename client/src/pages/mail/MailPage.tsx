@@ -134,13 +134,13 @@ export default function MailPage() {
     try {
       setSending(true);
       setError('');
-      await mailApi.send({
+      const result = await mailApi.send({
         customerId: composeCustomerId,
         templateId: composeTemplateId || undefined,
         subject: composeSubject.trim(),
         body: composeBody.trim(),
       });
-      setSuccess('Email sent successfully.');
+      setSuccess(result.warning || 'Email sent successfully.');
       setShowCompose(false);
       setComposeCustomerId('');
       setComposeTemplateId('');
@@ -456,7 +456,7 @@ export default function MailPage() {
                     Insert Merge Tag:
                   </small>
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    {['{{name}}', '{{company}}', '{{email}}', '{{phone}}', '{{dealValue}}', '{{user.name}}'].map(tag => (
+                    {['{{lead.name}}', '{{lead.company}}', '{{lead.email}}', '{{lead.phone}}', '{{lead.value}}', '{{user.name}}'].map(tag => (
                       <button
                         key={tag}
                         type="button"

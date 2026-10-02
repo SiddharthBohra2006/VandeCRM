@@ -6,11 +6,7 @@ function isValidEmail(value) {
 }
 
 function valueForToken(token, context) {
-  const [scope, key] = String(token || '').split('.');
-  if (!scope || !key) return '';
-  const source = context[scope];
-  if (!source) return '';
-  const value = source[key];
+  const value = String(token || '').split('.').reduce((source, key) => source == null ? undefined : source[key], context);
   if (value === null || value === undefined) return '';
   return String(value);
 }

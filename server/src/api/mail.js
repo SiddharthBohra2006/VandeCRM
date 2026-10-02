@@ -35,14 +35,18 @@ function normalizeSmtpHost(value) {
 }
 
 function buildRenderContext(req, customer) {
+  const lead = {
+    name: customer.name || '',
+    email: customer.email || '',
+    phone: customer.phone || '',
+    company: customer.company || '',
+    source: customer.source || '',
+    value: customer.value || 0,
+  };
   return {
-    lead: {
-      name: customer.name || '',
-      email: customer.email || '',
-      phone: customer.phone || '',
-      company: customer.company || '',
-      source: customer.source || '',
-    },
+    ...lead, // Keep older unscoped merge tags working.
+    dealValue: lead.value,
+    lead,
     user: {
       name: req.user.name || '',
       email: req.user.email || '',
@@ -72,7 +76,7 @@ router.get('/', async (req, res, next) => {
     const [account, templates, customers, messages] = await Promise.all([
       EmailAccount.findOne({ organization, isActive: true }).sort({ updatedAt: -1 }).lean(),
       EmailTemplate.find({ organization, isActive: true }).sort({ category: 1, name: 1 }).lean(),
-      Customer.find(getCustomerFilter(req, { email: { $nin: ['', null] } }))
+      Customer.find(getCustomerFilter(req, { email: { $exists: true, $nin: ['', null] } }))
         .populate('assignedTo clientCompany campaign')
         .sort({ updatedAt: -1 })
         .limit(150)
@@ -102,7 +106,7 @@ router.get('/', async (req, res, next) => {
           }
         : null,
       templates,
-      customers,
+      customers: customers.filter(customer => isValidEmail(customer.email)),
       messages,
       templateCategories,
     });
@@ -132,11 +136,10 @@ router.post('/send', mailSendLimiter, apiPermission('mail.create'), async (req, 
     let finalBody = rawBody;
 
     if (templateId) {
-      template = await EmailTemplate.findOne({ _id: templateId, organization });
-      if (template) {
-        finalSubject = finalSubject || template.subject;
-        finalBody = finalBody || template.body;
-      }
+      template = await EmailTemplate.findOne({ _id: templateId, organization, isActive: true });
+      if (!template) return res.status(404).json({ ok: false, error: 'Template not found.' });
+      finalSubject = finalSubject || template.subject;
+      finalBody = finalBody || template.body;
     }
 
     if (!finalSubject || !finalBody) {
@@ -147,43 +150,60 @@ router.post('/send', mailSendLimiter, apiPermission('mail.create'), async (req, 
     const renderedSubject = renderTemplate(finalSubject, context);
     const renderedBody = renderTemplate(finalBody, context);
 
-    await sendEmail({
-      account,
+    const delivery = await sendEmail(account, {
       to: customer.email,
       subject: renderedSubject,
-      text: renderedBody,
-    });
-
-    const emailMessage = await EmailMessage.create({
-      organization,
-      customer: customer._id,
-      sentBy: req.user._id,
-      template: template ? template._id : null,
-      toEmail: customer.email,
-      fromEmail: account.fromEmail,
-      subject: renderedSubject,
       body: renderedBody,
-      sentAt: new Date(),
     });
 
-    await Activity.create({
-      organization,
-      customer: customer._id,
-      user: req.user._id,
-      type: 'email',
-      note: `Sent email: "${renderedSubject}"`,
-      createdAt: new Date(),
-    });
+    let emailMessage = null;
+    try {
+      emailMessage = await EmailMessage.create({
+        organization,
+        customer: customer._id,
+        sentBy: req.user._id,
+        template: template ? template._id : null,
+        toEmail: customer.email,
+        fromEmail: account.fromEmail,
+        subject: renderedSubject,
+        body: renderedBody,
+        providerMessageId: delivery.messageId || '',
+        sentAt: new Date(),
+      });
+    } catch (recordError) {
+      // The SMTP server accepted the message; returning an error here invites duplicate sends on retry.
+      console.error('Email sent but mail history could not be saved:', recordError.message);
+    }
 
-    await logAudit(req, {
-      action: 'send_email',
-      entityType: 'customer',
-      entityId: customer._id,
-      entityName: customer.name,
-      message: `Email "${renderedSubject}" sent to ${customer.email}.`,
-    });
+    try {
+      await Activity.create({
+        organization,
+        customer: customer._id,
+        user: req.user._id,
+        type: 'email',
+        note: `Sent email: "${renderedSubject}"`,
+      });
+    } catch (recordError) {
+      console.error('Email sent but customer activity could not be saved:', recordError.message);
+    }
 
-    res.json({ ok: true, data: emailMessage });
+    try {
+      await logAudit(req, {
+        action: 'send_email',
+        entityType: 'customer',
+        entityId: customer._id,
+        entityName: customer.name,
+        message: `Email "${renderedSubject}" sent to ${customer.email}.`,
+      });
+    } catch (recordError) {
+      console.error('Email sent but audit record could not be saved:', recordError.message);
+    }
+
+    res.json({
+      ok: true,
+      data: emailMessage,
+      warning: emailMessage ? undefined : 'Email was sent, but its history could not be saved.',
+    });
   } catch (error) {
     next(error);
   }
@@ -239,10 +259,21 @@ router.put('/templates/:id', apiPermission('mail.update'), async (req, res, next
     }
 
     const { name, category, subject, body } = req.body;
-    if (name) template.name = String(name).trim();
-    if (category && templateCategories.includes(category)) template.category = category;
-    if (subject) template.subject = String(subject).trim();
-    if (body) template.body = String(body).trim();
+    if (category !== undefined && !templateCategories.includes(category)) {
+      return res.status(400).json({ ok: false, error: 'Invalid template category.' });
+    }
+    const next = {
+      name: name === undefined ? template.name : String(name).trim(),
+      subject: subject === undefined ? template.subject : String(subject).trim(),
+      body: body === undefined ? template.body : String(body).trim(),
+    };
+    if (!next.name || !next.subject || !next.body) {
+      return res.status(400).json({ ok: false, error: 'Name, subject, and body are required.' });
+    }
+    template.name = next.name;
+    template.subject = next.subject;
+    template.body = next.body;
+    if (category !== undefined) template.category = category;
     template.updatedBy = req.user._id;
 
     await template.save();
@@ -314,7 +345,7 @@ router.post('/settings', apiPermission('mail.update'), async (req, res, next) =>
       replyTo: normalizeEmail(replyTo),
       smtpHost: normalizedHost,
       smtpPort: portNum,
-      smtpSecure: Boolean(smtpSecure) || usesImplicitTls(portNum),
+      smtpSecure: smtpSecure === true || String(smtpSecure).toLowerCase() === 'true' || usesImplicitTls(portNum),
       smtpUsername: String(smtpUsername).trim(),
       isActive: true,
     };
