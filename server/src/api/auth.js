@@ -235,33 +235,41 @@ router.post('/forgot-password', authRateLimit, async (req, res, next) => {
 
     if (user) {
       const account = await EmailAccount.findOne({ organization: user.organization, isActive: true }).sort({ updatedAt: -1 });
-      if (account) {
-        const token = crypto.randomBytes(32).toString('hex');
-        user.passwordResetTokenHash = resetTokenHash(token);
-        user.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
-        await user.save();
+      if (!account) {
+        console.warn('Password reset unavailable: no active SMTP account for user organization.');
+        return res.status(503).json({
+          ok: false,
+          error: 'Password reset email is temporarily unavailable. Please try again later or contact your administrator.',
+        });
+      }
 
-        const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
-        const resetUrl = new URL(`/reset-password?token=${token}`, baseUrl).toString();
-        const orgDoc = await Organization.findById(user.organization).select('name').lean().catch(() => null);
-        const subject = `Reset your ${orgDoc?.name || 'CRM'} password`;
-        try {
-          await sendEmail(account, {
-            to: user.email,
-            subject,
-            body: `We received a request to reset your password. Use this link within one hour:\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`,
-          });
-          console.info('Password reset email accepted by SMTP.');
-        } catch (emailError) {
-          user.passwordResetTokenHash = '';
-          user.passwordResetExpiresAt = null;
-          await user.save().catch(clearError => {
-            console.error('Failed to clear undelivered password reset token:', clearError.message);
-          });
-          console.error('Password reset email failed:', emailError.message);
-        }
-      } else {
-        console.warn('Password reset skipped: no active SMTP account for user organization.');
+      const token = crypto.randomBytes(32).toString('hex');
+      user.passwordResetTokenHash = resetTokenHash(token);
+      user.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
+      await user.save();
+
+      const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const resetUrl = new URL(`/reset-password?token=${token}`, baseUrl).toString();
+      const orgDoc = await Organization.findById(user.organization).select('name').lean().catch(() => null);
+      const subject = `Reset your ${orgDoc?.name || 'CRM'} password`;
+      try {
+        await sendEmail(account, {
+          to: user.email,
+          subject,
+          body: `We received a request to reset your password. Use this link within one hour:\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`,
+        });
+        console.info('Password reset email accepted by SMTP.');
+      } catch (emailError) {
+        user.passwordResetTokenHash = '';
+        user.passwordResetExpiresAt = null;
+        await user.save().catch(clearError => {
+          console.error('Failed to clear undelivered password reset token:', clearError.message);
+        });
+        console.error('Password reset email failed:', emailError.message);
+        return res.status(503).json({
+          ok: false,
+          error: 'Password reset email could not be sent. Please try again later or contact your administrator.',
+        });
       }
     } else {
       console.info('Password reset skipped: no active user matched.');
