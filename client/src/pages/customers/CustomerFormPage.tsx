@@ -56,12 +56,10 @@ export default function CustomerFormPage() {
           customData: d.customData ? (typeof (d.customData as any).toObject === 'function' ? (d.customData as any).toObject() : d.customData) : {},
         });
       } else {
-        const availableStages = isClientScope
-          ? result.stages.filter(s => s.isActive && s.isWon).length
-            ? result.stages.filter(s => s.isActive && s.isWon)
-            : result.stages.filter(s => s.isActive)
-          : result.stages.filter(s => s.isActive);
-        const defaultStage = availableStages.find(stage => stage.isDefault) || availableStages[0];
+        const availableStages = result.stages.filter(s => s.isActive);
+        const defaultStage = (isClientScope && availableStages.find(stage => stage.isWon))
+          || availableStages.find(stage => stage.isDefault)
+          || availableStages[0];
         setForm(current => ({ ...current, stage: defaultStage?._id || '' }));
       }
     }).catch(caught => setError(caught instanceof Error ? caught.message : 'Failed to load form options'))
@@ -109,9 +107,7 @@ export default function CustomerFormPage() {
   if (!options) return <div className="alert alert-error" role="alert">{error || 'Form options are unavailable.'}</div>;
 
   const backUrl = isClientScope ? '/clients' : '/customers';
-  const displayStages = isClientScope && !isEdit
-    ? (options.stages.filter(s => s.isActive && s.isWon).length ? options.stages.filter(s => s.isActive && s.isWon) : options.stages.filter(s => s.isActive))
-    : options.stages.filter(s => s.isActive);
+  const displayStages = options.stages.filter(s => s.isActive);
 
   return (
     <div className="page-container experience-page customer-form-page">
