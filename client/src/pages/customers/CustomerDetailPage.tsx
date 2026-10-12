@@ -10,8 +10,10 @@ import QuickActivityPrompt from '../../components/QuickActivityPrompt';
 import CustomSelect from '../../components/CustomSelect';
 import DatePicker from '../../components/DatePicker';
 import Icon from '../../components/Icons';
+import CustomerInvoicesPanel from './CustomerInvoicesPanel';
+import ClientPaymentStatus from './ClientPaymentStatus';
 
-type Tab = 'overview' | 'work' | 'activity' | 'files' | 'details';
+type Tab = 'overview' | 'work' | 'activity' | 'files' | 'details' | 'invoices';
 
 const avatarPalettes = [
   { bg: '#eff6ff', color: '#2563eb' },
@@ -75,6 +77,7 @@ export default function CustomerDetailPage() {
   const [success, setSuccess] = useState('');
   const [confirmAction, setConfirmAction] = useState<{ kind: 'delete' } | { kind: 'deleteAttachment'; attachmentId: string } | null>(null);
   const [searchParams] = useSearchParams();
+  useEffect(() => { if (searchParams.get('tab') === 'invoices') setTab('invoices'); }, [searchParams]);
 
   // Activity Composer State
   const [activityType, setActivityType] = useState('note');
@@ -626,6 +629,14 @@ export default function CustomerDetailPage() {
             </button>
             <button
               type="button"
+              className={tab === 'invoices' ? 'active' : ''}
+              onClick={() => setTab('invoices')}
+              style={{ background: 'transparent', border: 'none', padding: '0.5rem 0 0.85rem 0', color: tab === 'invoices' ? 'var(--gold)' : 'var(--sub)', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', position: 'relative', borderBottom: tab === 'invoices' ? '2px solid var(--gold)' : '2px solid transparent' }}
+            >
+              Invoices
+            </button>
+            <button
+              type="button"
               className={tab === 'files' ? 'active' : ''}
               onClick={() => setTab('files')}
               style={{
@@ -797,6 +808,8 @@ export default function CustomerDetailPage() {
           ) : (
             <>
               {/* Overview Tab */}
+              {tab === 'invoices' && isClientProfile && <CustomerInvoicesPanel customerId={customer._id} />}
+
               {tab === 'overview' && (
                 <article className="profile-panel lead-overview-card" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03)' }}>
                   <div className="profile-summary" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
@@ -806,6 +819,7 @@ export default function CustomerDetailPage() {
                     <span className="stage-badge" style={{ ['--stage' as any]: stageColor, fontSize: '0.72rem', padding: '4px 10px', borderRadius: '999px', fontWeight: 700 }}>
                       {customer.stage?.name}
                     </span>
+                    {isClientProfile && <ClientPaymentStatus customerId={customer._id} />}
                   </div>
 
                   {isClientProfile && (

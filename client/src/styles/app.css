@@ -1,5 +1,81 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
 
+/* Invoice panel: keep the payment forms and ledger in the same type scale as the CRM. */
+.customer-invoices-panel {
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: .84rem;
+  line-height: 1.45;
+}
+.customer-invoices-panel h2 {
+  font-family: var(--font-display);
+  font-size: 1rem !important;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.customer-invoices-panel label {
+  display: grid;
+  gap: .35rem;
+  color: var(--sub);
+  font-size: .76rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.customer-invoices-panel input,
+.customer-invoices-panel select {
+  font-family: var(--font-body);
+  font-size: .84rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.invoice-summary-value {
+  margin-top: .15rem;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.invoice-number { font-size: .86rem; font-weight: 700; }
+.invoice-description { margin-top: .1rem; font-size: .84rem; line-height: 1.45; }
+.invoice-meta { display: block; margin-top: .25rem; color: var(--muted); font-size: .72rem; }
+.invoice-balance-wrap { text-align: right; }
+.invoice-balance { font-size: .84rem; font-weight: 700; white-space: nowrap; }
+.invoice-status {
+  display: inline-block;
+  margin-top: .25rem;
+  padding: .12rem .45rem;
+  border-radius: 999px;
+  background: var(--panel-muted);
+  color: var(--sub);
+  font-size: .68rem;
+  font-weight: 650;
+  text-transform: capitalize;
+}
+.invoice-status-paid { color: var(--green); background: color-mix(in srgb, var(--green) 10%, var(--panel)); }
+.invoice-status-partial { color: #a16207; background: color-mix(in srgb, #f59e0b 12%, var(--panel)); }
+.invoice-status-overdue { color: var(--red); background: color-mix(in srgb, var(--red) 9%, var(--panel)); }
+.client-payment-status {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  margin-top: 0;
+  padding: .3rem .55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--sub);
+  font-size: .7rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.client-payment-status.invoice-status-paid { border-color: color-mix(in srgb, var(--green) 26%, var(--border)); }
+.client-payment-status.invoice-status-partial { border-color: color-mix(in srgb, #f59e0b 32%, var(--border)); }
+.client-payment-status.invoice-status-overdue { border-color: color-mix(in srgb, var(--red) 28%, var(--border)); }
+.client-payment-status strong { font-weight: 700; }
+.invoice-payments { margin-top: .75rem; font-size: .76rem; }
+.invoice-payments > strong { display: block; margin-bottom: .25rem; font-size: .76rem; font-weight: 650; }
+.invoice-payment-row { display: flex; justify-content: space-between; gap: .75rem; padding: .35rem 0; border-top: 1px solid var(--border); }
+.invoice-payment-row strong { white-space: nowrap; font-weight: 650; }
+
 :root {
   --bg: #ffffff;
   --bg-soft: color-mix(in srgb, var(--bg) 96%, var(--text));

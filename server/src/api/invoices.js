@@ -1,0 +1,115 @@
+const express = require('express');
+const mongoose = require('mongoose');
+const Invoice = require('../models/Invoice');
+const Customer = require('../models/Customer');
+const ClientCompany = require('../models/ClientCompany');
+const { hasPermission, isRestrictedUser } = require('../config/roles');
+const { requireApiAuth } = require('./middleware/auth');
+const { getWonStageIds } = require('../services/crmStages');
+const { createSimpleReportPdf } = require('../utils/pdf');
+
+const router = express.Router();
+router.use(requireApiAuth);
+router.use((req, res, next) => hasPermission(req.user, 'businesses.view') ? next() : res.status(403).json({ ok: false, error: 'Access denied' }));
+
+function workspace(req) { return req.activeCompanyId; }
+function scope(req, more = {}) { return { organization: req.user.organization._id, clientCompany: workspace(req), ...more }; }
+function totals(invoice) {
+  const total = Math.max(0, Number(invoice.amount || 0) - Number(invoice.discount || 0));
+  const paid = (invoice.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const balance = Math.max(0, total - paid);
+  const status = balance <= 0 ? 'paid' : paid > 0 ? 'partial' : invoice.dueDate && new Date(invoice.dueDate) < new Date() ? 'overdue' : 'unpaid';
+  return { total, paid, balance, status };
+}
+function serialize(invoice) { return { ...invoice.toObject(), ...totals(invoice) }; }
+
+async function findCustomer(req, customerId) {
+  if (!mongoose.isValidObjectId(customerId)) return null;
+  const filter = { _id: customerId, ...scope(req) };
+  if (isRestrictedUser(req.user)) filter.assignedTo = req.user._id;
+  const customer = await Customer.findOne(filter);
+  if (!customer) return null;
+  const wonStageIds = await getWonStageIds(req.user.organization._id, workspace(req));
+  return wonStageIds.some(stageId => String(stageId) === String(customer.stage)) ? customer : null;
+}
+
+router.get('/customers/:customerId', async (req, res, next) => {
+  try {
+    if (!workspace(req)) return res.status(400).json({ ok: false, error: 'Select an active CRM workspace first.' });
+    const customer = await findCustomer(req, req.params.customerId);
+    if (!customer) return res.status(404).json({ ok: false, error: 'Client not found.' });
+    const invoices = await Invoice.find(scope(req, { customer: customer._id })).sort({ createdAt: -1 });
+    res.json({ ok: true, data: invoices.map(serialize) });
+  } catch (error) { next(error); }
+});
+
+router.post('/customers/:customerId', async (req, res, next) => {
+  try {
+    if (!hasPermission(req.user, 'businesses.create')) return res.status(403).json({ ok: false, error: 'Access denied' });
+    if (!workspace(req)) return res.status(400).json({ ok: false, error: 'Select an active CRM workspace first.' });
+    const customer = await findCustomer(req, req.params.customerId);
+    if (!customer || !customer.stage) return res.status(404).json({ ok: false, error: 'Client not found.' });
+    const amount = Number(req.body.amount);
+    const discount = Number(req.body.discount || 0);
+    const description = String(req.body.description || '').trim();
+    const dueDate = req.body.dueDate ? new Date(req.body.dueDate) : null;
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(discount) || discount < 0 || discount >= amount || !description || (dueDate && Number.isNaN(dueDate.getTime()))) {
+      return res.status(400).json({ ok: false, error: 'Enter a description, a positive amount, a valid discount, and a valid optional due date.' });
+    }
+    const company = await ClientCompany.findOne(scope(req));
+    if (!company) return res.status(400).json({ ok: false, error: 'Active workspace not found.' });
+    const sequence = await ClientCompany.findOneAndUpdate(scope(req), { $inc: { invoiceSequence: 1 } }, { new: true, projection: { invoiceSequence: 1 } });
+    const invoice = await Invoice.create({
+      ...scope(req), customer: customer._id,
+      invoiceNumber: `INV-${String(sequence.invoiceSequence).padStart(5, '0')}`,
+      description, amount, discount, dueDate, createdBy: req.user._id
+    });
+    res.status(201).json({ ok: true, data: serialize(invoice) });
+  } catch (error) { next(error); }
+});
+
+router.post('/:invoiceId/payments', async (req, res, next) => {
+  try {
+    if (!hasPermission(req.user, 'businesses.update')) return res.status(403).json({ ok: false, error: 'Access denied' });
+    if (!mongoose.isValidObjectId(req.params.invoiceId)) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
+    const invoice = await Invoice.findOne(scope(req, { _id: req.params.invoiceId }));
+    if (!invoice) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
+    const customer = await findCustomer(req, invoice.customer);
+    if (!customer) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
+    const amount = Number(req.body.amount);
+    const balance = totals(invoice).balance;
+    const methods = ['Cash', 'UPI', 'Bank transfer', 'Card', 'Other'];
+    const method = methods.includes(req.body.method) ? req.body.method : 'Other';
+    if (!Number.isFinite(amount) || amount <= 0 || amount > balance) return res.status(400).json({ ok: false, error: `Payment must be greater than zero and no more than the balance (${balance}).` });
+    invoice.payments.push({ amount, method, reference: String(req.body.reference || '').trim(), note: String(req.body.note || '').trim(), receivedBy: req.user._id });
+    await invoice.save();
+    res.json({ ok: true, data: serialize(invoice) });
+  } catch (error) { next(error); }
+});
+
+router.get('/:invoiceId/pdf', async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.invoiceId)) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
+    const invoice = await Invoice.findOne(scope(req, { _id: req.params.invoiceId })).populate('customer', 'name company phone email');
+    if (!invoice || !(await findCustomer(req, invoice.customer._id))) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
+    const company = await ClientCompany.findOne(scope(req)).select('name phone email location');
+    const { total, paid, balance, status } = totals(invoice);
+    const money = value => `Rs. ${Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+    const rows = [
+      { Description: 'Bill to', Amount: invoice.customer.name },
+      { Description: invoice.customer.company || 'Contact', Amount: invoice.customer.email || invoice.customer.phone || '' },
+      { Description: 'Due date', Amount: invoice.dueDate ? invoice.dueDate.toLocaleDateString('en-IN') : 'Not set' },
+      { Description: invoice.description, Amount: money(invoice.amount) },
+      ...(invoice.discount ? [{ Description: 'Discount', Amount: `-${money(invoice.discount)}` }] : []),
+      { Description: 'Net invoice amount', Amount: money(total) },
+      { Description: 'Amount paid', Amount: money(paid) },
+      { Description: 'Balance due', Amount: money(balance) },
+      { Description: 'Payment status', Amount: status.toUpperCase() },
+    ];
+    const pdf = createSimpleReportPdf(company?.name || 'Invoice', `${invoice.invoiceNumber} | Invoice date: ${invoice.createdAt.toLocaleDateString('en-IN')}`, ['Invoice details', 'Amount'], rows);
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${invoice.invoiceNumber}.pdf"` });
+    res.send(pdf);
+  } catch (error) { next(error); }
+});
+
+module.exports = { router, totals };

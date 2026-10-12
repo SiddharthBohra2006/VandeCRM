@@ -4,6 +4,7 @@ import { customersApi, CustomersListResponse } from '../../api/customers';
 import { useAuth } from '../../contexts/AuthContext';
 import CustomSelect from '../../components/CustomSelect';
 import { CustomerInput, CustomField } from '../../types';
+import { invoicesApi } from '../../api/invoices';
 
 type FormState = Required<Pick<CustomerInput, 'name' | 'company' | 'email' | 'phone' | 'source' | 'value' | 'priority' | 'stage' | 'assignedTo' | 'campaign' | 'notes'>> & {
   leadScore: number;
@@ -30,6 +31,9 @@ export default function CustomerFormPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [invoiceDescription, setInvoiceDescription] = useState('');
+  const [invoiceAmount, setInvoiceAmount] = useState('');
+  const [invoiceDueDate, setInvoiceDueDate] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -94,7 +98,14 @@ export default function CustomerFormPage() {
         navigate(`${isClientScope ? '/clients' : '/customers'}/${id}`);
       } else {
         const result = await customersApi.create(form);
-        navigate(`${isClientScope ? '/clients' : '/customers'}/${result.data._id}`);
+        if (isClientScope && Number(invoiceAmount) > 0 && invoiceDescription.trim()) {
+          try {
+            await invoicesApi.create(result.data._id, { description: invoiceDescription.trim(), amount: Number(invoiceAmount), ...(invoiceDueDate ? { dueDate: invoiceDueDate } : {}) });
+          } catch (invoiceError) {
+            window.alert(`Client was created, but the invoice could not be saved: ${invoiceError instanceof Error ? invoiceError.message : 'Please try again from the Invoices tab.'}`);
+          }
+        }
+        navigate(`${isClientScope ? '/clients' : '/customers'}/${result.data._id}${isClientScope && Number(invoiceAmount) > 0 && invoiceDescription.trim() ? '?tab=invoices' : ''}`);
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : `Failed to save ${isClientScope ? crmTerms.recordSingular.toLowerCase() : crmTerms.leadSingular.toLowerCase()}`);
@@ -260,6 +271,18 @@ export default function CustomerFormPage() {
             )}
           </div>
         </details>
+
+        {isClientScope && !isEdit && (
+          <details className="optional-panel" style={{ border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 16px', background: 'var(--panel-muted)' }}>
+            <summary style={{ cursor: 'pointer' }}><strong style={{ fontSize: '0.85rem' }}>Invoice / payment (optional)</strong><small style={{ display: 'block', fontSize: '0.72rem', color: 'var(--muted)', marginTop: '2px' }}>Skip this if you are not ready to invoice the client.</small></summary>
+            <div className="form-grid" style={{ marginTop: '1rem' }}>
+              <label>Invoice description<input value={invoiceDescription} onChange={e => setInvoiceDescription(e.target.value)} placeholder="e.g. Monthly marketing package" /></label>
+              <label>Agreed invoice amount (₹)<input type="number" min="0" step="0.01" value={invoiceAmount} onChange={e => setInvoiceAmount(e.target.value)} placeholder="Optional" /></label>
+              <label>Payment due date<input type="date" value={invoiceDueDate} onChange={e => setInvoiceDueDate(e.target.value)} /></label>
+            </div>
+            <small style={{ display: 'block', marginTop: 8, color: 'var(--muted)' }}>Both description and amount are needed to create the invoice. Record partial or full payments from the client’s Invoices tab.</small>
+          </details>
+        )}
 
         <div className="form-actions" style={{ marginTop: '1.5rem' }}>
           <Link to={backUrl} className="btn secondary">Cancel</Link>

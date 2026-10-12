@@ -20,6 +20,7 @@ const CLIENT_COLUMNS: ColumnDefinition[] = [
   { key: 'stage', label: 'Client status', icon: 'git-commit-horizontal', defaultVisible: true },
   { key: 'priority', label: 'Priority', icon: 'flag', defaultVisible: true },
   { key: 'value', label: 'Value', icon: 'indian-rupee', defaultVisible: true },
+  { key: 'payment', label: 'Payment', icon: 'indian-rupee', defaultVisible: true },
   { key: 'followup', label: 'Next follow-up', icon: 'calendar', defaultVisible: true },
   { key: 'lastActivity', label: 'Last activity', icon: 'clock', defaultVisible: true },
   { key: 'labels', label: 'Labels', icon: 'tags', defaultVisible: true },
@@ -94,7 +95,7 @@ export default function ClientsPage() {
   const [columnOrder, setColumnOrder] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem('crm_client_cols_order');
-      return stored ? JSON.parse(stored) : CLIENT_COLUMNS.map(c => c.key);
+      return stored ? [...JSON.parse(stored), ...CLIENT_COLUMNS.map(c => c.key).filter(key => !JSON.parse(stored).includes(key))] : CLIENT_COLUMNS.map(c => c.key);
     } catch {
       return CLIENT_COLUMNS.map(c => c.key);
     }
@@ -102,7 +103,7 @@ export default function ClientsPage() {
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
     try {
       const stored = localStorage.getItem('crm_client_cols_visible');
-      return stored ? JSON.parse(stored) : {
+      return stored ? { ...Object.fromEntries(CLIENT_COLUMNS.map(c => [c.key, c.defaultVisible])), ...JSON.parse(stored), payment: true } : {
         name: true,
         phone: true,
         email: true,
@@ -111,6 +112,7 @@ export default function ClientsPage() {
         stage: true,
         priority: true,
         value: true,
+        payment: true,
         followup: true,
         lastActivity: true,
         labels: true,
@@ -129,6 +131,7 @@ export default function ClientsPage() {
         stage: true,
         priority: true,
         value: true,
+        payment: true,
         followup: true,
         lastActivity: true,
         labels: true,
@@ -744,6 +747,7 @@ export default function ClientsPage() {
               {visibleColumns.stage && <th>CLIENT STATUS</th>}
               {visibleColumns.priority && <th>PRIORITY</th>}
               {visibleColumns.value && <th>VALUE</th>}
+              {visibleColumns.payment && <th>PAYMENT</th>}
               {visibleColumns.followup && <th>NEXT FOLLOW-UP</th>}
               {visibleColumns.lastActivity && <th>LAST ACTIVITY</th>}
             {visibleColumns.labels && <th>LABELS</th>}
@@ -759,8 +763,12 @@ export default function ClientsPage() {
               />
             ) : clients.length === 0 ? (
               <tr>
-                <td colSpan={13} className="empty-state" style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-                  No {crmTerms.recordPlural.toLowerCase()} found.
+                <td colSpan={Object.values(visibleColumns).filter(Boolean).length + (isManager ? 1 : 0)} className="empty-state" style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+                  <div style={{ display: 'grid', justifyItems: 'center', gap: 8 }}>
+                    <strong>No clients yet</strong>
+                    <span style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>Add your first client to create an optional invoice and record payments.</span>
+                    <Link to="/customers/new?scope=client" className="btn primary btn-add-primary" style={{ marginTop: 6 }}>Add first client</Link>
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -890,6 +898,12 @@ export default function ClientsPage() {
                     {visibleColumns.value && (
                       <td style={{ whiteSpace: 'nowrap' }}>
                         <span className="lead-value-text">Rs. {(client.value || 0).toLocaleString('en-IN')}</span>
+                      </td>
+                    )}
+
+                    {visibleColumns.payment && (
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {client.paymentSummary?.invoiceCount ? <Link to={`/customers/${client._id}?from=clients&tab=invoices`} style={{ color: 'var(--text)', textDecoration: 'none' }}><strong>₹{client.paymentSummary.balanceDue.toLocaleString('en-IN')}</strong><small style={{ display: 'block', color: 'var(--muted)' }}>{client.paymentSummary.status === 'partial' ? 'Partial' : client.paymentSummary.status === 'paid' ? 'Paid' : client.paymentSummary.status === 'overdue' ? 'Overdue' : 'Unpaid'}</small></Link> : <Link to={`/customers/${client._id}?from=clients&tab=invoices`} style={{ color: 'var(--muted)' }}>Add invoice</Link>}
                       </td>
                     )}
 

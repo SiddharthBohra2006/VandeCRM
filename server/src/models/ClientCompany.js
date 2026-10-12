@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const clientCompanySchema = new mongoose.Schema({
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
   name: { type: String, required: true, trim: true },
+  invoiceSequence: { type: Number, default: 0, min: 0 },
   isMain: { type: Boolean, default: false, index: true },
   businessType: { type: String, enum: ['service', 'consumer', 'commerce', 'other'], default: 'service' },
   terminology: {

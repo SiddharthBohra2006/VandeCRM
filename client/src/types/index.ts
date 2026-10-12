@@ -24,6 +24,7 @@ export interface Customer {
   utmTerm: string;
   createdAt: string;
   updatedAt: string;
+  paymentSummary?: { totalInvoiced: number; totalPaid: number; balanceDue: number; invoiceCount: number; nextDueDate: string | null; overdue: boolean; status: 'not_invoiced' | 'unpaid' | 'partial' | 'overdue' | 'paid' };
 }
 
 export interface Stage {
