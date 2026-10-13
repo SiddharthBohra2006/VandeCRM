@@ -67,7 +67,7 @@ video.presentation = {
 
 DEFAULT_WORK_TYPES.push({
   key: 'payment', name: 'Payments', order: 60, icon: 'indian-rupee', color: '#16a34a', isActive: true,
-  statuses: statuses(['pending', 'partial', 'paid', 'overdue']),
+  statuses: statuses(['pending', 'partial', 'paid', 'overdue']).map(status => status.key === 'paid' ? { ...status, isTerminalWon: true } : status),
   fields: [
     { key: 'billingMonth', label: 'Billing month', type: 'text', required: true, group: 'core' },
     { key: 'expectedAmount', label: 'Expected amount', type: 'currency', min: 0, group: 'core' },

@@ -852,9 +852,9 @@ export default function WorkCenterPage() {
                     const statusColor = getStatusColor(item.status, wt);
                     const completionStatus = wt?.statuses?.find(s => s.isTerminalWon);
                     const isSelected = selectedIds.has(item._id);
-                    const dueInfo = formatRelativeDue(item.deadline);
                     const isStatusAllowed = canChangeWorkStatus(user, wt, item.status);
                     const isClosed = isWorkItemClosed(item, wt);
+                    const dueInfo = isClosed ? { text: '', className: 'normal' } : formatRelativeDue(item.deadline);
 
                     const priorityLower = String(item.priority || 'medium').toLowerCase();
 

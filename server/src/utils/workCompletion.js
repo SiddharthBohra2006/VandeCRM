@@ -7,8 +7,9 @@ const rules = {
 };
 
 const configuredStatus = item => item.workType?.statuses?.find(status => status.key === item.status);
-const isComplete = item => configuredStatus(item) ? Boolean(configuredStatus(item).isTerminalWon) : Boolean(rules[item.type] && item.status === rules[item.type].status && rules[item.type].fields.some(field => String(item[field] || '').trim()));
-const isClosed = item => configuredStatus(item) ? Boolean(configuredStatus(item).isTerminalWon || configuredStatus(item).isTerminalLost) : isComplete(item);
+const isPaidPayment = item => item.workType?.key === 'payment' && (String(item.status || '').toLowerCase() === 'paid' || configuredStatus(item)?.label?.toLowerCase() === 'paid');
+const isComplete = item => isPaidPayment(item) || (configuredStatus(item) ? Boolean(configuredStatus(item).isTerminalWon) : Boolean(rules[item.type] && item.status === rules[item.type].status && rules[item.type].fields.some(field => String(item[field] || '').trim())));
+const isClosed = item => isPaidPayment(item) || (configuredStatus(item) ? Boolean(configuredStatus(item).isTerminalWon || configuredStatus(item).isTerminalLost) : isComplete(item));
 const fieldValue = (item, key) => String((item && (item[key] ?? item.customFields?.get?.(key))) ?? '').trim();
 // Guard for moving a record into its terminal-won status: the proof fields (a
 // delivery link, published link, etc.) must be present, otherwise the status

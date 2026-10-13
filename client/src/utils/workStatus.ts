@@ -40,6 +40,8 @@ export function isWorkItemClosed(
     if (statusObj.isTerminalWon || statusObj.isTerminalLost) return true;
   }
 
+  if (workType?.key === 'payment' && (rawStatus === 'paid' || statusObj?.label.toLowerCase() === 'paid')) return true;
+
   // 2. Fallback check against known terminal/closed statuses
   return FALLBACK_CLOSED_STATUSES.has(rawStatus);
 }
