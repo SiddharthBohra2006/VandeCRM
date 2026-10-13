@@ -423,7 +423,7 @@ export default function WorkCenterPage() {
     if (lower.includes('review') || lower.includes('progress') || lower.includes('edit')) return '#3b82f6';
     if (lower.includes('design') || lower.includes('figma')) return '#8b5cf6';
     if (lower.includes('cancel') || lower.includes('reject') || lower.includes('lost')) return '#dc2626';
-    return '#f59e0b';
+    return 'var(--gold)';
   }
 
   function getInitials(name?: string): string {
@@ -479,7 +479,7 @@ export default function WorkCenterPage() {
                     className="new-work-popover-item"
                     onClick={() => setNewWorkOpen(false)}
                   >
-                    <Icon name={wt.icon || 'clipboard-list'} size={15} style={{ color: wt.color || '#ea580c' }} />
+                    <Icon name={wt.icon || 'clipboard-list'} size={15} style={{ color: wt.color || 'var(--gold)' }} />
                     <span>{wt.name}</span>
                   </Link>
                 ))}
@@ -708,7 +708,7 @@ export default function WorkCenterPage() {
           </div>
 
           <div className="work-kpi-stat-item">
-            <span className="work-kpi-stat-icon"><Icon name="calendar" size={16} color="#ea580c" /></span>
+            <span className="work-kpi-stat-icon"><Icon name="calendar" size={16} color="var(--gold)" /></span>
             <span className="work-kpi-stat-num">{kpis.dueToday}</span>
             <span className="work-kpi-stat-label">Due today</span>
           </div>
@@ -792,7 +792,7 @@ export default function WorkCenterPage() {
                         to={`/work/${item.workType?.key || 'task'}/${item._id}`}
                         className="work-calendar-chip"
                         style={{
-                          borderLeftColor: wt?.color || '#ea580c',
+                          borderLeftColor: wt?.color || 'var(--gold)',
                         }}
                         title={`${item.title} (${wt?.name || 'Task'})`}
                       >
@@ -889,7 +889,7 @@ export default function WorkCenterPage() {
                             <Icon
                               name={wt?.icon || 'clipboard-list'}
                               size={15}
-                              style={{ color: wt?.color || '#ea580c' }}
+                              style={{ color: wt?.color || 'var(--gold)' }}
                             />
                             <span>{wt?.name || typeKey}</span>
                           </span>

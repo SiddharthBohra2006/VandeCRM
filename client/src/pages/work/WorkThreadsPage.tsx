@@ -191,7 +191,9 @@ export default function WorkThreadsPage() {
   }, [conversations, activeId, users]);
 
   const currentActiveId = activeConversation?.id || activeId;
-  const activeTasks = currentActiveId ? (itemsByAssignee.get(currentActiveId) || []) : [];
+  const activeTasks = currentActiveId
+    ? (itemsByAssignee.get(currentActiveId) || []).filter(item => !isClosedItem(item, workTypeOf(item)))
+    : [];
 
   // All historical tasks for this person across the system
   const personAllTasks = useMemo(() => {

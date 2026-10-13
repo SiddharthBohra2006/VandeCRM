@@ -75,8 +75,8 @@
 }
 
 .crm-search-modal {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--panel);
+  border: 1px solid var(--border);
   border-radius: 16px;
   width: min(880px, 92vw);
   max-width: 880px;
@@ -86,15 +86,15 @@
   box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.2), 0 0 0 1px rgba(15, 23, 42, 0.04);
   animation: crmScaleIn 0.16s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
-  color: #0f172a;
+  color: var(--text);
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 html.dark-theme .crm-search-modal {
-  background: #0d121f;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--panel);
+  border: 1px solid var(--border);
   box-shadow: 0 30px 70px -15px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.06);
-  color: #f8fafc;
+  color: var(--text);
 }
 
 /* Top Search Input Row */
@@ -125,13 +125,13 @@ html.dark-theme .crm-search-top-bar {
 }
 
 html.dark-theme .crm-search-input-wrap {
-  background: #080d1a;
+  background: var(--input);
   border-color: rgba(255, 255, 255, 0.1);
 }
 
 .crm-search-input-wrap:focus-within {
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.14);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-dim);
 }
 
 .crm-search-icon {
@@ -176,7 +176,7 @@ html.dark-theme .crm-search-tab-hint {
 }
 
 .crm-search-tab-hint strong {
-  color: #f59e0b;
+  color: var(--gold);
 }
 
 .crm-search-clear-btn {
@@ -221,7 +221,7 @@ html.dark-theme .crm-search-clear-btn:hover {
 }
 
 html.dark-theme .crm-modal-close-icon-btn {
-  background: #080d1a;
+  background: var(--input);
   border-color: rgba(255, 255, 255, 0.1);
   color: #94a3b8;
 }
@@ -234,9 +234,9 @@ html.dark-theme .crm-modal-close-icon-btn {
 }
 
 html.dark-theme .crm-modal-close-icon-btn:hover {
-  color: #fbbf24;
-  border-color: rgba(245, 158, 11, 0.35);
-  background: rgba(245, 158, 11, 0.08);
+  color: var(--gold);
+  border-color: var(--gold-border);
+  background: var(--gold-dim);
 }
 
 /* Quick Suggestion Chips Bar */
@@ -300,20 +300,20 @@ html.dark-theme .crm-suggestion-chip {
 
 .crm-suggestion-chip:hover,
 .crm-suggestion-chip.active {
-  border-color: #f59e0b;
-  color: #d97706;
-  background: #fffbeb;
+  border-color: var(--gold);
+  color: var(--gold);
+  background: var(--gold-dim);
 }
 
 html.dark-theme .crm-suggestion-chip:hover,
 html.dark-theme .crm-suggestion-chip.active {
-  border-color: rgba(245, 158, 11, 0.4);
-  color: #fbbf24;
-  background: rgba(245, 158, 11, 0.1);
+  border-color: var(--gold-border);
+  color: var(--gold);
+  background: var(--gold-dim);
 }
 
 .chip-sparkle {
-  color: #f59e0b;
+  color: var(--gold);
   font-size: 9px;
 }
 
@@ -361,16 +361,16 @@ html.dark-theme .crm-search-tab {
 }
 
 .crm-search-tab:hover {
-  color: #0f172a;
+  color: var(--text);
 }
 
 html.dark-theme .crm-search-tab:hover {
-  color: #f8fafc;
+  color: var(--text);
 }
 
 .crm-search-tab.active {
-  color: #f59e0b;
-  border-bottom-color: #f59e0b;
+  color: var(--gold);
+  border-bottom-color: var(--gold);
   font-weight: 750;
 }
 
@@ -430,15 +430,15 @@ html.dark-theme .crm-search-filter-bar {
 
 html.dark-theme .crm-filter-select,
 html.dark-theme .crm-date-input {
-  background-color: #080d1a;
+  background-color: var(--input);
   border-color: rgba(255, 255, 255, 0.1);
   color: #f1f5f9;
 }
 
 .crm-filter-select:focus,
 .crm-date-input:focus {
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-dim);
 }
 
 .crm-date-box {
@@ -460,15 +460,15 @@ html.dark-theme .crm-date-input {
 }
 
 html.dark-theme .crm-date-box .date-input-wrap input {
-  background-color: #080d1a;
+  background-color: var(--input);
   border-color: rgba(255, 255, 255, 0.1);
   color: #f1f5f9;
 }
 
 .crm-date-box .date-input-wrap input:focus,
 .crm-date-box .date-input-wrap input.is-date-picker-open {
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-dim);
 }
 
 .crm-filter-more-wrap {
@@ -494,21 +494,21 @@ html.dark-theme .crm-date-box .date-input-wrap input {
 }
 
 html.dark-theme .crm-more-filters-btn {
-  background-color: #080d1a;
+  background-color: var(--input);
   border-color: rgba(255, 255, 255, 0.1);
   color: #cbd5e1;
 }
 
 .crm-more-filters-btn:hover {
-  border-color: #f59e0b;
-  color: #f59e0b;
-  background-color: #fffbeb;
+  border-color: var(--gold);
+  color: var(--gold);
+  background-color: var(--gold-dim);
 }
 
 html.dark-theme .crm-more-filters-btn:hover {
-  border-color: rgba(245, 158, 11, 0.4);
-  color: #fbbf24;
-  background-color: rgba(245, 158, 11, 0.08);
+  border-color: var(--gold-border);
+  color: var(--gold);
+  background-color: var(--gold-dim);
 }
 
 /* 3. Modal Body: 2-Column Layout */
@@ -585,7 +585,7 @@ html.dark-theme .crm-sec-title-bold {
   background: none;
   border: none;
   font-size: 11px;
-  color: #d97706;
+  color: var(--gold);
   cursor: pointer;
   text-decoration: none;
   padding: 0;
@@ -593,7 +593,7 @@ html.dark-theme .crm-sec-title-bold {
 }
 
 html.dark-theme .crm-link-btn {
-  color: #fbbf24;
+  color: var(--gold);
 }
 
 .crm-link-btn:hover {
@@ -703,12 +703,12 @@ html.dark-theme .crm-quick-access-sec {
 }
 
 html.dark-theme .crm-kpi-card {
-  background: #080d1a;
+  background: var(--input);
   border-color: rgba(255, 255, 255, 0.07);
 }
 
 .crm-kpi-card:hover {
-  border-color: #f59e0b;
+  border-color: var(--gold);
   transform: translateY(-1px);
 }
 
@@ -729,7 +729,7 @@ html.dark-theme .crm-kpi-title {
 .crm-kpi-val {
   font-size: 17px;
   font-weight: 850;
-  color: #f59e0b;
+  color: var(--gold);
   line-height: 1.1;
   margin: 1px 0;
 }
@@ -759,14 +759,14 @@ html.dark-theme .crm-kpi-title {
 }
 
 html.dark-theme .crm-shortcuts-footer-link {
-  background: #080d1a;
+  background: var(--input);
   border-color: rgba(255, 255, 255, 0.07);
   color: #cbd5e1;
 }
 
 .crm-shortcuts-footer-link:hover {
-  border-color: #f59e0b;
-  color: #f59e0b;
+  border-color: var(--gold);
+  color: var(--gold);
 }
 
 /* Top Results List Cards */
@@ -790,21 +790,21 @@ html.dark-theme .crm-shortcuts-footer-link {
 }
 
 html.dark-theme .crm-result-card {
-  background: #080d1a;
+  background: var(--input);
   border-color: rgba(255, 255, 255, 0.07);
 }
 
 .crm-result-card:hover,
 .crm-result-card.selected {
-  border-color: #f59e0b;
-  background: #fffdf5;
+  border-color: var(--gold);
+  background: var(--gold-dim);
   transform: translateX(2px);
 }
 
 html.dark-theme .crm-result-card:hover,
 html.dark-theme .crm-result-card.selected {
-  background: rgba(245, 158, 11, 0.06);
-  border-color: rgba(245, 158, 11, 0.4);
+  background: var(--gold-dim);
+  border-color: var(--gold-border);
 }
 
 .crm-card-left {
@@ -939,7 +939,7 @@ html.dark-theme .crm-card-subtitle {
 }
 
 .crm-result-card:hover .crm-card-arrow {
-  color: #f59e0b;
+  color: var(--gold);
   transform: translateX(2px);
 }
 
@@ -966,8 +966,8 @@ html.dark-theme .crm-show-more-btn {
 }
 
 .crm-show-more-btn:hover {
-  border-color: #f59e0b;
-  color: #f59e0b;
+  border-color: var(--gold);
+  color: var(--gold);
 }
 
 /* 4. Live Search Results List */
@@ -1006,16 +1006,16 @@ html.dark-theme .crm-live-group-header {
 }
 
 mark {
-  background: rgba(245, 158, 11, 0.2);
-  color: #d97706;
+  background: var(--gold-dim);
+  color: var(--gold);
   font-weight: 700;
   border-radius: 2px;
   padding: 0 2px;
 }
 
 html.dark-theme mark {
-  background: rgba(245, 158, 11, 0.3);
-  color: #fbbf24;
+  background: var(--gold-dim);
+  color: var(--gold);
 }
 
 /* Responsive Styles */
@@ -1557,6 +1557,4 @@ html.dark-theme mark {
     max-width: 100% !important;
   }
 }
-
-
 
