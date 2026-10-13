@@ -850,9 +850,11 @@ export default function WorkCenterPage() {
                     const wt = item.workType || workTypes.find(t => t.key === typeKey || t._id === item.module);
                     const statusObj = wt?.statuses?.find(s => s.key === item.status);
                     const statusColor = getStatusColor(item.status, wt);
+                    const completionStatus = wt?.statuses?.find(s => s.isTerminalWon);
                     const isSelected = selectedIds.has(item._id);
                     const dueInfo = formatRelativeDue(item.deadline);
                     const isStatusAllowed = canChangeWorkStatus(user, wt, item.status);
+                    const isClosed = isWorkItemClosed(item, wt);
 
                     const priorityLower = String(item.priority || 'medium').toLowerCase();
 
@@ -996,6 +998,17 @@ export default function WorkCenterPage() {
                         {/* ROW ACTIONS */}
                         <td style={{ textAlign: 'right' }}>
                           <div className="work-row-actions">
+                            {typeKey === 'task' && completionStatus && !isClosed && isStatusAllowed && (
+                              <button
+                                type="button"
+                                className="btn small outline"
+                                onClick={() => void handleStatusChange(item, completionStatus.key)}
+                                title="Mark this task as complete"
+                              >
+                                <Icon name="check" size={13} />
+                                Complete
+                              </button>
+                            )}
                             <Link
                               to={`/work/${typeKey}/${item._id}`}
                               className="work-row-menu-btn"
