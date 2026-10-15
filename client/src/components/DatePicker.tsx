@@ -13,6 +13,7 @@ export interface DatePickerProps {
   min?: string;
   max?: string;
   mode?: 'date' | 'month';
+  displayFormat?: 'iso' | 'dmy';
   'aria-label'?: string;
 }
 
@@ -51,6 +52,7 @@ export default function DatePicker({
   min,
   max,
   mode = 'date',
+  displayFormat = 'iso',
   'aria-label': ariaLabel,
 }: DatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -67,6 +69,9 @@ export default function DatePicker({
   const pickerRef = useRef<HTMLDivElement>(null);
 
   const selectedDate = mode === 'month' ? parseISOMonth(value) : parseISODate(value);
+  const displayValue = displayFormat === 'dmy' && mode === 'date'
+    ? String(value || '').replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$3-$2-$1')
+    : value;
 
   // Reposition picker relative to trigger
   const updatePosition = () => {
@@ -292,7 +297,7 @@ export default function DatePicker({
           type="text"
           readOnly
           disabled={disabled}
-          value={value}
+          value={displayValue}
           placeholder={placeholder || (mode === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD')}
           className={isOpen ? 'is-date-picker-open' : ''}
           name={name}

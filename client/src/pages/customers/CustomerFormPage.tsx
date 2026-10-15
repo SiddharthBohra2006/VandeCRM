@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import { customersApi, CustomersListResponse } from '../../api/customers';
 import { useAuth } from '../../contexts/AuthContext';
 import CustomSelect from '../../components/CustomSelect';
+import DatePicker from '../../components/DatePicker';
 import { CustomerInput, CustomField } from '../../types';
 import { invoicesApi } from '../../api/invoices';
 
@@ -278,7 +279,7 @@ export default function CustomerFormPage() {
             <div className="form-grid" style={{ marginTop: '1rem' }}>
               <label>Invoice description<input value={invoiceDescription} onChange={e => setInvoiceDescription(e.target.value)} placeholder="e.g. Monthly marketing package" /></label>
               <label>Agreed invoice amount (₹)<input type="number" min="0" step="0.01" value={invoiceAmount} onChange={e => setInvoiceAmount(e.target.value)} placeholder="Optional" /></label>
-              <label>Payment due date<input type="date" value={invoiceDueDate} onChange={e => setInvoiceDueDate(e.target.value)} /></label>
+              <label>Payment due date<DatePicker style={{ display: 'block', width: '100%', height: 42 }} value={invoiceDueDate} onChange={setInvoiceDueDate} placeholder="dd-mm-yyyy" displayFormat="dmy" aria-label="Payment due date" /></label>
             </div>
             <small style={{ display: 'block', marginTop: 8, color: 'var(--muted)' }}>Both description and amount are needed to create the invoice. Record partial or full payments from the client’s Invoices tab.</small>
           </details>

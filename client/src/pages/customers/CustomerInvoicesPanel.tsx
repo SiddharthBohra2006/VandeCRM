@@ -135,7 +135,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
               <button type="button" className={discountType === 'amount' ? 'is-active' : ''} aria-pressed={discountType === 'amount'} onClick={() => setDiscountType('amount')}>₹</button>
             </div>
           </div>
-          <small>{money(discountAmount)} off · {money(netAmount)} invoice total</small>
+          <small>{discountType === 'percent' ? `${Number(discount || 0)}% · ` : ''}{money(discountAmount)} off · {money(netAmount)} invoice total</small>
         </div>
       </div>
 
@@ -155,7 +155,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
         </div>
         {paymentPlan === 'monthly' && <p className="invoice-plan-hint">You’ll be asked each month before another invoice is created. No automatic charges.</p>}
         {paymentPlan !== 'installments' && <label className="invoice-field invoice-field-date"><span className="invoice-field-label">{paymentPlan === 'monthly' ? 'First payment due' : 'Due date'}{monthlyRenewal ? <b>*</b> : <small>Optional</small>}</span>
-          <DatePicker className="invoice-date-picker" value={dueDate} onChange={setDueDate} placeholder="dd-mm-yyyy" aria-label={paymentPlan === 'monthly' ? 'First payment due date' : 'Invoice due date'} />
+          <DatePicker className="invoice-date-picker" value={dueDate} onChange={setDueDate} placeholder="dd-mm-yyyy" displayFormat="dmy" aria-label={paymentPlan === 'monthly' ? 'First payment due date' : 'Invoice due date'} />
         </label>}
       </section>
 
@@ -174,7 +174,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
           {installments.map((row, index) => <div className="invoice-installment-row" key={index}>
             <label className="invoice-field">Instalment name<input required value={row.name} onChange={e => { const value = e.currentTarget.value; setInstallments(rows => rows.map((item, i) => i === index ? { ...item, name: value } : item)); }} placeholder={`Instalment ${index + 1}`} /></label>
             <label className="invoice-field">Amount (₹)<input required type="number" min="0.01" step="0.01" value={row.amount} onChange={e => { const value = e.currentTarget.value; setInstallments(rows => rows.map((item, i) => i === index ? { ...item, amount: value } : item)); }} placeholder="0.00" /></label>
-            <label className="invoice-field">Due date<DatePicker className="invoice-date-picker" value={row.dueDate} onChange={value => setInstallments(rows => rows.map((item, i) => i === index ? { ...item, dueDate: value } : item))} placeholder="dd-mm-yyyy" aria-label={`${row.name || `Instalment ${index + 1}`} due date`} /></label>
+            <label className="invoice-field">Due date<DatePicker className="invoice-date-picker" value={row.dueDate} onChange={value => setInstallments(rows => rows.map((item, i) => i === index ? { ...item, dueDate: value } : item))} placeholder="dd-mm-yyyy" displayFormat="dmy" aria-label={`${row.name || `Instalment ${index + 1}`} due date`} /></label>
             <button type="button" className="invoice-button invoice-remove-button" aria-label={`Remove ${row.name || `instalment ${index + 1}`}`} onClick={() => setInstallments(rows => rows.filter((_, i) => i !== index))}><Trash2 size={16} aria-hidden="true" /><span>Remove</span></button>
           </div>)}
           <div className={`invoice-schedule-total${scheduleMatches ? ' is-valid' : ' is-invalid'}`}><span>Schedule total <strong>{money(installmentTotal)}</strong></span><span>Invoice after discount <strong>{money(netAmount)}</strong></span></div>
