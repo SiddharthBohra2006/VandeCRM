@@ -16,10 +16,19 @@ async function replaceIndex(collection, oldName, keys) {
 }
 
 async function ensureCrmIndexes() {
-  await Invoice.collection.createIndex(
-    { organization: 1, clientCompany: 1, renewalSource: 1, renewalPeriod: 1 },
-    { unique: true, partialFilterExpression: { renewalSource: { $type: 'objectId' }, renewalPeriod: { $type: 'string' } } }
-  );
+  const renewalIndexKeys = { organization: 1, clientCompany: 1, renewalSource: 1, renewalPeriod: 1 };
+  let invoiceIndexes = [];
+  try { invoiceIndexes = await Invoice.collection.indexes(); }
+  catch (error) { if (error.codeName !== 'NamespaceNotFound') throw error; }
+  const hasUniqueRenewalIndex = invoiceIndexes.some(index => index.unique &&
+    Object.keys(renewalIndexKeys).every((key, position) => Object.keys(index.key || {})[position] === key && index.key[key] === 1) &&
+    Object.keys(index.key || {}).length === Object.keys(renewalIndexKeys).length);
+  if (!hasUniqueRenewalIndex) {
+    await Invoice.collection.createIndex(renewalIndexKeys, {
+      unique: true,
+      partialFilterExpression: { renewalSource: { $type: 'objectId' }, renewalPeriod: { $type: 'string', $gt: '' } }
+    });
+  }
   await replaceIndex(CrmStage.collection, 'organization_1_key_1', { organization: 1, clientCompany: 1, key: 1 });
   await CrmStage.collection.createIndex({ organization: 1, clientCompany: 1, isDefault: 1 }, { unique: true, partialFilterExpression: { isDefault: true } });
   await replaceIndex(CrmLabel.collection, 'organization_1_name_1', { organization: 1, clientCompany: 1, name: 1 });
