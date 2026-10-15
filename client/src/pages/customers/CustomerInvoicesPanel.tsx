@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { Clock3, CreditCard, Download, FileText, Info, Plus, RotateCcw, Trash2, Wallet } from 'lucide-react';
 import { Invoice, invoicesApi } from '../../api/invoices';
 import DatePicker from '../../components/DatePicker';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const money = (value: number) => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const date = (value: string) => new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -28,6 +29,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
   const [paymentAmount, setPaymentAmount] = useState('');
   const [method, setMethod] = useState('UPI');
   const [reference, setReference] = useState('');
+  const [confirmAction, setConfirmAction] = useState<{ type: 'delete' | 'stop-renewal'; invoice: Invoice } | null>(null);
 
   const load = useCallback(async () => {
     try { setInvoices((await invoicesApi.list(customerId)).data); setError(''); }
@@ -72,17 +74,30 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
   }
 
   async function deleteInvoice(invoice: Invoice) {
-    if (!window.confirm(`Delete invoice ${invoice.invoiceNumber}? This will also remove its payment history.`)) return;
-    try { setSaving(true); setError(''); await invoicesApi.remove(invoice._id); await load(); }
+    setConfirmAction({ type: 'delete', invoice });
+  }
+
+  async function executeDeleteInvoice(invoice: Invoice) {
+    try { setSaving(true); setError(''); await invoicesApi.remove(invoice._id); setConfirmAction(null); await load(); }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not delete invoice.'); }
     finally { setSaving(false); }
   }
 
   async function handleRenewal(invoice: Invoice, action: 'continue' | 'stop') {
-    if (action === 'stop' && !window.confirm('Stop monthly renewal for this invoice?')) return;
+    if (action === 'stop') { setConfirmAction({ type: 'stop-renewal', invoice }); return; }
+    await updateRenewal(invoice, action);
+  }
+
+  async function updateRenewal(invoice: Invoice, action: 'continue' | 'stop') {
     try { setSaving(true); setError(''); await invoicesApi.renewal(invoice._id, action); await load(); }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not update monthly renewal.'); }
     finally { setSaving(false); }
+  }
+
+  async function confirmPendingAction() {
+    if (!confirmAction) return;
+    if (confirmAction.type === 'delete') await executeDeleteInvoice(confirmAction.invoice);
+    else { await updateRenewal(confirmAction.invoice, 'stop'); setConfirmAction(null); }
   }
 
   const total = invoices.reduce((sum, invoice) => sum + invoice.total, 0);
@@ -243,5 +258,16 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
       </div>
       <footer className="invoice-form-actions"><button className="invoice-button invoice-button-primary" disabled={saving}><CreditCard size={17} aria-hidden="true" />{saving ? 'Saving…' : 'Save payment'}</button><button type="button" className="invoice-button invoice-button-secondary" onClick={() => setPaymentInvoice('')}>Cancel</button></footer>
     </form>}
+
+    <ConfirmDialog
+      open={Boolean(confirmAction)}
+      title={confirmAction?.type === 'delete' ? 'Delete this invoice?' : 'Stop monthly renewal?'}
+      message={confirmAction?.type === 'delete' ? `Delete invoice ${confirmAction.invoice.invoiceNumber}? Its payment history will also be removed.` : `Stop monthly renewal for invoice ${confirmAction?.invoice.invoiceNumber}? No more monthly invoices will be created.`}
+      confirmText={confirmAction?.type === 'delete' ? 'Delete invoice' : 'Stop renewal'}
+      variant="danger"
+      loading={saving}
+      onConfirm={() => void confirmPendingAction()}
+      onCancel={() => setConfirmAction(null)}
+    />
   </div>;
 }
