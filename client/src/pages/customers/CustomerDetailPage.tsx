@@ -812,7 +812,7 @@ export default function CustomerDetailPage() {
 
               {tab === 'overview' && (
                 <article className="profile-panel lead-overview-card" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px 32px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03)' }}>
-                  <div className="profile-summary" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                  <div className={`profile-summary${isClientProfile ? ' client-overview-heading' : ''}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                     <strong style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text)' }}>
                       {isClientProfile ? 'Relationship overview' : `Rs. ${(customer.value || 0).toLocaleString('en-IN')}`}
                     </strong>
@@ -823,10 +823,11 @@ export default function CustomerDetailPage() {
                   </div>
 
                   {isClientProfile && (
-                    <div className="client-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px', margin: '1.25rem 0' }}>
+                    <div className="client-summary-grid client-overview-metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px', margin: '1.25rem 0' }}>
                       <div
                         onClick={() => setTab('work')}
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--panel-muted)', cursor: 'pointer' }}
+                        className="client-overview-metric"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--panel)', cursor: 'pointer' }}
                       >
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--sub)" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
                         <div className="metric-value" style={{ display: 'flex', flexDirection: 'column-reverse', gap: '0.1rem' }}>
@@ -836,7 +837,8 @@ export default function CustomerDetailPage() {
                       </div>
                       <div
                         onClick={() => setTab('work')}
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--panel-muted)', cursor: 'pointer' }}
+                        className="client-overview-metric"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--panel)', cursor: 'pointer' }}
                       >
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#10b981" strokeWidth="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                         <div className="metric-value" style={{ display: 'flex', flexDirection: 'column-reverse', gap: '0.1rem' }}>
@@ -846,7 +848,8 @@ export default function CustomerDetailPage() {
                       </div>
                       <div
                         onClick={() => setTab('work')}
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--panel-muted)', cursor: 'pointer' }}
+                        className="client-overview-metric"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--panel)', cursor: 'pointer' }}
                       >
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#3b82f6" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                         <div className="metric-value" style={{ display: 'flex', flexDirection: 'column-reverse', gap: '0.1rem' }}>
@@ -856,7 +859,8 @@ export default function CustomerDetailPage() {
                       </div>
                       <div
                         onClick={() => setTab('activity')}
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--panel-muted)', cursor: 'pointer' }}
+                        className="client-overview-metric"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: '10px', background: 'var(--panel)', cursor: 'pointer' }}
                       >
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#8b5cf6" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                         <div className="metric-value" style={{ display: 'flex', flexDirection: 'column-reverse', gap: '0.1rem' }}>
@@ -868,8 +872,8 @@ export default function CustomerDetailPage() {
                   )}
 
                   {/* Fact Grid */}
-                  <div className="lead-facts" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px 18px', marginTop: '1.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                  <div className={`lead-facts${isClientProfile ? ' client-overview-facts' : ''}`} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px 18px', marginTop: '1.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: isClientProfile ? 'var(--panel)' : 'var(--panel-muted)', minHeight: '52px' }}>
                       <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                       </span>
@@ -879,7 +883,7 @@ export default function CustomerDetailPage() {
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: isClientProfile ? 'var(--panel)' : 'var(--panel-muted)', minHeight: '52px' }}>
                       <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="m22 6-10 7L2 6"/></svg>
                       </span>
@@ -889,7 +893,7 @@ export default function CustomerDetailPage() {
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: isClientProfile ? 'var(--panel)' : 'var(--panel-muted)', minHeight: '52px' }}>
                       <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 12h4M10 8h4M14 21v-3a2 2 0 0 0-4 0v3M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/></svg>
                       </span>
@@ -899,7 +903,7 @@ export default function CustomerDetailPage() {
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: isClientProfile ? 'var(--panel)' : 'var(--panel-muted)', minHeight: '52px' }}>
                       <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
                       </span>
@@ -909,7 +913,7 @@ export default function CustomerDetailPage() {
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: isClientProfile ? 'var(--panel)' : 'var(--panel-muted)', minHeight: '52px' }}>
                       <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                       </span>
@@ -919,7 +923,7 @@ export default function CustomerDetailPage() {
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: isClientProfile ? 'var(--panel)' : 'var(--panel-muted)', minHeight: '52px' }}>
                       <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/></svg>
                       </span>
@@ -931,7 +935,7 @@ export default function CustomerDetailPage() {
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: isClientProfile ? 'var(--panel)' : 'var(--panel-muted)', minHeight: '52px' }}>
                       <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                       </span>
@@ -944,7 +948,7 @@ export default function CustomerDetailPage() {
                     </div>
 
                     {!isClientProfile && customer.labels && customer.labels.length > 0 && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: isClientProfile ? 'var(--panel)' : 'var(--panel-muted)', minHeight: '52px' }}>
                         <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
                           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
                         </span>
@@ -959,7 +963,7 @@ export default function CustomerDetailPage() {
                       const val = customer.customData?.[field.key];
                       if (val == null || val === '') return null;
                       return (
-                        <div key={field._id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel-muted)', minHeight: '52px' }}>
+                        <div key={field._id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: '8px', background: isClientProfile ? 'var(--panel)' : 'var(--panel-muted)', minHeight: '52px' }}>
                           <span className="fact-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '6px', background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--muted)', flexShrink: 0 }}>
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
                           </span>
