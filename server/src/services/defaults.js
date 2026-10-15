@@ -18,7 +18,7 @@ async function replaceIndex(collection, oldName, keys) {
 async function ensureCrmIndexes() {
   await Invoice.collection.createIndex(
     { organization: 1, clientCompany: 1, renewalSource: 1, renewalPeriod: 1 },
-    { unique: true, partialFilterExpression: { renewalSource: { $type: 'objectId' }, renewalPeriod: { $type: 'string', $gt: '' } } }
+    { unique: true, partialFilterExpression: { renewalSource: { $type: 'objectId' }, renewalPeriod: { $type: 'string' } } }
   );
   await replaceIndex(CrmStage.collection, 'organization_1_key_1', { organization: 1, clientCompany: 1, key: 1 });
   await CrmStage.collection.createIndex({ organization: 1, clientCompany: 1, isDefault: 1 }, { unique: true, partialFilterExpression: { isDefault: true } });

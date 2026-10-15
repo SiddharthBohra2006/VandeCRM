@@ -38,5 +38,5 @@ const invoiceSchema = new mongoose.Schema({
 
 invoiceSchema.index({ organization: 1, clientCompany: 1, invoiceNumber: 1 }, { unique: true });
 invoiceSchema.index({ organization: 1, clientCompany: 1, customer: 1, createdAt: -1 });
-invoiceSchema.index({ organization: 1, clientCompany: 1, renewalSource: 1, renewalPeriod: 1 }, { unique: true, partialFilterExpression: { renewalSource: { $type: 'objectId' }, renewalPeriod: { $type: 'string', $gt: '' } } });
+invoiceSchema.index({ organization: 1, clientCompany: 1, renewalSource: 1, renewalPeriod: 1 }, { unique: true, partialFilterExpression: { renewalSource: { $type: 'objectId' }, renewalPeriod: { $type: 'string' } } });
 module.exports = mongoose.model('Invoice', invoiceSchema);
