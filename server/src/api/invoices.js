@@ -7,7 +7,7 @@ const { hasPermission, isRestrictedUser } = require('../config/roles');
 const { requireApiAuth } = require('./middleware/auth');
 const { getWonStageIds } = require('../services/crmStages');
 const { createInvoicePdf } = require('../utils/invoicePdf');
-const { invoiceDiscount, invoiceTotal } = require('../utils/invoiceTotals');
+const { invoiceDiscount, invoiceTotal, invoiceIsOverdue } = require('../utils/invoiceTotals');
 
 const router = express.Router();
 router.use(requireApiAuth);
@@ -20,7 +20,7 @@ function totals(invoice) {
   const total = invoiceTotal(invoice);
   const paid = (invoice.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
   const balance = Math.max(0, total - paid);
-  const status = balance <= 0 ? 'paid' : paid > 0 ? 'partial' : invoice.dueDate && new Date(invoice.dueDate) < new Date() ? 'overdue' : 'unpaid';
+  const status = balance <= 0 ? 'paid' : invoiceIsOverdue(invoice, paid) ? 'overdue' : paid > 0 ? 'partial' : 'unpaid';
   return { total, paid, balance, status };
 }
 function serialize(invoice) { return { ...invoice.toObject(), ...totals(invoice) }; }
@@ -79,6 +79,7 @@ router.post('/customers/:customerId', async (req, res, next) => {
       return res.status(400).json({ ok: false, error: 'Enter a description, a positive amount, a valid discount, and a valid optional due date.' });
     }
     const netAmount = invoiceTotal({ amount, discount, discountType });
+    if (netAmount <= 0) return res.status(400).json({ ok: false, error: 'The discount must leave a positive invoice total.' });
     if (!Number.isFinite(initialPaymentAmount) || initialPaymentAmount < 0 || initialPaymentAmount > netAmount || (initialPaymentAmount > 0 && (!initialPaymentDate || Number.isNaN(initialPaymentDate.getTime())))) {
       return res.status(400).json({ ok: false, error: 'The amount already received must not exceed the invoice total, and needs a valid payment date.' });
     }
@@ -151,14 +152,25 @@ router.post('/:invoiceId/payments', async (req, res, next) => {
     if (!invoice) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
     const customer = await findCustomer(req, invoice.customer);
     if (!customer) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
-    const amount = Number(req.body.amount);
+    const rawAmount = Number(req.body.amount);
+    const amount = Math.round(rawAmount * 100) / 100;
     const balance = totals(invoice).balance;
     const methods = ['Cash', 'UPI', 'Bank transfer', 'Card', 'Other'];
     const method = methods.includes(req.body.method) ? req.body.method : 'Other';
-    if (!Number.isFinite(amount) || amount <= 0 || amount > balance) return res.status(400).json({ ok: false, error: `Payment must be greater than zero and no more than the balance (${balance}).` });
-    invoice.payments.push({ amount, method, reference: String(req.body.reference || '').trim(), note: String(req.body.note || '').trim(), receivedBy: req.user._id });
-    await invoice.save();
-    res.json({ ok: true, data: serialize(invoice) });
+    const paidAt = req.body.paidAt ? new Date(req.body.paidAt) : new Date();
+    if (!Number.isFinite(rawAmount) || rawAmount !== amount || amount <= 0 || amount > balance || Number.isNaN(paidAt.getTime())) {
+      return res.status(400).json({ ok: false, error: `Enter a valid payment amount (up to the current balance of ${balance}) and payment date.` });
+    }
+    const updated = await Invoice.findOneAndUpdate(
+      {
+        ...scope(req, { _id: invoice._id }),
+        $expr: { $lte: [{ $round: [{ $add: [{ $sum: '$payments.amount' }, amount] }, 2] }, Number(invoiceTotal(invoice).toFixed(2))] }
+      },
+      { $push: { payments: { amount, method, paidAt, reference: String(req.body.reference || '').trim(), note: String(req.body.note || '').trim(), receivedBy: req.user._id } } },
+      { new: true, runValidators: true }
+    );
+    if (!updated) return res.status(409).json({ ok: false, error: 'The invoice balance changed while saving. Refresh the invoice and try again.' });
+    res.json({ ok: true, data: serialize(updated) });
   } catch (error) { next(error); }
 });
 
@@ -168,6 +180,7 @@ router.delete('/:invoiceId', async (req, res, next) => {
     if (!mongoose.isValidObjectId(req.params.invoiceId)) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
     const invoice = await Invoice.findOne(scope(req, { _id: req.params.invoiceId }));
     if (!invoice || !(await findCustomer(req, invoice.customer))) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
+    await Invoice.updateMany(scope(req, { renewalSource: invoice._id }), { $set: { renewalSource: null, renewalPeriod: '' } });
     await invoice.deleteOne();
     res.json({ ok: true });
   } catch (error) { next(error); }

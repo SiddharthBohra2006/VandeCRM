@@ -7,6 +7,14 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 const money = (value: number) => `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const date = (value: string) => new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 const localToday = () => { const today = new Date(); today.setMinutes(today.getMinutes() - today.getTimezoneOffset()); return today.toISOString().slice(0, 10); };
+const dueDateFor = (invoice: Invoice) => {
+  let paid = invoice.paid;
+  for (const installment of [...(invoice.installments || [])].sort((a, b) => a.dueDate.localeCompare(b.dueDate))) {
+    if (paid < installment.amount) return installment.dueDate;
+    paid -= installment.amount;
+  }
+  return invoice.balance > 0 ? invoice.dueDate || '' : '';
+};
 
 export default function CustomerInvoicesPanel({ customerId }: { customerId: string }) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -27,6 +35,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
   const [installments, setInstallments] = useState<{ name: string; amount: string; dueDate: string }[]>([]);
   const [paymentInvoice, setPaymentInvoice] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentDate, setPaymentDate] = useState('');
   const [method, setMethod] = useState('UPI');
   const [reference, setReference] = useState('');
   const [confirmAction, setConfirmAction] = useState<{ type: 'delete' | 'stop-renewal'; invoice: Invoice } | null>(null);
@@ -65,10 +74,11 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
 
   async function recordPayment(event: FormEvent) {
     event.preventDefault();
+    if (!paymentDate) return setError('Choose the date the payment was received.');
     try {
       setSaving(true); setError('');
-      await invoicesApi.addPayment(paymentInvoice, { amount: Number(paymentAmount), method, reference });
-      setPaymentInvoice(''); setPaymentAmount(''); setReference(''); await load();
+      await invoicesApi.addPayment(paymentInvoice, { amount: Number(paymentAmount), method, reference, paidAt: paymentDate });
+      setPaymentInvoice(''); setPaymentAmount(''); setPaymentDate(''); setReference(''); await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not record payment.'); }
     finally { setSaving(false); }
   }
@@ -111,7 +121,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
   const initialPaid = Number(initialPaymentAmount) || 0;
   const initialPaymentValid = initialPaid <= netAmount && (initialPaid === 0 || Boolean(initialPaymentDate));
   const balanceAfterInitialPayment = Math.max(0, netAmount - initialPaid);
-  const discountValid = discountType === 'percent' ? Number(discount) < 100 : discountAmount < (Number(amount) || 0);
+  const discountValid = netAmount > 0 && (discountType === 'percent' ? Number(discount) < 100 : discountAmount < (Number(amount) || 0));
   const monthlyRenewal = paymentPlan === 'monthly';
   const downPaymentAmount = paymentPlan === 'installments' && installments[0]?.name.trim().toLowerCase() === 'down payment' ? Number(installments[0].amount) || 0 : 0;
   const scheduleMatches = Math.round(installmentTotal * 100) === Math.round(netAmount * 100);
@@ -231,20 +241,20 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
       {loading ? <div className="invoice-empty-state"><span className="invoice-loading-dot" />Loading invoices…</div> : invoices.length === 0 ? <div className="invoice-empty-state"><span className="invoice-empty-icon"><FileText size={22} aria-hidden="true" /></span><strong>No invoices yet</strong><span>Create the first invoice using the form above.</span></div> : <div className="invoice-list">
         {invoices.map(invoice => <article key={invoice._id} className="invoice-item">
           <div className="invoice-item-main">
-            <div className="invoice-item-title"><span className="invoice-file-icon"><FileText size={17} aria-hidden="true" /></span><div><strong>{invoice.invoiceNumber}</strong><span>{invoice.description}</span><small>Issued {date(invoice.createdAt)} <i>·</i> Due {invoice.dueDate ? date(invoice.dueDate) : 'Not set'}</small></div></div>
+            <div className="invoice-item-title"><span className="invoice-file-icon"><FileText size={17} aria-hidden="true" /></span><div><strong>{invoice.invoiceNumber}</strong><span>{invoice.description}</span><small>Issued {date(invoice.createdAt)} <i>·</i> Next due {dueDateFor(invoice) ? date(dueDateFor(invoice)) : 'Not set'}</small></div></div>
             <div className="invoice-item-balance"><strong>{money(invoice.balance)}</strong><span className={`invoice-status invoice-status-${invoice.status}`}>{invoice.status}</span></div>
           </div>
           <div className="invoice-progress-track" role="progressbar" aria-label={`${invoice.invoiceNumber} payment progress`} aria-valuenow={invoice.total > 0 ? Math.round(invoice.paid / invoice.total * 100) : 0} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${invoice.total > 0 ? Math.min(100, invoice.paid / invoice.total * 100) : 0}%` }} /></div>
           <div className="invoice-item-totals"><span>Total <strong>{money(invoice.total)}</strong></span><span>Paid <strong className="invoice-paid-value">{money(invoice.paid)}</strong></span><span>Pending <strong className="invoice-pending-value">{money(invoice.balance)}</strong></span></div>
           <div className="invoice-item-actions">
             <button type="button" className="invoice-button invoice-button-secondary" onClick={() => void invoicesApi.download(invoice).catch(e => setError(e.message))}><Download size={16} aria-hidden="true" />Download PDF</button>
-            {invoice.balance > 0 && <button type="button" className="invoice-button invoice-button-primary" onClick={() => { setPaymentInvoice(invoice._id); setPaymentAmount(String(invoice.balance)); }}><CreditCard size={16} aria-hidden="true" />Record payment</button>}
+            {invoice.balance > 0 && <button type="button" className="invoice-button invoice-button-primary" onClick={() => { setPaymentInvoice(invoice._id); setPaymentAmount(String(invoice.balance)); setPaymentDate(localToday()); }}><CreditCard size={16} aria-hidden="true" />Record payment</button>}
             <button type="button" className="invoice-button invoice-delete-button" onClick={() => void deleteInvoice(invoice)}><Trash2 size={16} aria-hidden="true" />Delete</button>
           </div>
           {invoice.monthlyRenewal && <div className="invoice-renewal-status"><RotateCcw size={17} aria-hidden="true" /><div><strong>Monthly renewal</strong><span>{invoice.renewalPromptedMonth ? 'Your decision is due' : 'Next decision'} · {invoice.nextRenewalDate ? date(invoice.nextRenewalDate) : 'Date not set'}</span></div><div className="invoice-renewal-actions"><button type="button" className="invoice-button invoice-button-primary" disabled={!invoice.renewalPromptedMonth} onClick={() => void handleRenewal(invoice, 'continue')}>Continue</button><button type="button" className="invoice-button invoice-button-secondary" onClick={() => void handleRenewal(invoice, 'stop')}>Stop renewal</button></div></div>}
-          {invoice.installments?.length > 0 && <div className="invoice-detail-block"><h3>Payment schedule</h3>{(() => { let remainingPaid = invoice.paid; return [...invoice.installments].sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map((row, index) => { const rowPaid = Math.min(row.amount, remainingPaid); remainingPaid -= rowPaid; const rowBalance = row.amount - rowPaid; const overdue = rowBalance > 0 && new Date(row.dueDate) < new Date(); return <div className="invoice-detail-row" key={row._id || index}><span><strong>{row.name}</strong><small>{date(row.dueDate)} · {rowBalance <= 0 ? 'Paid' : overdue ? 'Overdue' : rowPaid > 0 ? 'Partially paid' : 'Upcoming'}</small></span><span><strong className="invoice-paid-value">{money(rowPaid)} paid</strong><small>of {money(row.amount)} · {money(rowBalance)} pending</small></span></div>; }); })()}</div>}
+          {invoice.installments?.length > 0 && <div className="invoice-detail-block"><h3>Payment schedule</h3>{(() => { let remainingPaid = invoice.paid; return [...invoice.installments].sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map((row, index) => { const rowPaid = Math.min(row.amount, remainingPaid); remainingPaid -= rowPaid; const rowBalance = row.amount - rowPaid; const dueKey = row.dueDate.slice(0, 10); const overdue = rowBalance > 0 && dueKey < localToday(); return <div className="invoice-detail-row" key={row._id || index}><span><strong>{row.name}</strong><small>{date(row.dueDate)} · {rowBalance <= 0 ? 'Paid' : overdue ? 'Overdue' : rowPaid > 0 ? 'Partially paid' : 'Upcoming'}</small></span><span><strong className="invoice-paid-value">{money(rowPaid)} paid</strong><small>of {money(row.amount)} · {money(rowBalance)} pending</small></span></div>; }); })()}</div>}
           {invoice.agreementTerms && <div className="invoice-detail-block"><h3>Agreement terms & deliverables</h3><p className="invoice-agreement-terms">{invoice.agreementTerms}</p></div>}
-          {invoice.payments.length > 0 && <div className="invoice-detail-block"><h3>Payment history</h3>{invoice.payments.map(payment => <div className="invoice-detail-row" key={payment._id}><span><strong>{payment.method}{payment.reference ? ` · ${payment.reference}` : ''}</strong><small>{date(payment.paidAt)}</small></span><strong className="invoice-paid-value">{money(payment.amount)}</strong></div>)}</div>}
+          {invoice.payments.length > 0 && <div className="invoice-detail-block"><h3>Payment history</h3>{[...invoice.payments].sort((a, b) => a.paidAt.localeCompare(b.paidAt)).map(payment => <div className="invoice-detail-row" key={payment._id}><span><strong>{payment.method}{payment.reference ? ` · ${payment.reference}` : ''}</strong><small>{date(payment.paidAt)}</small></span><strong className="invoice-paid-value">{money(payment.amount)}</strong></div>)}</div>}
         </article>)}
       </div>}
     </section>
@@ -253,6 +263,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
       <header className="invoice-section-heading"><div><h2>Record payment</h2><p>Save the payment against this invoice balance.</p></div><span className="invoice-heading-icon invoice-icon-green"><Wallet size={19} aria-hidden="true" /></span></header>
       <div className="invoice-form-grid">
         <label className="invoice-field">Amount (₹) <span>*</span><input required type="number" min="0.01" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} /></label>
+        <label className="invoice-field">Date received <span>*</span><DatePicker className="invoice-date-picker" value={paymentDate} onChange={setPaymentDate} placeholder="dd-mm-yyyy" displayFormat="dmy" aria-label="Date payment received" /></label>
         <label className="invoice-field">Method <span>*</span><select value={method} onChange={e => setMethod(e.target.value)}>{['Cash', 'UPI', 'Bank transfer', 'Card', 'Other'].map(item => <option key={item}>{item}</option>)}</select></label>
         <label className="invoice-field invoice-field-description">Transaction reference <small>Optional</small><input value={reference} onChange={e => setReference(e.target.value)} placeholder="UPI reference or transaction ID" /></label>
       </div>
@@ -262,7 +273,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
     <ConfirmDialog
       open={Boolean(confirmAction)}
       title={confirmAction?.type === 'delete' ? 'Delete this invoice?' : 'Stop monthly renewal?'}
-      message={confirmAction?.type === 'delete' ? `Delete invoice ${confirmAction.invoice.invoiceNumber}? Its payment history will also be removed.` : `Stop monthly renewal for invoice ${confirmAction?.invoice.invoiceNumber}? No more monthly invoices will be created.`}
+      message={confirmAction?.type === 'delete' ? `Delete invoice ${confirmAction.invoice.invoiceNumber}? Its payment history will be removed. Any monthly invoices already created will remain.` : `Stop monthly renewal for invoice ${confirmAction?.invoice.invoiceNumber}? No more monthly invoices will be created.`}
       confirmText={confirmAction?.type === 'delete' ? 'Delete invoice' : 'Stop renewal'}
       variant="danger"
       loading={saving}

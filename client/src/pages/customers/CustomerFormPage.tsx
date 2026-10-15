@@ -103,7 +103,8 @@ export default function CustomerFormPage() {
           try {
             await invoicesApi.create(result.data._id, { description: invoiceDescription.trim(), amount: Number(invoiceAmount), ...(invoiceDueDate ? { dueDate: invoiceDueDate } : {}) });
           } catch (invoiceError) {
-            window.alert(`Client was created, but the invoice could not be saved: ${invoiceError instanceof Error ? invoiceError.message : 'Please try again from the Invoices tab.'}`);
+            navigate(`/clients/${result.data._id}?tab=invoices`, { state: { invoiceCreationError: `Client was created, but the invoice could not be saved: ${invoiceError instanceof Error ? invoiceError.message : 'Please try again from the Invoices tab.'}` } });
+            return;
           }
         }
         navigate(`${isClientScope ? '/clients' : '/customers'}/${result.data._id}${isClientScope && Number(invoiceAmount) > 0 && invoiceDescription.trim() ? '?tab=invoices' : ''}`);

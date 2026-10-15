@@ -1,3 +1,5 @@
+const { dateKey, todayKey } = require('./invoiceTotals');
+
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
 const MARGIN = 42;
@@ -131,7 +133,7 @@ function createInvoicePdf({ company, invoice, customer, total, paid, balance, st
     text(MARGIN + 12, y, descLine, 9, TEXT, true);
     y += 12;
   }
-  text(PAGE_WIDTH - MARGIN - 12, y - descLines.length * 14, money(invoice.amount), 9, TEXT, true, 'right');
+  text(PAGE_WIDTH - MARGIN - 12, y - descLines.length * 12, money(invoice.amount), 9, TEXT, true, 'right');
   y += 5;
   if (invoice.agreementTerms) {
     line(MARGIN, y, PAGE_WIDTH - MARGIN);
@@ -158,7 +160,7 @@ function createInvoicePdf({ company, invoice, customer, total, paid, balance, st
   rect(summaryX, y, summaryWidth, summaryHeight, PALE, BORDER);
   let summaryY = y + 12;
   netRows.forEach(([label, value], index) => {
-    const emphasized = index === 2;
+    const emphasized = label === 'Total after discount';
     text(summaryX + 12, summaryY, label, emphasized ? 9 : 8.5, emphasized ? NAVY : MUTED, emphasized);
     text(summaryX + summaryWidth - 12, summaryY, value, emphasized ? 10 : 8.5, emphasized ? NAVY : TEXT, true, 'right');
     summaryY += 20;
@@ -185,9 +187,8 @@ function createInvoicePdf({ company, invoice, customer, total, paid, balance, st
       const allocated = Math.min(Number(installment.amount || 0), paidLeft);
       paidLeft = Math.max(0, paidLeft - allocated);
       const remaining = Math.max(0, Number(installment.amount || 0) - allocated);
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const due = new Date(installment.dueDate); due.setHours(0, 0, 0, 0);
-      const rowStatus = remaining === 0 ? 'Paid' : allocated > 0 ? 'Partially paid' : due < today ? 'Overdue' : 'Upcoming';
+      const overdue = dateKey(installment.dueDate) < todayKey();
+      const rowStatus = remaining === 0 ? 'Paid' : overdue ? 'Overdue' : allocated > 0 ? 'Partially paid' : 'Upcoming';
       if (index % 2 === 1) rect(MARGIN, y - 3, contentWidth, 22, [0.985, 0.988, 0.993]);
       text(MARGIN + 10, y, installment.name || `Payment ${index + 1}`, 8.5, TEXT, true);
       text(MARGIN + 263, y, formatDate(installment.dueDate), 8, MUTED);

@@ -8,7 +8,7 @@ const Customer = require('../models/Customer');
 const SavedView = require('../models/SavedView');
 const User = require('../models/User');
 const Invoice = require('../models/Invoice');
-const { invoiceTotal } = require('../utils/invoiceTotals');
+const { invoiceTotal, invoiceIsOverdue, invoiceNextDueDate, dateKey } = require('../utils/invoiceTotals');
 const { hasPermission, isRestrictedUser, canAccessLeadField } = require('../config/roles');
 const { getWonStageIds } = require('../services/crmStages');
 const { requireApiAuth } = require('./middleware/auth');
@@ -95,7 +95,7 @@ router.get('/', async (req, res, next) => {
     const stages = allStages.filter(stage => stage.isWon && (stage.isActive || customerStageIds.has(String(stage._id)) || String(stage._id) === String(selectedStageId)));
     const activeSavedView = savedViews.find(sv => String(sv._id) === String(viewId)) || null;
 
-    const invoiceRows = customers.length ? await Invoice.find(scope(req, { customer: { $in: customers.map(customer => customer._id) } })).select('customer amount discount discountType dueDate payments').lean() : [];
+    const invoiceRows = customers.length ? await Invoice.find(scope(req, { customer: { $in: customers.map(customer => customer._id) } })).select('customer amount discount discountType dueDate installments payments').lean() : [];
     const paymentByCustomer = new Map();
     invoiceRows.forEach(invoice => {
       const customerId = String(invoice.customer);
@@ -107,9 +107,10 @@ router.get('/', async (req, res, next) => {
       current.totalPaid += paid;
       current.balanceDue += balance;
       current.invoiceCount += 1;
-      if (balance > 0 && invoice.dueDate) {
-        if (!current.nextDueDate || new Date(invoice.dueDate) < new Date(current.nextDueDate)) current.nextDueDate = invoice.dueDate;
-        if (new Date(invoice.dueDate) < new Date()) current.overdue = true;
+      if (balance > 0) {
+        const nextDueDate = invoiceNextDueDate(invoice, paid);
+        if (nextDueDate && (!current.nextDueDate || dateKey(nextDueDate) < dateKey(current.nextDueDate))) current.nextDueDate = nextDueDate;
+        if (invoiceIsOverdue(invoice, paid)) current.overdue = true;
       }
       paymentByCustomer.set(customerId, current);
     });

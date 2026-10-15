@@ -62,6 +62,7 @@ function formatWorkValue(value: any, field: any) {
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
+  const invoiceCreationError = (location.state as { invoiceCreationError?: string } | null)?.invoiceCreationError;
   const navigate = useNavigate();
   const { crmTerms, user } = useAuth();
   const [detail, setDetail] = useState<CustomerDetailResponse | null>(null);
@@ -685,6 +686,7 @@ export default function CustomerDetailPage() {
       </section>
 
       {error && <div className="notice danger" style={{ marginBottom: '1rem' }}>{error}</div>}
+      {invoiceCreationError && <div className="notice danger" role="alert" style={{ marginBottom: '1rem' }}>{invoiceCreationError}</div>}
       {success && <div className="notice success" style={{ marginBottom: '1rem' }}>{success}</div>}
 
       {/* Grid Layout: Main column + Right Settings Sidebar */}
