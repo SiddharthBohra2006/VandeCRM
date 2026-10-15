@@ -110,12 +110,21 @@
 .invoice-schedule-total strong { font-weight: 750; }
 .invoice-schedule-total.is-valid { background: #ecfdf3; color: #087443; }
 .invoice-schedule-total.is-invalid { background: #fff4f2; color: #b42318; }
-.invoice-agreement-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; padding: 14px; border: 1px solid color-mix(in srgb, var(--gold) 22%, var(--border)); border-radius: 12px; background: color-mix(in srgb, var(--gold) 4%, var(--panel)); }
-.invoice-agreement-summary > div { display: grid; align-content: start; gap: 4px; min-width: 0; }
+.invoice-terms-toggle { padding: 11px 0; border-bottom: 1px solid var(--invoice-line); }
+.invoice-terms-toggle summary { color: var(--sub); font-size: .8rem; font-weight: 700; cursor: pointer; }
+.invoice-terms-toggle summary span { margin-left: 5px; color: var(--muted); font-size: .72rem; font-weight: 500; }
+.invoice-terms-toggle[open] .invoice-field { margin-top: 12px; }
+.invoice-payment-plan { display: grid; gap: 12px; }
+.invoice-payment-plan h3 { font-size: .9rem; font-weight: 750; }
+.invoice-plan-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.invoice-plan-options button { min-height: 38px; padding: 0 13px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); color: var(--sub); font: 650 .78rem var(--font-body); cursor: pointer; }
+.invoice-plan-options button:hover { border-color: var(--gold); }
+.invoice-plan-options button.is-active { border-color: var(--gold); background: var(--gold-dim); color: var(--gold); }
+.invoice-plan-hint { color: var(--muted); font-size: .76rem; }
+.invoice-agreement-summary { display: flex; flex-wrap: wrap; gap: 10px 30px; padding: 12px 0; border-top: 1px solid var(--invoice-line); border-bottom: 1px solid var(--invoice-line); }
+.invoice-agreement-summary > div { display: grid; align-content: start; gap: 3px; min-width: 140px; flex: 1; }
 .invoice-agreement-summary > div span { color: var(--muted); font-size: .7rem; font-weight: 650; }
 .invoice-agreement-summary > div strong { color: var(--text); font-size: .88rem; overflow-wrap: anywhere; }
-.invoice-agreement-summary > div:nth-child(3) strong { color: var(--gold); }
-.invoice-agreement-summary > p { grid-column: 1 / -1; margin: 2px 0 0; color: var(--muted); font-size: .74rem; }
 .invoice-agreement-terms { white-space: pre-wrap; color: var(--sub); font-size: .8rem; }
 .invoice-form-actions { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; margin-top: 20px; padding-top: 17px; border-top: 1px solid #edf0f4; }
 .invoice-form-actions > span { color: var(--invoice-muted); font-size: .76rem; }
@@ -167,7 +176,6 @@
 @media (max-width: 900px) {
   .invoice-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .invoice-field-description { grid-column: 1 / -1; }
-  .invoice-agreement-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .invoice-installment-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .invoice-remove-button { justify-self: start; }
 }
@@ -181,7 +189,10 @@
   .invoice-form-grid, .invoice-installment-row { grid-template-columns: minmax(0, 1fr); }
   .invoice-field-date, .invoice-field-description { grid-column: auto; }
   .invoice-field-terms { grid-column: auto; }
-  .invoice-agreement-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .invoice-agreement-summary { gap: 8px 16px; }
+  .invoice-agreement-summary > div { min-width: 120px; }
+  .invoice-plan-options { display: grid; grid-template-columns: 1fr; }
+  .invoice-plan-options button { width: 100%; }
   .invoice-subheading-row { align-items: flex-start; flex-direction: column; }
   .invoice-item { padding: 13px; }
   .invoice-item-main { flex-direction: column; }
