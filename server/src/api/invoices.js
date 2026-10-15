@@ -53,8 +53,14 @@ router.post('/customers/:customerId', async (req, res, next) => {
     const discount = Number(req.body.discount || 0);
     const description = String(req.body.description || '').trim();
     const dueDate = req.body.dueDate ? new Date(req.body.dueDate) : null;
+    const installments = Array.isArray(req.body.installments) ? req.body.installments.map(row => ({
+      name: String(row.name || '').trim(), amount: Number(row.amount), dueDate: new Date(row.dueDate)
+    })) : [];
     if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(discount) || discount < 0 || discount >= amount || !description || (dueDate && Number.isNaN(dueDate.getTime()))) {
       return res.status(400).json({ ok: false, error: 'Enter a description, a positive amount, a valid discount, and a valid optional due date.' });
+    }
+    if (installments.length && (installments.some(row => !row.name || row.name.length > 80 || !Number.isFinite(row.amount) || row.amount <= 0 || Number.isNaN(row.dueDate.getTime())) || Math.round(installments.reduce((sum, row) => sum + row.amount, 0) * 100) !== Math.round((amount - discount) * 100))) {
+      return res.status(400).json({ ok: false, error: 'Instalment names, positive amounts, and due dates are required; instalments must total the invoice amount after discount.' });
     }
     const company = await ClientCompany.findOne(scope(req));
     if (!company) return res.status(400).json({ ok: false, error: 'Active workspace not found.' });
@@ -62,7 +68,7 @@ router.post('/customers/:customerId', async (req, res, next) => {
     const invoice = await Invoice.create({
       ...scope(req), customer: customer._id,
       invoiceNumber: `INV-${String(sequence.invoiceSequence).padStart(5, '0')}`,
-      description, amount, discount, dueDate, createdBy: req.user._id
+      description, amount, discount, dueDate, installments, createdBy: req.user._id
     });
     res.status(201).json({ ok: true, data: serialize(invoice) });
   } catch (error) { next(error); }
@@ -95,6 +101,7 @@ router.get('/:invoiceId/pdf', async (req, res, next) => {
     const company = await ClientCompany.findOne(scope(req)).select('name phone email location');
     const { total, paid, balance, status } = totals(invoice);
     const money = value => `Rs. ${Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+    const installmentRows = (invoice.installments || []).map(row => ({ Description: `${row.name.slice(0, 14)} due ${row.dueDate.toLocaleDateString('en-IN')}`, Amount: money(row.amount) }));
     const rows = [
       { Description: 'Bill to', Amount: invoice.customer.name },
       { Description: invoice.customer.company || 'Contact', Amount: invoice.customer.email || invoice.customer.phone || '' },
@@ -105,6 +112,7 @@ router.get('/:invoiceId/pdf', async (req, res, next) => {
       { Description: 'Amount paid', Amount: money(paid) },
       { Description: 'Balance due', Amount: money(balance) },
       { Description: 'Payment status', Amount: status.toUpperCase() },
+      ...(installmentRows.length ? [{ Description: 'INSTALMENT SCHEDULE', Amount: '' }, ...installmentRows] : []),
     ];
     const pdf = createSimpleReportPdf(company?.name || 'Invoice', `${invoice.invoiceNumber} | Invoice date: ${invoice.createdAt.toLocaleDateString('en-IN')}`, ['Invoice details', 'Amount'], rows);
     res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${invoice.invoiceNumber}.pdf"` });

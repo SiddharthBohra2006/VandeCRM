@@ -9,6 +9,12 @@ const paymentSchema = new mongoose.Schema({
   paidAt: { type: Date, default: Date.now }
 }, { _id: true });
 
+const installmentSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true, maxlength: 80 },
+  amount: { type: Number, required: true, min: 0.01 },
+  dueDate: { type: Date, required: true }
+}, { _id: true });
+
 const invoiceSchema = new mongoose.Schema({
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
   clientCompany: { type: mongoose.Schema.Types.ObjectId, ref: 'ClientCompany', required: true, index: true },
@@ -18,6 +24,7 @@ const invoiceSchema = new mongoose.Schema({
   amount: { type: Number, required: true, min: 0.01 },
   discount: { type: Number, default: 0, min: 0 },
   dueDate: { type: Date, default: null },
+  installments: { type: [installmentSchema], default: [] },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   payments: { type: [paymentSchema], default: [] }
 }, { timestamps: true });

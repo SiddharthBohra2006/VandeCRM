@@ -14,6 +14,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
   const [amount, setAmount] = useState('');
   const [discount, setDiscount] = useState('0');
   const [dueDate, setDueDate] = useState('');
+  const [installments, setInstallments] = useState<{ name: string; amount: string; dueDate: string }[]>([]);
   const [paymentInvoice, setPaymentInvoice] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [method, setMethod] = useState('UPI');
@@ -30,8 +31,8 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
     event.preventDefault();
     try {
       setSaving(true); setError('');
-      await invoicesApi.create(customerId, { description, amount: Number(amount), discount: Number(discount || 0), ...(dueDate ? { dueDate } : {}) });
-      setDescription(''); setAmount(''); setDiscount('0'); setDueDate(''); await load();
+      await invoicesApi.create(customerId, { description, amount: Number(amount), discount: Number(discount || 0), ...(dueDate ? { dueDate } : {}), ...(installments.length ? { installments: installments.map(row => ({ ...row, amount: Number(row.amount) })) } : {}) });
+      setDescription(''); setAmount(''); setDiscount('0'); setDueDate(''); setInstallments([]); await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not create invoice.'); }
     finally { setSaving(false); }
   }
@@ -49,6 +50,8 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
   const total = invoices.reduce((sum, i) => sum + i.total, 0);
   const paid = invoices.reduce((sum, i) => sum + i.paid, 0);
   const balance = invoices.reduce((sum, i) => sum + i.balance, 0);
+  const installmentTotal = installments.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+  const netAmount = (Number(amount) || 0) - (Number(discount) || 0);
   return <div className="customer-invoices-panel" style={{ display: 'grid', gap: 16 }}>
     {error && <div className="notice danger" role="alert">{error}</div>}
     <section style={{ ...panelStyle, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 16 }}>
@@ -62,7 +65,17 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
         <label>Discount (₹)<input type="number" min="0" step="0.01" value={discount} onChange={e => setDiscount(e.target.value)} style={inputStyle} /></label>
         <label>Due date (optional)<input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} style={inputStyle} /></label>
       </div>
-      <button className="btn primary" disabled={saving} style={{ marginTop: 14 }}>{saving ? 'Saving…' : 'Create invoice'}</button>
+      <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}><strong>Instalment schedule (optional)</strong><button type="button" className="btn" onClick={() => setInstallments(rows => [...rows, { name: `Instalment ${rows.length + 1}`, amount: '', dueDate: '' }])}>+ Add instalment</button></div>
+        {installments.map((row, index) => <div key={index} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10, marginTop: 10 }}>
+          <label>Instalment name<input required value={row.name} onChange={e => setInstallments(rows => rows.map((item, i) => i === index ? { ...item, name: e.target.value } : item))} style={inputStyle} /></label>
+          <label>Amount (₹)<input required type="number" min="0.01" step="0.01" value={row.amount} onChange={e => setInstallments(rows => rows.map((item, i) => i === index ? { ...item, amount: e.target.value } : item))} style={inputStyle} /></label>
+          <label>Due date<input required type="date" value={row.dueDate} onChange={e => setInstallments(rows => rows.map((item, i) => i === index ? { ...item, dueDate: e.target.value } : item))} style={inputStyle} /></label>
+          <button type="button" className="btn" onClick={() => setInstallments(rows => rows.filter((_, i) => i !== index))}>Remove</button>
+        </div>)}
+        {installments.length > 0 && <small style={{ display: 'block', marginTop: 8, color: Math.round(installmentTotal * 100) === Math.round(netAmount * 100) ? 'var(--green)' : 'var(--red)' }}>Schedule total: {money(installmentTotal)} / Invoice after discount: {money(netAmount)}</small>}
+      </div>
+      <button className="btn primary" disabled={saving || (installments.length > 0 && Math.round(installmentTotal * 100) !== Math.round(netAmount * 100))} style={{ marginTop: 14 }}>{saving ? 'Saving…' : 'Create invoice'}</button>
     </form>
     <section style={panelStyle}>
       <h2 style={{ margin: '0 0 14px', fontSize: 18 }}>Invoices</h2>
@@ -77,6 +90,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
             {invoice.balance > 0 && <button type="button" className="btn primary" onClick={() => { setPaymentInvoice(invoice._id); setPaymentAmount(String(invoice.balance)); }}>Record payment</button>}
           </div>
           {invoice.payments.length > 0 && <div className="invoice-payments"><strong>Payments</strong>{invoice.payments.map(payment => <div key={payment._id} className="invoice-payment-row"><span>{new Date(payment.paidAt).toLocaleDateString('en-IN')} · {payment.method}{payment.reference ? ` · ${payment.reference}` : ''}</span><strong>{money(payment.amount)}</strong></div>)}</div>}
+          {invoice.installments?.length > 0 && <div className="invoice-payments"><strong>Instalments</strong>{(() => { let remainingPaid = invoice.paid; return [...invoice.installments].sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map((row, index) => { const rowPaid = Math.min(row.amount, remainingPaid); remainingPaid -= rowPaid; const rowBalance = row.amount - rowPaid; const overdue = rowBalance > 0 && new Date(row.dueDate) < new Date(); return <div key={row._id || index} className="invoice-payment-row"><span>{row.name} · due {new Date(row.dueDate).toLocaleDateString('en-IN')} · {rowBalance <= 0 ? 'Paid' : overdue ? 'Overdue' : rowPaid > 0 ? 'Partial' : 'Upcoming'}</span><strong>{money(row.amount)}{rowBalance < row.amount ? ` · ${money(rowPaid)} paid` : ''}</strong></div>; }); })()}</div>}
         </article>)}
       </div>}
     </section>
