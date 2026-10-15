@@ -6,7 +6,7 @@ const ClientCompany = require('../models/ClientCompany');
 const { hasPermission, isRestrictedUser } = require('../config/roles');
 const { requireApiAuth } = require('./middleware/auth');
 const { getWonStageIds } = require('../services/crmStages');
-const { createSimpleReportPdf } = require('../utils/pdf');
+const { createInvoicePdf } = require('../utils/invoicePdf');
 const { invoiceDiscount, invoiceTotal } = require('../utils/invoiceTotals');
 
 const router = express.Router();
@@ -33,26 +33,6 @@ function addMonth(date) {
   return next;
 }
 function monthKey(date) { return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`; }
-function pdfTextRows(label, value, maxLength = 32) {
-  const lines = [];
-  let current = '';
-  for (let word of String(value || '').split(/\s+/)) {
-    if (!word) continue;
-    while (word.length > maxLength) {
-      if (current) lines.push(current);
-      lines.push(word.slice(0, maxLength));
-      current = '';
-      word = word.slice(maxLength);
-    }
-    if (current && `${current} ${word}`.length > maxLength) {
-      lines.push(current);
-      current = word;
-    } else current = current ? `${current} ${word}` : word;
-  }
-  if (current) lines.push(current);
-  return lines.map((line, index) => ({ Description: index ? 'Terms (continued)' : label, Amount: line }));
-}
-
 async function findCustomer(req, customerId) {
   if (!mongoose.isValidObjectId(customerId)) return null;
   const filter = { _id: customerId, ...scope(req) };
@@ -190,23 +170,16 @@ router.get('/:invoiceId/pdf', async (req, res, next) => {
     if (!invoice || !(await findCustomer(req, invoice.customer._id))) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
     const company = await ClientCompany.findOne(scope(req)).select('name phone email location');
     const { total, paid, balance, status } = totals(invoice);
-    const money = value => `Rs. ${Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-    const installmentRows = (invoice.installments || []).map(row => ({ Description: `${row.name.slice(0, 14)} due ${row.dueDate.toLocaleDateString('en-IN')}`, Amount: money(row.amount) }));
-    const rows = [
-      { Description: 'Bill to', Amount: invoice.customer.name },
-      { Description: invoice.customer.company || 'Contact', Amount: invoice.customer.email || invoice.customer.phone || '' },
-      { Description: 'Due date', Amount: invoice.dueDate ? invoice.dueDate.toLocaleDateString('en-IN') : 'Not set' },
-      { Description: invoice.description, Amount: money(invoice.amount) },
-      ...(invoice.agreementTerms ? pdfTextRows('Agreement terms / deliverables', invoice.agreementTerms) : []),
-      ...(invoice.discount ? [{ Description: `Discount${invoice.discountType === 'percent' ? ` (${invoice.discount}%)` : ''}`, Amount: `-${money(invoiceDiscount(invoice))}` }] : []),
-      { Description: 'Net invoice amount', Amount: money(total) },
-      { Description: 'Amount paid', Amount: money(paid) },
-      { Description: 'Balance due', Amount: money(balance) },
-      { Description: 'Payment status', Amount: status.toUpperCase() },
-      ...(invoice.monthlyRenewal ? [{ Description: 'Renewal terms', Amount: 'Monthly; confirmation required, no automatic charge' }] : []),
-      ...(installmentRows.length ? [{ Description: 'INSTALMENT SCHEDULE', Amount: '' }, ...installmentRows] : []),
-    ];
-    const pdf = createSimpleReportPdf(company?.name || 'Invoice', `${invoice.invoiceNumber} | Invoice date: ${invoice.createdAt.toLocaleDateString('en-IN')}`, ['Invoice details', 'Amount'], rows);
+    const pdf = createInvoicePdf({
+      company: company?.toObject?.() || company || {},
+      invoice: invoice.toObject(),
+      customer: invoice.customer,
+      total,
+      paid,
+      balance,
+      status,
+      discountAmount: invoiceDiscount(invoice)
+    });
     res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${invoice.invoiceNumber}.pdf"` });
     res.send(pdf);
   } catch (error) { next(error); }
