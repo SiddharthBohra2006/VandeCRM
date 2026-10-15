@@ -18,6 +18,10 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
   const [discount, setDiscount] = useState('0');
   const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent');
   const [dueDate, setDueDate] = useState('');
+  const [initialPaymentAmount, setInitialPaymentAmount] = useState('');
+  const [initialPaymentDate, setInitialPaymentDate] = useState('');
+  const [initialPaymentMethod, setInitialPaymentMethod] = useState('UPI');
+  const [initialPaymentReference, setInitialPaymentReference] = useState('');
   const [paymentPlan, setPaymentPlan] = useState<'full' | 'installments' | 'monthly'>('full');
   const [installments, setInstallments] = useState<{ name: string; amount: string; dueDate: string }[]>([]);
   const [paymentInvoice, setPaymentInvoice] = useState('');
@@ -43,6 +47,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
         discount: Number(discount || 0),
         discountType,
         ...(dueDate ? { dueDate } : {}),
+        ...(Number(initialPaymentAmount) > 0 ? { initialPayment: { amount: Number(initialPaymentAmount), paidAt: initialPaymentDate, method: initialPaymentMethod, reference: initialPaymentReference } } : {}),
         monthlyRenewal: paymentPlan === 'monthly',
         ...(installments.length ? { installments: installments.map(row => ({ ...row, amount: Number(row.amount) })) } : {})
       });
@@ -53,7 +58,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
   }
 
   function clearInvoiceDraft() {
-    setDescription(''); setAgreementTerms(''); setAmount(''); setDiscount('0'); setDueDate(''); setPaymentPlan('full'); setInstallments([]);
+    setDescription(''); setAgreementTerms(''); setAmount(''); setDiscount('0'); setDueDate(''); setInitialPaymentAmount(''); setInitialPaymentDate(''); setInitialPaymentMethod('UPI'); setInitialPaymentReference(''); setPaymentPlan('full'); setInstallments([]);
   }
 
   async function recordPayment(event: FormEvent) {
@@ -88,10 +93,12 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
     ? Math.round((((Number(amount) || 0) * (Number(discount) || 0) / 100) + Number.EPSILON) * 100) / 100
     : Number(discount) || 0;
   const netAmount = Math.max(0, (Number(amount) || 0) - discountAmount);
+  const initialPaid = Number(initialPaymentAmount) || 0;
+  const initialPaymentValid = initialPaid <= netAmount && (initialPaid === 0 || Boolean(initialPaymentDate));
+  const balanceAfterInitialPayment = Math.max(0, netAmount - initialPaid);
   const discountValid = discountType === 'percent' ? Number(discount) < 100 : discountAmount < (Number(amount) || 0);
   const monthlyRenewal = paymentPlan === 'monthly';
   const downPaymentAmount = paymentPlan === 'installments' && installments[0]?.name.trim().toLowerCase() === 'down payment' ? Number(installments[0].amount) || 0 : 0;
-  const remainingAfterDownPayment = Math.max(0, netAmount - downPaymentAmount);
   const scheduleMatches = Math.round(installmentTotal * 100) === Math.round(netAmount * 100);
   const installmentsComplete = installments.every(row => row.name.trim() && Number(row.amount) > 0 && row.dueDate);
   const planComplete = paymentPlan !== 'installments' || (installments.length > 0 && scheduleMatches && installmentsComplete);
@@ -159,10 +166,25 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
         </label>}
       </section>
 
+      <section className="invoice-initial-payment">
+        <div className="invoice-subheading-row"><div><h3>Payment already received <span>Optional</span></h3><p>Enter an upfront payment here so it appears in the paid history.</p></div></div>
+        <div className="invoice-initial-payment-fields">
+          <label className="invoice-field">Amount received (₹)<input type="number" min="0" max={netAmount || undefined} step="0.01" value={initialPaymentAmount} onChange={e => setInitialPaymentAmount(e.target.value)} placeholder="0.00" /></label>
+          {initialPaid > 0 && <>
+            <label className="invoice-field">Date received<DatePicker className="invoice-date-picker" value={initialPaymentDate} onChange={setInitialPaymentDate} placeholder="dd-mm-yyyy" displayFormat="dmy" aria-label="Date payment received" /></label>
+            <label className="invoice-field">Method<select value={initialPaymentMethod} onChange={e => setInitialPaymentMethod(e.target.value)}>{['Cash', 'UPI', 'Bank transfer', 'Card', 'Other'].map(item => <option key={item}>{item}</option>)}</select></label>
+            <label className="invoice-field">Reference <small>Optional</small><input value={initialPaymentReference} onChange={e => setInitialPaymentReference(e.target.value)} placeholder="Transaction ID" /></label>
+          </>}
+        </div>
+        {initialPaid > 0 && <div className="invoice-initial-payment-summary"><span>Paid now <strong>{money(initialPaid)}</strong></span><span>Remaining after payment <strong>{money(balanceAfterInitialPayment)}</strong></span></div>}
+        {!initialPaymentValid && <p className="invoice-inline-hint">Enter a valid payment date and an amount no greater than the invoice total.</p>}
+      </section>
+
       <section className="invoice-agreement-summary" aria-label="Payment summary">
         <div><span>Total after discount</span><strong>{money(netAmount)}</strong></div>
-        <div><span>{paymentPlan === 'installments' ? 'Down payment' : paymentPlan === 'monthly' ? 'Monthly amount' : 'Amount due'}</span><strong>{paymentPlan === 'installments' ? (downPaymentAmount ? money(downPaymentAmount) : 'Add amount below') : money(netAmount)}</strong></div>
-        {paymentPlan === 'installments' && <div><span>Left after down payment</span><strong>{money(remainingAfterDownPayment)}</strong></div>}
+        <div><span>{paymentPlan === 'installments' ? 'Scheduled down payment' : paymentPlan === 'monthly' ? 'Monthly amount' : 'Amount due after payment'}</span><strong>{paymentPlan === 'installments' ? (downPaymentAmount ? money(downPaymentAmount) : 'Add amount below') : paymentPlan === 'monthly' ? money(netAmount) : money(balanceAfterInitialPayment)}</strong></div>
+        {initialPaid > 0 && <div><span>Paid so far</span><strong>{money(initialPaid)}</strong></div>}
+        {(paymentPlan === 'installments' || initialPaid > 0) && <div><span>Still due</span><strong>{money(balanceAfterInitialPayment)}</strong></div>}
       </section>
 
       {paymentPlan === 'installments' && <section className="invoice-installment-editor">
@@ -183,7 +205,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
       </section>}
 
       <footer className="invoice-form-actions">
-        <button className="invoice-button invoice-button-primary" disabled={saving || !discountValid || (monthlyRenewal && !dueDate) || !planComplete}><FileText size={17} aria-hidden="true" />{saving ? 'Creating…' : 'Create invoice'}</button>
+        <button className="invoice-button invoice-button-primary" disabled={saving || !discountValid || !initialPaymentValid || (monthlyRenewal && !dueDate) || !planComplete}><FileText size={17} aria-hidden="true" />{saving ? 'Creating…' : 'Create invoice'}</button>
         <button type="button" className="invoice-button invoice-button-secondary" onClick={clearInvoiceDraft}>Cancel</button>
         <span>PDF invoice is ready to download after saving.</span>
       </footer>

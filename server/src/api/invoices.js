@@ -65,6 +65,11 @@ router.post('/customers/:customerId', async (req, res, next) => {
     const description = String(req.body.description || '').trim();
     const agreementTerms = String(req.body.agreementTerms || '').trim();
     const dueDate = req.body.dueDate ? new Date(req.body.dueDate) : null;
+    const initialPayment = req.body.initialPayment || {};
+    const initialPaymentAmount = Number(initialPayment.amount || 0);
+    const initialPaymentDate = initialPaymentAmount > 0 && initialPayment.paidAt ? new Date(initialPayment.paidAt) : null;
+    const paymentMethods = ['Cash', 'UPI', 'Bank transfer', 'Card', 'Other'];
+    const initialPaymentMethod = paymentMethods.includes(initialPayment.method) ? initialPayment.method : 'Other';
     const monthlyRenewal = req.body.monthlyRenewal === true;
     const installments = Array.isArray(req.body.installments) ? req.body.installments.map(row => ({
       name: String(row.name || '').trim(), amount: Number(row.amount), dueDate: new Date(row.dueDate)
@@ -73,6 +78,9 @@ router.post('/customers/:customerId', async (req, res, next) => {
       return res.status(400).json({ ok: false, error: 'Enter a description, a positive amount, a valid discount, and a valid optional due date.' });
     }
     const netAmount = invoiceTotal({ amount, discount, discountType });
+    if (!Number.isFinite(initialPaymentAmount) || initialPaymentAmount < 0 || initialPaymentAmount > netAmount || (initialPaymentAmount > 0 && (!initialPaymentDate || Number.isNaN(initialPaymentDate.getTime())))) {
+      return res.status(400).json({ ok: false, error: 'The amount already received must not exceed the invoice total, and needs a valid payment date.' });
+    }
     if (installments.length && (installments.some(row => !row.name || row.name.length > 80 || !Number.isFinite(row.amount) || row.amount <= 0 || Number.isNaN(row.dueDate.getTime())) || Math.round(installments.reduce((sum, row) => sum + row.amount, 0) * 100) !== Math.round(netAmount * 100))) {
       return res.status(400).json({ ok: false, error: 'Instalment names, positive amounts, and due dates are required; instalments must total the invoice amount after discount.' });
     }
@@ -84,6 +92,7 @@ router.post('/customers/:customerId', async (req, res, next) => {
       ...scope(req), customer: customer._id,
       invoiceNumber: `INV-${String(sequence.invoiceSequence).padStart(5, '0')}`,
       description, agreementTerms, amount, discount, discountType, dueDate, installments, monthlyRenewal,
+      payments: initialPaymentAmount > 0 ? [{ amount: initialPaymentAmount, paidAt: initialPaymentDate, method: initialPaymentMethod, reference: String(initialPayment.reference || '').trim(), receivedBy: req.user._id }] : [],
       nextRenewalDate: monthlyRenewal ? dueDate : null,
       createdBy: req.user._id
     });

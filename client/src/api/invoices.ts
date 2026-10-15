@@ -6,7 +6,7 @@ export interface Invoice { _id: string; invoiceNumber: string; description: stri
 
 export const invoicesApi = {
   list: (customerId: string) => api.get<{ ok: true; data: Invoice[] }>(`/invoices/customers/${customerId}`, { skipCache: true }),
-  create: (customerId: string, body: { description: string; agreementTerms?: string; amount: number; discount?: number; discountType?: 'amount' | 'percent'; dueDate?: string; installments?: InvoiceInstallment[]; monthlyRenewal?: boolean }) => api.post<{ ok: true; data: Invoice }>(`/invoices/customers/${customerId}`, body),
+  create: (customerId: string, body: { description: string; agreementTerms?: string; amount: number; discount?: number; discountType?: 'amount' | 'percent'; dueDate?: string; initialPayment?: { amount: number; paidAt: string; method?: string; reference?: string }; installments?: InvoiceInstallment[]; monthlyRenewal?: boolean }) => api.post<{ ok: true; data: Invoice }>(`/invoices/customers/${customerId}`, body),
   addPayment: (invoiceId: string, body: { amount: number; method: string; reference?: string; note?: string }) => api.post<{ ok: true; data: Invoice }>(`/invoices/${invoiceId}/payments`, body),
   renewal: (invoiceId: string, action: 'continue' | 'stop') => api.post<{ ok: true; continued: boolean; data?: Invoice }>(`/invoices/${invoiceId}/renewal`, { action }),
   remove: (invoiceId: string) => api.delete<{ ok: true }>(`/invoices/${invoiceId}`),
