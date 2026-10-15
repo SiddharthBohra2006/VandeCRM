@@ -25,10 +25,16 @@ const invoiceSchema = new mongoose.Schema({
   discount: { type: Number, default: 0, min: 0 },
   dueDate: { type: Date, default: null },
   installments: { type: [installmentSchema], default: [] },
+  monthlyRenewal: { type: Boolean, default: false },
+  nextRenewalDate: { type: Date, default: null },
+  renewalPromptedMonth: { type: String, default: '' },
+  renewalSource: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null },
+  renewalPeriod: { type: String, default: '' },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   payments: { type: [paymentSchema], default: [] }
 }, { timestamps: true });
 
 invoiceSchema.index({ organization: 1, clientCompany: 1, invoiceNumber: 1 }, { unique: true });
 invoiceSchema.index({ organization: 1, clientCompany: 1, customer: 1, createdAt: -1 });
+invoiceSchema.index({ organization: 1, clientCompany: 1, renewalSource: 1, renewalPeriod: 1 }, { unique: true, partialFilterExpression: { renewalSource: { $type: 'objectId' }, renewalPeriod: { $type: 'string' } } });
 module.exports = mongoose.model('Invoice', invoiceSchema);

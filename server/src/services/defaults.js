@@ -3,6 +3,7 @@ const CrmStage = require('../models/CrmStage');
 const CrmLabel = require('../models/CrmLabel');
 const CustomField = require('../models/CustomField');
 const WorkType = require('../models/WorkType');
+const Invoice = require('../models/Invoice');
 const { DEFAULT_WORK_TYPES } = require('../config/defaultWorkTypes');
 
 async function replaceIndex(collection, oldName, keys) {
@@ -15,6 +16,10 @@ async function replaceIndex(collection, oldName, keys) {
 }
 
 async function ensureCrmIndexes() {
+  await Invoice.collection.createIndex(
+    { organization: 1, clientCompany: 1, renewalSource: 1, renewalPeriod: 1 },
+    { unique: true, partialFilterExpression: { renewalSource: { $type: 'objectId' }, renewalPeriod: { $type: 'string' } } }
+  );
   await replaceIndex(CrmStage.collection, 'organization_1_key_1', { organization: 1, clientCompany: 1, key: 1 });
   await CrmStage.collection.createIndex({ organization: 1, clientCompany: 1, isDefault: 1 }, { unique: true, partialFilterExpression: { isDefault: true } });
   await replaceIndex(CrmLabel.collection, 'organization_1_name_1', { organization: 1, clientCompany: 1, name: 1 });

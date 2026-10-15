@@ -171,8 +171,10 @@ async function startServer() {
   await syncWorkspaceSeedData();
   const { startIntegrationScheduler } = require('./services/integrationSync');
   const { startDeadlineScheduler } = require('./services/deadlineAlerts');
+  const { startInvoiceRenewalScheduler } = require('./services/invoiceRenewals');
   startIntegrationScheduler();
   startDeadlineScheduler();
+  startInvoiceRenewalScheduler();
   app.listen(port, '0.0.0.0', () => {
     console.log(`CRM API running on http://0.0.0.0:${port}`);
     console.log(`API available at http://0.0.0.0:${port}/api`);

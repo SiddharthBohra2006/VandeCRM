@@ -22,6 +22,16 @@ function totals(invoice) {
   return { total, paid, balance, status };
 }
 function serialize(invoice) { return { ...invoice.toObject(), ...totals(invoice) }; }
+function addMonth(date) {
+  const next = new Date(date);
+  const day = next.getUTCDate();
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + 1);
+  const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(day, lastDay));
+  return next;
+}
+function monthKey(date) { return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`; }
 
 async function findCustomer(req, customerId) {
   if (!mongoose.isValidObjectId(customerId)) return null;
@@ -53,6 +63,7 @@ router.post('/customers/:customerId', async (req, res, next) => {
     const discount = Number(req.body.discount || 0);
     const description = String(req.body.description || '').trim();
     const dueDate = req.body.dueDate ? new Date(req.body.dueDate) : null;
+    const monthlyRenewal = req.body.monthlyRenewal === true;
     const installments = Array.isArray(req.body.installments) ? req.body.installments.map(row => ({
       name: String(row.name || '').trim(), amount: Number(row.amount), dueDate: new Date(row.dueDate)
     })) : [];
@@ -62,15 +73,60 @@ router.post('/customers/:customerId', async (req, res, next) => {
     if (installments.length && (installments.some(row => !row.name || row.name.length > 80 || !Number.isFinite(row.amount) || row.amount <= 0 || Number.isNaN(row.dueDate.getTime())) || Math.round(installments.reduce((sum, row) => sum + row.amount, 0) * 100) !== Math.round((amount - discount) * 100))) {
       return res.status(400).json({ ok: false, error: 'Instalment names, positive amounts, and due dates are required; instalments must total the invoice amount after discount.' });
     }
+    if (monthlyRenewal && (!dueDate || installments.length)) return res.status(400).json({ ok: false, error: 'Monthly renewal needs a due date and a single monthly invoice amount.' });
     const company = await ClientCompany.findOne(scope(req));
     if (!company) return res.status(400).json({ ok: false, error: 'Active workspace not found.' });
     const sequence = await ClientCompany.findOneAndUpdate(scope(req), { $inc: { invoiceSequence: 1 } }, { new: true, projection: { invoiceSequence: 1 } });
     const invoice = await Invoice.create({
       ...scope(req), customer: customer._id,
       invoiceNumber: `INV-${String(sequence.invoiceSequence).padStart(5, '0')}`,
-      description, amount, discount, dueDate, installments, createdBy: req.user._id
+      description, amount, discount, dueDate, installments, monthlyRenewal,
+      nextRenewalDate: monthlyRenewal ? dueDate : null,
+      createdBy: req.user._id
     });
     res.status(201).json({ ok: true, data: serialize(invoice) });
+  } catch (error) { next(error); }
+});
+
+router.post('/:invoiceId/renewal', async (req, res, next) => {
+  try {
+    if (!hasPermission(req.user, 'businesses.update')) return res.status(403).json({ ok: false, error: 'Access denied' });
+    if (!mongoose.isValidObjectId(req.params.invoiceId)) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
+    const selected = await Invoice.findOne(scope(req, { _id: req.params.invoiceId }));
+    if (!selected || !(await findCustomer(req, selected.customer))) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
+    const rootId = selected.renewalSource || selected._id;
+    const root = await Invoice.findOne(scope(req, { _id: rootId, monthlyRenewal: true }));
+    if (!root) return res.status(400).json({ ok: false, error: 'This invoice has no active monthly renewal.' });
+    if (req.body.action === 'stop') {
+      root.monthlyRenewal = false;
+      await root.save();
+      return res.json({ ok: true, continued: false });
+    }
+    if (req.body.action !== 'continue' || !root.nextRenewalDate) return res.status(400).json({ ok: false, error: 'Choose Continue or Stop for this monthly renewal.' });
+    if (root.renewalPromptedMonth !== monthKey(root.nextRenewalDate)) return res.status(400).json({ ok: false, error: 'The monthly renewal prompt is not due yet.' });
+    const nextDueDate = addMonth(root.nextRenewalDate);
+    const renewalPeriod = monthKey(nextDueDate);
+    let nextInvoice = await Invoice.findOne(scope(req, { renewalSource: root._id, renewalPeriod }));
+    if (!nextInvoice) {
+      const company = await ClientCompany.findOneAndUpdate(scope(req), { $inc: { invoiceSequence: 1 } }, { new: true, projection: { invoiceSequence: 1 } });
+      if (!company) return res.status(400).json({ ok: false, error: 'Active workspace not found.' });
+      try {
+        nextInvoice = await Invoice.create({
+          ...scope(req), customer: root.customer,
+          invoiceNumber: `INV-${String(company.invoiceSequence).padStart(5, '0')}`,
+          description: root.description, amount: root.amount, discount: root.discount,
+          dueDate: nextDueDate, createdBy: root.createdBy || req.user._id,
+          renewalSource: root._id, renewalPeriod
+        });
+      } catch (error) {
+        if (error.code !== 11000) throw error;
+        nextInvoice = await Invoice.findOne(scope(req, { renewalSource: root._id, renewalPeriod }));
+      }
+    }
+    root.nextRenewalDate = nextDueDate;
+    root.renewalPromptedMonth = '';
+    await root.save();
+    res.json({ ok: true, continued: true, data: serialize(nextInvoice) });
   } catch (error) { next(error); }
 });
 
@@ -93,6 +149,17 @@ router.post('/:invoiceId/payments', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+router.delete('/:invoiceId', async (req, res, next) => {
+  try {
+    if (!hasPermission(req.user, 'businesses.delete')) return res.status(403).json({ ok: false, error: 'Access denied' });
+    if (!mongoose.isValidObjectId(req.params.invoiceId)) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
+    const invoice = await Invoice.findOne(scope(req, { _id: req.params.invoiceId }));
+    if (!invoice || !(await findCustomer(req, invoice.customer))) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
+    await invoice.deleteOne();
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
 router.get('/:invoiceId/pdf', async (req, res, next) => {
   try {
     if (!mongoose.isValidObjectId(req.params.invoiceId)) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
@@ -112,6 +179,7 @@ router.get('/:invoiceId/pdf', async (req, res, next) => {
       { Description: 'Amount paid', Amount: money(paid) },
       { Description: 'Balance due', Amount: money(balance) },
       { Description: 'Payment status', Amount: status.toUpperCase() },
+      ...(invoice.monthlyRenewal ? [{ Description: 'Renewal terms', Amount: 'Monthly; confirmation required, no automatic charge' }] : []),
       ...(installmentRows.length ? [{ Description: 'INSTALMENT SCHEDULE', Amount: '' }, ...installmentRows] : []),
     ];
     const pdf = createSimpleReportPdf(company?.name || 'Invoice', `${invoice.invoiceNumber} | Invoice date: ${invoice.createdAt.toLocaleDateString('en-IN')}`, ['Invoice details', 'Amount'], rows);
