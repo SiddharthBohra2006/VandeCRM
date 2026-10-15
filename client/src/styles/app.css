@@ -178,6 +178,11 @@
 .invoice-alert { display: flex; align-items: flex-start; gap: 9px; padding: 12px 14px; border: 1px solid #fecdca; border-radius: 10px; background: #fff4f2; color: #b42318; font-size: .82rem; }
 .invoice-alert svg { flex: 0 0 auto; margin-top: 1px; }
 .invoice-workspace .invoice-payment-form { display: grid; gap: 2px; }
+.invoice-payment-modal-backdrop { --invoice-blue: #2563eb; --invoice-blue-soft: #eff6ff; --invoice-line: #e4eaf2; --invoice-muted: #64748b; position: fixed; inset: 0; z-index: 100050; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(15, 23, 42, .48); backdrop-filter: blur(4px); }
+.invoice-payment-modal { display: grid; gap: 2px; width: min(720px, 100%); max-height: calc(100dvh - 36px); overflow-y: auto; border: 1px solid var(--invoice-line); border-radius: 16px; background: var(--panel); color: var(--text); box-shadow: 0 24px 70px rgba(15, 23, 42, .24); }
+.invoice-payment-modal-close { display: grid; width: 40px; height: 40px; flex: 0 0 auto; place-items: center; border: 1px solid var(--invoice-line); border-radius: 10px; background: var(--panel); color: var(--invoice-muted); cursor: pointer; }
+.invoice-payment-modal-close:hover { border-color: #cbd9ed; background: #f5f8ff; color: #1d4ed8; }
+.invoice-payment-modal-close:focus-visible { outline: 3px solid rgba(37, 99, 235, .24); outline-offset: 2px; }
 @media (max-width: 900px) {
   .invoice-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .invoice-initial-payment-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -186,6 +191,8 @@
   .invoice-remove-button { justify-self: start; }
 }
 @media (max-width: 600px) {
+  .invoice-payment-modal-backdrop { padding: 10px; }
+  .invoice-payment-modal { max-height: calc(100dvh - 20px); }
   .invoice-workspace { gap: 13px; }
   .invoice-metrics { grid-template-columns: 1fr; gap: 9px; }
   .invoice-metric-card { min-height: 78px; padding: 13px 15px; }

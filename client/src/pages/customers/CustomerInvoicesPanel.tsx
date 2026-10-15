@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { Clock3, CreditCard, Download, FileText, Info, Plus, RotateCcw, Trash2, Wallet } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Clock3, CreditCard, Download, FileText, Info, Plus, RotateCcw, Trash2, Wallet, X } from 'lucide-react';
 import { Invoice, invoicesApi } from '../../api/invoices';
 import DatePicker from '../../components/DatePicker';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -38,7 +39,9 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
   const [paymentDate, setPaymentDate] = useState('');
   const [method, setMethod] = useState('UPI');
   const [reference, setReference] = useState('');
-  const paymentFormRef = useRef<HTMLFormElement>(null);
+  const paymentModalRef = useRef<HTMLDivElement>(null);
+  const savingRef = useRef(saving);
+  savingRef.current = saving;
   const [confirmAction, setConfirmAction] = useState<{ type: 'delete' | 'stop-renewal'; invoice: Invoice } | null>(null);
 
   const load = useCallback(async () => {
@@ -48,7 +51,35 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
   }, [customerId]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    if (paymentInvoice) paymentFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!paymentInvoice) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const modal = paymentModalRef.current;
+    const bodyChildren = Array.from(document.body.children).filter((element): element is HTMLElement => element instanceof HTMLElement && element !== modal);
+    bodyChildren.forEach(element => element.setAttribute('inert', 'true'));
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    modal?.querySelector<HTMLInputElement>('input')?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (!savingRef.current) setPaymentInvoice('');
+      }
+      if (event.key !== 'Tab' || !modal) return;
+      const focusable = [
+        ...Array.from(modal.querySelectorAll<HTMLElement>('button, input, select, [tabindex]:not([tabindex="-1"])')),
+        ...Array.from(document.querySelectorAll<HTMLElement>('.app-date-picker button'))
+      ].filter(element => !element.hasAttribute('disabled'));
+      if (!focusable.length) return;
+      if (event.shiftKey && document.activeElement === focusable[0]) { event.preventDefault(); focusable[focusable.length - 1].focus(); }
+      else if (!event.shiftKey && document.activeElement === focusable[focusable.length - 1]) { event.preventDefault(); focusable[0].focus(); }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      bodyChildren.forEach(element => element.removeAttribute('inert'));
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
   }, [paymentInvoice]);
 
   async function createInvoice(event: FormEvent) {
@@ -252,7 +283,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
           <div className="invoice-item-totals"><span>Total <strong>{money(invoice.total)}</strong></span><span>Paid <strong className="invoice-paid-value">{money(invoice.paid)}</strong></span><span>Pending <strong className="invoice-pending-value">{money(invoice.balance)}</strong></span></div>
           <div className="invoice-item-actions">
             <button type="button" className="invoice-button invoice-button-secondary" onClick={() => void invoicesApi.download(invoice).catch(e => setError(e.message))}><Download size={16} aria-hidden="true" />Download PDF</button>
-            {invoice.balance > 0 && <button type="button" className="invoice-button invoice-button-primary" onClick={() => { setPaymentInvoice(invoice._id); setPaymentAmount(String(invoice.balance)); setPaymentDate(localToday()); }}><CreditCard size={16} aria-hidden="true" />Record payment</button>}
+            {invoice.balance > 0 && <button type="button" className="invoice-button invoice-button-primary" onClick={() => { setError(''); setPaymentInvoice(invoice._id); setPaymentAmount(String(invoice.balance)); setPaymentDate(localToday()); }}><CreditCard size={16} aria-hidden="true" />Record payment</button>}
             <button type="button" className="invoice-button invoice-delete-button" onClick={() => void deleteInvoice(invoice)}><Trash2 size={16} aria-hidden="true" />Delete</button>
           </div>
           {invoice.monthlyRenewal && <div className="invoice-renewal-status"><RotateCcw size={17} aria-hidden="true" /><div><strong>Monthly renewal</strong><span>{invoice.renewalPromptedMonth ? 'Your decision is due' : 'Next decision'} · {invoice.nextRenewalDate ? date(invoice.nextRenewalDate) : 'Date not set'}</span></div><div className="invoice-renewal-actions"><button type="button" className="invoice-button invoice-button-primary" disabled={!invoice.renewalPromptedMonth} onClick={() => void handleRenewal(invoice, 'continue')}>Continue</button><button type="button" className="invoice-button invoice-button-secondary" onClick={() => void handleRenewal(invoice, 'stop')}>Stop renewal</button></div></div>}
@@ -263,16 +294,19 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
       </div>}
     </section>
 
-    {paymentInvoice && <form ref={paymentFormRef} className="invoice-card invoice-payment-form" onSubmit={recordPayment}>
-      <header className="invoice-section-heading"><div><h2>Record payment</h2><p>Save the payment against this invoice balance.</p></div><span className="invoice-heading-icon invoice-icon-green"><Wallet size={19} aria-hidden="true" /></span></header>
+    {paymentInvoice && createPortal(<div ref={paymentModalRef} className="invoice-payment-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="invoice-payment-title" onMouseDown={event => { if (event.target === event.currentTarget && !saving) setPaymentInvoice(''); }}>
+      <form className="invoice-payment-form invoice-payment-modal" onSubmit={recordPayment}>
+      <header className="invoice-section-heading"><div><h2 id="invoice-payment-title">Record payment</h2><p>Save the payment against this invoice balance.</p></div><button type="button" className="invoice-payment-modal-close" aria-label="Close payment form" disabled={saving} onClick={() => setPaymentInvoice('')}><X size={19} /></button></header>
+      {error && <div className="invoice-alert" role="alert"><Info size={17} aria-hidden="true" />{error}</div>}
       <div className="invoice-form-grid">
         <label className="invoice-field">Amount (₹) <span>*</span><input required type="number" min="0.01" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} /></label>
         <label className="invoice-field">Date received <span>*</span><DatePicker className="invoice-date-picker" value={paymentDate} onChange={setPaymentDate} placeholder="dd-mm-yyyy" displayFormat="dmy" aria-label="Date payment received" /></label>
         <label className="invoice-field">Method <span>*</span><select value={method} onChange={e => setMethod(e.target.value)}>{['Cash', 'UPI', 'Bank transfer', 'Card', 'Other'].map(item => <option key={item}>{item}</option>)}</select></label>
         <label className="invoice-field invoice-field-description">Transaction reference <small>Optional</small><input value={reference} onChange={e => setReference(e.target.value)} placeholder="UPI reference or transaction ID" /></label>
       </div>
-      <footer className="invoice-form-actions"><button className="invoice-button invoice-button-primary" disabled={saving}><CreditCard size={17} aria-hidden="true" />{saving ? 'Saving…' : 'Save payment'}</button><button type="button" className="invoice-button invoice-button-secondary" onClick={() => setPaymentInvoice('')}>Cancel</button></footer>
-    </form>}
+      <footer className="invoice-form-actions"><button className="invoice-button invoice-button-primary" disabled={saving}><CreditCard size={17} aria-hidden="true" />{saving ? 'Saving…' : 'Save payment'}</button><button type="button" className="invoice-button invoice-button-secondary" disabled={saving} onClick={() => setPaymentInvoice('')}>Cancel</button></footer>
+      </form>
+    </div>, document.body)}
 
     <ConfirmDialog
       open={Boolean(confirmAction)}
