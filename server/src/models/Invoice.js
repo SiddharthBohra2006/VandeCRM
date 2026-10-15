@@ -23,6 +23,7 @@ const invoiceSchema = new mongoose.Schema({
   description: { type: String, required: true, trim: true, maxlength: 200 },
   amount: { type: Number, required: true, min: 0.01 },
   discount: { type: Number, default: 0, min: 0 },
+  discountType: { type: String, enum: ['amount', 'percent'], default: 'amount' },
   dueDate: { type: Date, default: null },
   installments: { type: [installmentSchema], default: [] },
   monthlyRenewal: { type: Boolean, default: false },

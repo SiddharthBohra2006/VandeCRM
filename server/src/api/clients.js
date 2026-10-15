@@ -8,6 +8,7 @@ const Customer = require('../models/Customer');
 const SavedView = require('../models/SavedView');
 const User = require('../models/User');
 const Invoice = require('../models/Invoice');
+const { invoiceTotal } = require('../utils/invoiceTotals');
 const { hasPermission, isRestrictedUser, canAccessLeadField } = require('../config/roles');
 const { getWonStageIds } = require('../services/crmStages');
 const { requireApiAuth } = require('./middleware/auth');
@@ -94,12 +95,12 @@ router.get('/', async (req, res, next) => {
     const stages = allStages.filter(stage => stage.isWon && (stage.isActive || customerStageIds.has(String(stage._id)) || String(stage._id) === String(selectedStageId)));
     const activeSavedView = savedViews.find(sv => String(sv._id) === String(viewId)) || null;
 
-    const invoiceRows = customers.length ? await Invoice.find(scope(req, { customer: { $in: customers.map(customer => customer._id) } })).select('customer amount discount dueDate payments').lean() : [];
+    const invoiceRows = customers.length ? await Invoice.find(scope(req, { customer: { $in: customers.map(customer => customer._id) } })).select('customer amount discount discountType dueDate payments').lean() : [];
     const paymentByCustomer = new Map();
     invoiceRows.forEach(invoice => {
       const customerId = String(invoice.customer);
       const current = paymentByCustomer.get(customerId) || { totalInvoiced: 0, totalPaid: 0, balanceDue: 0, invoiceCount: 0, nextDueDate: null, overdue: false };
-      const total = Math.max(0, Number(invoice.amount || 0) - Number(invoice.discount || 0));
+      const total = invoiceTotal(invoice);
       const paid = (invoice.payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
       const balance = Math.max(0, total - paid);
       current.totalInvoiced += total;

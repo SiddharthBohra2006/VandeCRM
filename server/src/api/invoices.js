@@ -7,6 +7,7 @@ const { hasPermission, isRestrictedUser } = require('../config/roles');
 const { requireApiAuth } = require('./middleware/auth');
 const { getWonStageIds } = require('../services/crmStages');
 const { createSimpleReportPdf } = require('../utils/pdf');
+const { invoiceDiscount, invoiceTotal } = require('../utils/invoiceTotals');
 
 const router = express.Router();
 router.use(requireApiAuth);
@@ -15,7 +16,7 @@ router.use((req, res, next) => hasPermission(req.user, 'businesses.view') ? next
 function workspace(req) { return req.activeCompanyId; }
 function scope(req, more = {}) { return { organization: req.user.organization._id, clientCompany: workspace(req), ...more }; }
 function totals(invoice) {
-  const total = Math.max(0, Number(invoice.amount || 0) - Number(invoice.discount || 0));
+  const total = invoiceTotal(invoice);
   const paid = (invoice.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
   const balance = Math.max(0, total - paid);
   const status = balance <= 0 ? 'paid' : paid > 0 ? 'partial' : invoice.dueDate && new Date(invoice.dueDate) < new Date() ? 'overdue' : 'unpaid';
@@ -61,16 +62,18 @@ router.post('/customers/:customerId', async (req, res, next) => {
     if (!customer || !customer.stage) return res.status(404).json({ ok: false, error: 'Client not found.' });
     const amount = Number(req.body.amount);
     const discount = Number(req.body.discount || 0);
+    const discountType = req.body.discountType === 'percent' ? 'percent' : 'amount';
     const description = String(req.body.description || '').trim();
     const dueDate = req.body.dueDate ? new Date(req.body.dueDate) : null;
     const monthlyRenewal = req.body.monthlyRenewal === true;
     const installments = Array.isArray(req.body.installments) ? req.body.installments.map(row => ({
       name: String(row.name || '').trim(), amount: Number(row.amount), dueDate: new Date(row.dueDate)
     })) : [];
-    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(discount) || discount < 0 || discount >= amount || !description || (dueDate && Number.isNaN(dueDate.getTime()))) {
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(discount) || discount < 0 || (discountType === 'percent' ? discount >= 100 : discount >= amount) || !description || (dueDate && Number.isNaN(dueDate.getTime()))) {
       return res.status(400).json({ ok: false, error: 'Enter a description, a positive amount, a valid discount, and a valid optional due date.' });
     }
-    if (installments.length && (installments.some(row => !row.name || row.name.length > 80 || !Number.isFinite(row.amount) || row.amount <= 0 || Number.isNaN(row.dueDate.getTime())) || Math.round(installments.reduce((sum, row) => sum + row.amount, 0) * 100) !== Math.round((amount - discount) * 100))) {
+    const netAmount = invoiceTotal({ amount, discount, discountType });
+    if (installments.length && (installments.some(row => !row.name || row.name.length > 80 || !Number.isFinite(row.amount) || row.amount <= 0 || Number.isNaN(row.dueDate.getTime())) || Math.round(installments.reduce((sum, row) => sum + row.amount, 0) * 100) !== Math.round(netAmount * 100))) {
       return res.status(400).json({ ok: false, error: 'Instalment names, positive amounts, and due dates are required; instalments must total the invoice amount after discount.' });
     }
     if (monthlyRenewal && (!dueDate || installments.length)) return res.status(400).json({ ok: false, error: 'Monthly renewal needs a due date and a single monthly invoice amount.' });
@@ -80,7 +83,7 @@ router.post('/customers/:customerId', async (req, res, next) => {
     const invoice = await Invoice.create({
       ...scope(req), customer: customer._id,
       invoiceNumber: `INV-${String(sequence.invoiceSequence).padStart(5, '0')}`,
-      description, amount, discount, dueDate, installments, monthlyRenewal,
+      description, amount, discount, discountType, dueDate, installments, monthlyRenewal,
       nextRenewalDate: monthlyRenewal ? dueDate : null,
       createdBy: req.user._id
     });
@@ -114,7 +117,7 @@ router.post('/:invoiceId/renewal', async (req, res, next) => {
         nextInvoice = await Invoice.create({
           ...scope(req), customer: root.customer,
           invoiceNumber: `INV-${String(company.invoiceSequence).padStart(5, '0')}`,
-          description: root.description, amount: root.amount, discount: root.discount,
+          description: root.description, amount: root.amount, discount: root.discount, discountType: root.discountType,
           dueDate: nextDueDate, createdBy: root.createdBy || req.user._id,
           renewalSource: root._id, renewalPeriod
         });
@@ -174,7 +177,7 @@ router.get('/:invoiceId/pdf', async (req, res, next) => {
       { Description: invoice.customer.company || 'Contact', Amount: invoice.customer.email || invoice.customer.phone || '' },
       { Description: 'Due date', Amount: invoice.dueDate ? invoice.dueDate.toLocaleDateString('en-IN') : 'Not set' },
       { Description: invoice.description, Amount: money(invoice.amount) },
-      ...(invoice.discount ? [{ Description: 'Discount', Amount: `-${money(invoice.discount)}` }] : []),
+      ...(invoice.discount ? [{ Description: `Discount${invoice.discountType === 'percent' ? ` (${invoice.discount}%)` : ''}`, Amount: `-${money(invoiceDiscount(invoice))}` }] : []),
       { Description: 'Net invoice amount', Amount: money(total) },
       { Description: 'Amount paid', Amount: money(paid) },
       { Description: 'Balance due', Amount: money(balance) },

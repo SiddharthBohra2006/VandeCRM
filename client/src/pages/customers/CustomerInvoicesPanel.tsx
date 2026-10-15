@@ -13,6 +13,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [discount, setDiscount] = useState('0');
+  const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent');
   const [dueDate, setDueDate] = useState('');
   const [monthlyRenewal, setMonthlyRenewal] = useState(false);
   const [installments, setInstallments] = useState<{ name: string; amount: string; dueDate: string }[]>([]);
@@ -36,6 +37,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
         description,
         amount: Number(amount),
         discount: Number(discount || 0),
+        discountType,
         ...(dueDate ? { dueDate } : {}),
         monthlyRenewal,
         ...(installments.length ? { installments: installments.map(row => ({ ...row, amount: Number(row.amount) })) } : {})
@@ -78,7 +80,10 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
   const paid = invoices.reduce((sum, invoice) => sum + invoice.paid, 0);
   const pending = invoices.reduce((sum, invoice) => sum + invoice.balance, 0);
   const installmentTotal = installments.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
-  const netAmount = (Number(amount) || 0) - (Number(discount) || 0);
+  const discountAmount = discountType === 'percent'
+    ? Math.round(((Number(amount) || 0) * (Number(discount) || 0) + Number.EPSILON) * 100) / 100
+    : Number(discount) || 0;
+  const netAmount = (Number(amount) || 0) - discountAmount;
   const scheduleMatches = Math.round(installmentTotal * 100) === Math.round(netAmount * 100);
 
   return <div className="customer-invoices-panel invoice-workspace">
@@ -112,9 +117,16 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
         <label className="invoice-field">Agreed amount (₹) <span>*</span>
           <input required type="number" min="0.01" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" />
         </label>
-        <label className="invoice-field">Discount (₹)
-          <input type="number" min="0" step="0.01" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="0.00" />
-        </label>
+        <div className="invoice-field invoice-discount-field"><span>Discount</span>
+          <div className="invoice-discount-control">
+            <input aria-label={discountType === 'percent' ? 'Discount percent' : 'Discount amount in rupees'} type="number" min="0" max={discountType === 'percent' ? '99.99' : undefined} step="0.01" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="0" />
+            <div className="invoice-discount-options" role="group" aria-label="Discount type">
+              <button type="button" className={discountType === 'percent' ? 'is-active' : ''} aria-pressed={discountType === 'percent'} onClick={() => setDiscountType('percent')}>%</button>
+              <button type="button" className={discountType === 'amount' ? 'is-active' : ''} aria-pressed={discountType === 'amount'} onClick={() => setDiscountType('amount')}>₹</button>
+            </div>
+          </div>
+          <small>{money(discountAmount)} off · {money(netAmount)} invoice total</small>
+        </div>
         <label className="invoice-field invoice-field-date">Due date{monthlyRenewal ? <> <span>*</span></> : <small>Optional</small>}
           <span className="invoice-input-icon"><CalendarDays size={17} aria-hidden="true" /><input type="date" required={monthlyRenewal} value={dueDate} onChange={e => setDueDate(e.target.value)} /></span>
         </label>

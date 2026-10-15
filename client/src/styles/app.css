@@ -51,6 +51,13 @@
 .invoice-field { display: grid; min-width: 0; align-content: start; gap: 7px; color: #344054; font-size: .79rem; font-weight: 650; }
 .invoice-field > span:not(.invoice-input-icon) { color: #dc3545; }
 .invoice-field small { display: inline; color: var(--invoice-muted); font-size: .73rem; font-weight: 450; }
+.invoice-discount-control { display: flex; min-width: 0; }
+.invoice-discount-control > input { flex: 1; min-width: 0; border-radius: 9px 0 0 9px; }
+.invoice-discount-options { display: flex; overflow: hidden; border: 1px solid #d0d5dd; border-left: 0; border-radius: 0 9px 9px 0; background: #f8fafc; }
+.invoice-discount-options button { min-width: 42px; border: 0; background: transparent; color: #667085; cursor: pointer; font: inherit; font-weight: 700; }
+.invoice-discount-options button + button { border-left: 1px solid #d0d5dd; }
+.invoice-discount-options button.is-active { background: #eaf1ff; color: #175cd3; }
+.invoice-discount-field > small { color: #667085; }
 .invoice-field input,
 .invoice-field select {
   width: 100%; min-width: 0; height: 44px; padding: 0 12px;
