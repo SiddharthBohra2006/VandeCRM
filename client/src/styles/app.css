@@ -48,28 +48,28 @@
 .invoice-list-heading p { margin-top: 4px; color: var(--invoice-muted); font-size: .83rem; }
 .invoice-heading-icon { width: 42px; height: 42px; color: var(--invoice-blue); background: var(--invoice-blue-soft); }
 .invoice-form-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) repeat(2, minmax(145px, .85fr)); gap: 15px; }
-.invoice-field { display: grid; min-width: 0; align-content: start; gap: 7px; color: #344054; font-size: .79rem; font-weight: 650; }
+.invoice-field { display: grid; min-width: 0; align-content: start; gap: .4rem; color: var(--sub); font-size: .75rem; font-weight: 800; }
 .invoice-field-label { display: flex; min-height: 19px; align-items: baseline; gap: 3px; }
-.invoice-field-label b { color: #dc3545; font-weight: 650; }
+.invoice-field-label b { color: var(--red); font-weight: 800; }
 .invoice-field-label small { margin-left: 2px; }
 .invoice-field small { display: inline; color: var(--invoice-muted); font-size: .73rem; font-weight: 450; }
 .invoice-discount-control { display: flex; min-width: 0; }
 .invoice-discount-control > input { flex: 1; min-width: 0; border-radius: 9px 0 0 9px; }
-.invoice-discount-options { display: flex; overflow: hidden; border: 1px solid #d0d5dd; border-left: 0; border-radius: 0 9px 9px 0; background: #f8fafc; }
-.invoice-discount-options button { min-width: 42px; border: 0; background: transparent; color: #667085; cursor: pointer; font: inherit; font-weight: 700; }
-.invoice-discount-options button + button { border-left: 1px solid #d0d5dd; }
-.invoice-discount-options button.is-active { background: #eaf1ff; color: #175cd3; }
+.invoice-discount-options { display: flex; overflow: hidden; border: 1px solid var(--border); border-left: 0; border-radius: 0 9px 9px 0; background: var(--input); }
+.invoice-discount-options button { min-width: 42px; border: 0; background: transparent; color: var(--sub); cursor: pointer; font: inherit; font-weight: 700; }
+.invoice-discount-options button + button { border-left: 1px solid var(--border); }
+.invoice-discount-options button.is-active { background: var(--gold-dim); color: var(--gold); }
 .invoice-discount-field > small { color: #667085; }
 .invoice-field input,
 .invoice-field select {
-  width: 100%; min-width: 0; height: 44px; padding: 0 12px;
-  border: 1px solid #dce3ed; border-radius: 9px; background: #fff;
-  color: #182230; font: 450 .86rem var(--font-body); outline: none;
+  box-sizing: border-box; width: 100%; min-width: 0; min-height: 42px; padding: .5rem .7rem;
+  border: 1px solid var(--border); border-radius: 9px; background: var(--input);
+  color: var(--text); font: inherit; font-size: .85rem; outline: none;
   transition: border-color .16s ease, box-shadow .16s ease;
 }
-.invoice-field input::placeholder { color: #98a2b3; }
+.invoice-field input::placeholder { color: var(--muted); }
 .invoice-field input:focus,
-.invoice-field select:focus { border-color: #6b9cff; box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+.invoice-field select:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim); }
 .invoice-field-description { grid-column: span 1; }
 .invoice-field-date { grid-column: 1 / -1; }
 .invoice-input-icon { position: relative; display: flex; align-items: center; color: var(--invoice-muted); }
