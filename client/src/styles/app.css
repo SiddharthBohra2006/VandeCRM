@@ -61,16 +61,21 @@
 .invoice-discount-options button.is-active { background: var(--gold-dim); color: var(--gold); }
 .invoice-discount-field > small { color: #667085; }
 .invoice-field input,
-.invoice-field select {
+.invoice-field select,
+.invoice-field textarea {
   box-sizing: border-box; width: 100%; min-width: 0; min-height: 42px; padding: .5rem .7rem;
   border: 1px solid var(--border); border-radius: 9px; background: var(--input);
   color: var(--text); font: inherit; font-size: .85rem; outline: none;
   transition: border-color .16s ease, box-shadow .16s ease;
 }
+.invoice-field textarea { min-height: 78px; resize: vertical; }
 .invoice-field input::placeholder { color: var(--muted); }
+.invoice-field textarea::placeholder { color: var(--muted); }
 .invoice-field input:focus,
-.invoice-field select:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim); }
+.invoice-field select:focus,
+.invoice-field textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim); }
 .invoice-field-description { grid-column: span 1; }
+.invoice-field-terms { grid-column: 1 / -1; }
 .invoice-field-date { grid-column: 1 / -1; }
 .invoice-field .invoice-date-picker { display: block; width: 100%; height: 42px; }
 .invoice-field .invoice-date-picker > input { cursor: pointer; }
@@ -105,6 +110,13 @@
 .invoice-schedule-total strong { font-weight: 750; }
 .invoice-schedule-total.is-valid { background: #ecfdf3; color: #087443; }
 .invoice-schedule-total.is-invalid { background: #fff4f2; color: #b42318; }
+.invoice-agreement-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; padding: 14px; border: 1px solid color-mix(in srgb, var(--gold) 22%, var(--border)); border-radius: 12px; background: color-mix(in srgb, var(--gold) 4%, var(--panel)); }
+.invoice-agreement-summary > div { display: grid; align-content: start; gap: 4px; min-width: 0; }
+.invoice-agreement-summary > div span { color: var(--muted); font-size: .7rem; font-weight: 650; }
+.invoice-agreement-summary > div strong { color: var(--text); font-size: .88rem; overflow-wrap: anywhere; }
+.invoice-agreement-summary > div:nth-child(3) strong { color: var(--gold); }
+.invoice-agreement-summary > p { grid-column: 1 / -1; margin: 2px 0 0; color: var(--muted); font-size: .74rem; }
+.invoice-agreement-terms { white-space: pre-wrap; color: var(--sub); font-size: .8rem; }
 .invoice-form-actions { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; margin-top: 20px; padding-top: 17px; border-top: 1px solid #edf0f4; }
 .invoice-form-actions > span { color: var(--invoice-muted); font-size: .76rem; }
 .invoice-inline-hint { margin-top: 5px !important; color: #a15c07; font-size: .74rem; }
@@ -155,6 +167,7 @@
 @media (max-width: 900px) {
   .invoice-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .invoice-field-description { grid-column: 1 / -1; }
+  .invoice-agreement-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .invoice-installment-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .invoice-remove-button { justify-self: start; }
 }
@@ -167,6 +180,8 @@
   .invoice-create-card, .invoice-list-card, .invoice-payment-form { padding: 16px; }
   .invoice-form-grid, .invoice-installment-row { grid-template-columns: minmax(0, 1fr); }
   .invoice-field-date, .invoice-field-description { grid-column: auto; }
+  .invoice-field-terms { grid-column: auto; }
+  .invoice-agreement-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .invoice-subheading-row { align-items: flex-start; flex-direction: column; }
   .invoice-item { padding: 13px; }
   .invoice-item-main { flex-direction: column; }

@@ -33,6 +33,25 @@ function addMonth(date) {
   return next;
 }
 function monthKey(date) { return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`; }
+function pdfTextRows(label, value, maxLength = 32) {
+  const lines = [];
+  let current = '';
+  for (let word of String(value || '').split(/\s+/)) {
+    if (!word) continue;
+    while (word.length > maxLength) {
+      if (current) lines.push(current);
+      lines.push(word.slice(0, maxLength));
+      current = '';
+      word = word.slice(maxLength);
+    }
+    if (current && `${current} ${word}`.length > maxLength) {
+      lines.push(current);
+      current = word;
+    } else current = current ? `${current} ${word}` : word;
+  }
+  if (current) lines.push(current);
+  return lines.map((line, index) => ({ Description: index ? 'Terms (continued)' : label, Amount: line }));
+}
 
 async function findCustomer(req, customerId) {
   if (!mongoose.isValidObjectId(customerId)) return null;
@@ -64,12 +83,13 @@ router.post('/customers/:customerId', async (req, res, next) => {
     const discount = Number(req.body.discount || 0);
     const discountType = req.body.discountType === 'percent' ? 'percent' : 'amount';
     const description = String(req.body.description || '').trim();
+    const agreementTerms = String(req.body.agreementTerms || '').trim();
     const dueDate = req.body.dueDate ? new Date(req.body.dueDate) : null;
     const monthlyRenewal = req.body.monthlyRenewal === true;
     const installments = Array.isArray(req.body.installments) ? req.body.installments.map(row => ({
       name: String(row.name || '').trim(), amount: Number(row.amount), dueDate: new Date(row.dueDate)
     })) : [];
-    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(discount) || discount < 0 || (discountType === 'percent' ? discount >= 100 : discount >= amount) || !description || (dueDate && Number.isNaN(dueDate.getTime()))) {
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(discount) || discount < 0 || (discountType === 'percent' ? discount >= 100 : discount >= amount) || !description || agreementTerms.length > 2000 || (dueDate && Number.isNaN(dueDate.getTime()))) {
       return res.status(400).json({ ok: false, error: 'Enter a description, a positive amount, a valid discount, and a valid optional due date.' });
     }
     const netAmount = invoiceTotal({ amount, discount, discountType });
@@ -83,7 +103,7 @@ router.post('/customers/:customerId', async (req, res, next) => {
     const invoice = await Invoice.create({
       ...scope(req), customer: customer._id,
       invoiceNumber: `INV-${String(sequence.invoiceSequence).padStart(5, '0')}`,
-      description, amount, discount, discountType, dueDate, installments, monthlyRenewal,
+      description, agreementTerms, amount, discount, discountType, dueDate, installments, monthlyRenewal,
       nextRenewalDate: monthlyRenewal ? dueDate : null,
       createdBy: req.user._id
     });
@@ -117,7 +137,7 @@ router.post('/:invoiceId/renewal', async (req, res, next) => {
         nextInvoice = await Invoice.create({
           ...scope(req), customer: root.customer,
           invoiceNumber: `INV-${String(company.invoiceSequence).padStart(5, '0')}`,
-          description: root.description, amount: root.amount, discount: root.discount, discountType: root.discountType,
+          description: root.description, agreementTerms: root.agreementTerms, amount: root.amount, discount: root.discount, discountType: root.discountType,
           dueDate: nextDueDate, createdBy: root.createdBy || req.user._id,
           renewalSource: root._id, renewalPeriod
         });
@@ -177,6 +197,7 @@ router.get('/:invoiceId/pdf', async (req, res, next) => {
       { Description: invoice.customer.company || 'Contact', Amount: invoice.customer.email || invoice.customer.phone || '' },
       { Description: 'Due date', Amount: invoice.dueDate ? invoice.dueDate.toLocaleDateString('en-IN') : 'Not set' },
       { Description: invoice.description, Amount: money(invoice.amount) },
+      ...(invoice.agreementTerms ? pdfTextRows('Agreement terms / deliverables', invoice.agreementTerms) : []),
       ...(invoice.discount ? [{ Description: `Discount${invoice.discountType === 'percent' ? ` (${invoice.discount}%)` : ''}`, Amount: `-${money(invoiceDiscount(invoice))}` }] : []),
       { Description: 'Net invoice amount', Amount: money(total) },
       { Description: 'Amount paid', Amount: money(paid) },

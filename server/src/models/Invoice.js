@@ -21,6 +21,7 @@ const invoiceSchema = new mongoose.Schema({
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true, index: true },
   invoiceNumber: { type: String, required: true, trim: true },
   description: { type: String, required: true, trim: true, maxlength: 200 },
+  agreementTerms: { type: String, default: '', trim: true, maxlength: 2000 },
   amount: { type: Number, required: true, min: 0.01 },
   discount: { type: Number, default: 0, min: 0 },
   discountType: { type: String, enum: ['amount', 'percent'], default: 'amount' },
