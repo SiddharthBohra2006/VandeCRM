@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Clock3, CreditCard, Download, FileText, Info, Plus, RotateCcw, Trash2, Wallet } from 'lucide-react';
 import { Invoice, invoicesApi } from '../../api/invoices';
 import DatePicker from '../../components/DatePicker';
@@ -38,6 +38,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
   const [paymentDate, setPaymentDate] = useState('');
   const [method, setMethod] = useState('UPI');
   const [reference, setReference] = useState('');
+  const paymentFormRef = useRef<HTMLFormElement>(null);
   const [confirmAction, setConfirmAction] = useState<{ type: 'delete' | 'stop-renewal'; invoice: Invoice } | null>(null);
 
   const load = useCallback(async () => {
@@ -46,6 +47,9 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
     finally { setLoading(false); }
   }, [customerId]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (paymentInvoice) paymentFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [paymentInvoice]);
 
   async function createInvoice(event: FormEvent) {
     event.preventDefault();
@@ -259,7 +263,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
       </div>}
     </section>
 
-    {paymentInvoice && <form className="invoice-card invoice-payment-form" onSubmit={recordPayment}>
+    {paymentInvoice && <form ref={paymentFormRef} className="invoice-card invoice-payment-form" onSubmit={recordPayment}>
       <header className="invoice-section-heading"><div><h2>Record payment</h2><p>Save the payment against this invoice balance.</p></div><span className="invoice-heading-icon invoice-icon-green"><Wallet size={19} aria-hidden="true" /></span></header>
       <div className="invoice-form-grid">
         <label className="invoice-field">Amount (₹) <span>*</span><input required type="number" min="0.01" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} /></label>
