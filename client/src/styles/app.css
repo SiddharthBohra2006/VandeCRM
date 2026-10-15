@@ -49,7 +49,9 @@
 .invoice-heading-icon { width: 42px; height: 42px; color: var(--invoice-blue); background: var(--invoice-blue-soft); }
 .invoice-form-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) repeat(2, minmax(145px, .85fr)); gap: 15px; }
 .invoice-field { display: grid; min-width: 0; align-content: start; gap: 7px; color: #344054; font-size: .79rem; font-weight: 650; }
-.invoice-field > span:not(.invoice-input-icon) { color: #dc3545; }
+.invoice-field-label { display: flex; min-height: 19px; align-items: baseline; gap: 3px; }
+.invoice-field-label b { color: #dc3545; font-weight: 650; }
+.invoice-field-label small { margin-left: 2px; }
 .invoice-field small { display: inline; color: var(--invoice-muted); font-size: .73rem; font-weight: 450; }
 .invoice-discount-control { display: flex; min-width: 0; }
 .invoice-discount-control > input { flex: 1; min-width: 0; border-radius: 9px 0 0 9px; }

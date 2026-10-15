@@ -111,13 +111,13 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
       </header>
 
       <div className="invoice-form-grid">
-        <label className="invoice-field invoice-field-description">Description <span>*</span>
+        <label className="invoice-field invoice-field-description"><span className="invoice-field-label">Description <b>*</b></span>
           <input required maxLength={200} value={description} onChange={e => setDescription(e.target.value)} placeholder="e.g. Monthly marketing package" />
         </label>
-        <label className="invoice-field">Agreed amount (₹) <span>*</span>
+        <label className="invoice-field"><span className="invoice-field-label">Agreed amount (₹) <b>*</b></span>
           <input required type="number" min="0.01" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" />
         </label>
-        <div className="invoice-field invoice-discount-field"><span>Discount</span>
+        <div className="invoice-field invoice-discount-field"><span className="invoice-field-label">Discount</span>
           <div className="invoice-discount-control">
             <input aria-label={discountType === 'percent' ? 'Discount percent' : 'Discount amount in rupees'} type="number" min="0" max={discountType === 'percent' ? '99.99' : undefined} step="0.01" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="0" />
             <div className="invoice-discount-options" role="group" aria-label="Discount type">
@@ -127,7 +127,7 @@ export default function CustomerInvoicesPanel({ customerId }: { customerId: stri
           </div>
           <small>{money(discountAmount)} off · {money(netAmount)} invoice total</small>
         </div>
-        <label className="invoice-field invoice-field-date">Due date{monthlyRenewal ? <> <span>*</span></> : <small>Optional</small>}
+        <label className="invoice-field invoice-field-date"><span className="invoice-field-label">Due date {monthlyRenewal ? <b>*</b> : <small>Optional</small>}</span>
           <span className="invoice-input-icon"><CalendarDays size={17} aria-hidden="true" /><input type="date" required={monthlyRenewal} value={dueDate} onChange={e => setDueDate(e.target.value)} /></span>
         </label>
       </div>
