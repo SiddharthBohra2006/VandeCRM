@@ -15,6 +15,7 @@ router.use((req, res, next) => hasPermission(req.user, 'businesses.view') ? next
 
 function workspace(req) { return req.activeCompanyId; }
 function scope(req, more = {}) { return { organization: req.user.organization._id, clientCompany: workspace(req), ...more }; }
+function companyScope(req, more = {}) { return { organization: req.user.organization._id, _id: workspace(req), ...more }; }
 function totals(invoice) {
   const total = invoiceTotal(invoice);
   const paid = (invoice.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
@@ -85,9 +86,9 @@ router.post('/customers/:customerId', async (req, res, next) => {
       return res.status(400).json({ ok: false, error: 'Instalment names, positive amounts, and due dates are required; instalments must total the invoice amount after discount.' });
     }
     if (monthlyRenewal && (!dueDate || installments.length)) return res.status(400).json({ ok: false, error: 'Monthly renewal needs a due date and a single monthly invoice amount.' });
-    const company = await ClientCompany.findOne(scope(req));
+    const company = await ClientCompany.findOne(companyScope(req));
     if (!company) return res.status(400).json({ ok: false, error: 'Active workspace not found.' });
-    const sequence = await ClientCompany.findOneAndUpdate(scope(req), { $inc: { invoiceSequence: 1 } }, { new: true, projection: { invoiceSequence: 1 } });
+    const sequence = await ClientCompany.findOneAndUpdate(companyScope(req), { $inc: { invoiceSequence: 1 } }, { new: true, projection: { invoiceSequence: 1 } });
     const invoice = await Invoice.create({
       ...scope(req), customer: customer._id,
       invoiceNumber: `INV-${String(sequence.invoiceSequence).padStart(5, '0')}`,
@@ -120,7 +121,7 @@ router.post('/:invoiceId/renewal', async (req, res, next) => {
     const renewalPeriod = monthKey(nextDueDate);
     let nextInvoice = await Invoice.findOne(scope(req, { renewalSource: root._id, renewalPeriod }));
     if (!nextInvoice) {
-      const company = await ClientCompany.findOneAndUpdate(scope(req), { $inc: { invoiceSequence: 1 } }, { new: true, projection: { invoiceSequence: 1 } });
+      const company = await ClientCompany.findOneAndUpdate(companyScope(req), { $inc: { invoiceSequence: 1 } }, { new: true, projection: { invoiceSequence: 1 } });
       if (!company) return res.status(400).json({ ok: false, error: 'Active workspace not found.' });
       try {
         nextInvoice = await Invoice.create({
@@ -177,7 +178,7 @@ router.get('/:invoiceId/pdf', async (req, res, next) => {
     if (!mongoose.isValidObjectId(req.params.invoiceId)) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
     const invoice = await Invoice.findOne(scope(req, { _id: req.params.invoiceId })).populate('customer', 'name company phone email');
     if (!invoice || !(await findCustomer(req, invoice.customer._id))) return res.status(404).json({ ok: false, error: 'Invoice not found.' });
-    const company = await ClientCompany.findOne(scope(req)).select('name phone email location');
+    const company = await ClientCompany.findOne(companyScope(req)).select('name phone email location');
     const { total, paid, balance, status } = totals(invoice);
     const pdf = createInvoicePdf({
       company: company?.toObject?.() || company || {},
