@@ -75,10 +75,6 @@ export default function WorkThreadsPage() {
   const [bulkText, setBulkText] = useState('');
   const [bulkCleanBullets, setBulkCleanBullets] = useState(true);
 
-  const [cmd, setCmd] = useState<'area' | 'assignee' | null>(null);
-  const [cmdFilter, setCmdFilter] = useState('');
-  const [cmdIndex, setCmdIndex] = useState(0);
-
   const [subOpen, setSubOpen] = useState<string | null>(null);
   const [subTitle, setSubTitle] = useState('');
   const [subAssignee, setSubAssignee] = useState('');
@@ -416,11 +412,6 @@ export default function WorkThreadsPage() {
   const effAssignee = draftAssigneeId();
   const selectedRecipient = users.find(member => member._id === effAssignee);
   const availableDraftTypes = getAvailableWorkTypes(workTypes, selectedRecipient);
-  const areaOptions = useMemo(
-    () => availableDraftTypes.filter(t => `${t.name} ${t.key}`.toLowerCase().includes(cmdFilter)),
-    [availableDraftTypes, cmdFilter]
-  );
-  const assigneeOptions = users.filter(u => u.name.toLowerCase().includes(cmdFilter));
 
   useEffect(() => {
     const targetId = draftAssignee || (currentActiveId !== 'unassigned' ? currentActiveId : '');
@@ -431,62 +422,7 @@ export default function WorkThreadsPage() {
       : workTypes.find(type => member.workTypeKeys!.includes(type.key))?.key || current);
   }, [currentActiveId, draftAssignee, users, workTypes]);
 
-  function handleDraft(text: string) {
-    if (cmd === null && text === '/') {
-      setCmd('area'); setCmdFilter(''); setCmdIndex(0); return;
-    }
-    if (cmd === null && text.length > 1 && /(^|[^\d@])/.test(text.slice(-2, -1)) && text.endsWith('/') && !text.endsWith('//')) {
-      setDraft(text.replace(/\/$/, ''));
-      setCmd('assignee'); setCmdFilter(''); setCmdIndex(0); return;
-    }
-    if (cmd === 'area') {
-      setDraft(text);
-      setCmdFilter(text.replace(/^\//, '').toLowerCase());
-      setCmdIndex(0);
-      return;
-    }
-    if (cmd === 'assignee') {
-      setCmd(null);
-      setDraft(text);
-      return;
-    }
-    setDraft(text);
-  }
-
-  function selectCmd(overrideIndex?: number) {
-    const index = typeof overrideIndex === 'number' ? overrideIndex : cmdIndex;
-    if (cmd === 'area') {
-      const opt = areaOptions[Math.min(index, areaOptions.length - 1)];
-      if (opt) {
-        setDraftType(opt.key);
-        setDraft('');
-        setCmd(null); setCmdFilter(''); setCmdIndex(0);
-      }
-    } else if (cmd === 'assignee') {
-      const opt = assigneeOptions[Math.min(index, assigneeOptions.length - 1)];
-      if (opt) {
-        setDraftAssignee(opt._id);
-        setCmd(null); setCmdFilter(''); setCmdIndex(0);
-      }
-    }
-  }
-
   function onDraftKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (cmd) {
-      const options = cmd === 'area' ? areaOptions : assigneeOptions;
-      if (e.key === 'ArrowDown') { e.preventDefault(); setCmdIndex(i => Math.min(i + 1, options.length - 1)); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); setCmdIndex(i => Math.max(i - 1, 0)); }
-      else if (e.key === 'Enter') {
-        if (options.length > 0) {
-          e.preventDefault();
-          selectCmd();
-        } else {
-          setCmd(null);
-        }
-      }
-      else if (e.key === 'Escape') { e.preventDefault(); setCmd(null); }
-      return;
-    }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTask(); }
   }
 
@@ -1026,69 +962,19 @@ export default function WorkThreadsPage() {
                         {/* MODE 1: SINGLE TASK */}
                         {composerMode === 'single' ? (
                           <form onSubmit={sendTask} style={{ padding: '.55rem .85rem .6rem' }}>
-                            <div style={{ position: 'relative' }}>
-                              {cmd && (
-                                <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 20, overflow: 'hidden', border: '1px solid var(--border)', borderRadius: 12, background: 'var(--panel)', boxShadow: '0 12px 32px rgba(0,0,0,.16)' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.75rem', padding: '.65rem .8rem .5rem', borderBottom: '1px solid var(--border)' }}>
-                                    <span style={{ fontSize: '.65rem', fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                                      {cmd === 'area' ? 'Choose work area' : 'Choose assignee'}
-                                    </span>
-                                    <span style={{ fontSize: '.65rem', color: 'var(--muted)' }}>↑ ↓ navigate · Enter select</span>
-                                  </div>
-                                  <div style={{ maxHeight: 240, overflowY: 'auto', padding: '.35rem' }}>
-                                    {(cmd === 'area' ? areaOptions : assigneeOptions).map((opt, i) => {
-                                      const isArea = cmd === 'area';
-                                      return (
-                                        <button
-                                          key={isArea ? (opt as WorkType)._id : (opt as Member)._id}
-                                          type="button"
-                                          onClick={() => { setCmdIndex(i); selectCmd(i); }}
-                                          onMouseEnter={() => setCmdIndex(i)}
-                                          style={{
-                                            display: 'flex', alignItems: 'center', gap: '.65rem', width: '100%', minHeight: 40, padding: '.45rem .65rem',
-                                            textAlign: 'left', border: i === cmdIndex ? '1px solid color-mix(in srgb, var(--gold) 45%, var(--border))' : '1px solid transparent',
-                                            borderRadius: 8, background: i === cmdIndex ? 'color-mix(in srgb, var(--gold) 12%, var(--panel))' : 'transparent',
-                                            color: 'var(--text)', cursor: 'pointer', transition: 'background .12s ease, border-color .12s ease',
-                                          }}
-                                        >
-                                          {isArea ? (
-                                            <>
-                                              <span aria-hidden="true" style={{ width: 9, height: 9, minWidth: 9, borderRadius: '50%', background: (opt as WorkType).color }} />
-                                              <b style={{ fontSize: '.8rem', fontWeight: 700 }}>{(opt as WorkType).name}</b>
-                                              <small style={{ marginLeft: 'auto', color: 'var(--muted)', fontSize: '.68rem', fontFamily: 'monospace', background: 'color-mix(in srgb, var(--bg) 65%, var(--panel))', border: '1px solid var(--border)', borderRadius: 5, padding: '.12rem .38rem' }}>/{(opt as WorkType).key}</small>
-                                            </>
-                                          ) : (
-                                            <>
-                                              <span aria-hidden="true" style={{ width: 26, height: 26, minWidth: 26, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 750, fontSize: '.62rem', background: avatarColor((opt as Member)._id) }}>
-                                                {initialsOf((opt as Member).name)}
-                                              </span>
-                                              <b style={{ fontSize: '.8rem', fontWeight: 700 }}>{(opt as Member).name}</b>
-                                            </>
-                                          )}
-                                        </button>
-                                      );
-                                    })}
-                                    {cmd === 'area' && areaOptions.length === 0 && (
-                                      <div style={{ padding: '.5rem .75rem', fontSize: '.7rem', color: 'var(--muted)' }}>No work area matches "{cmdFilter}". <button type="button" className="btn small outline" style={{ marginLeft: '.3rem', padding: '1px 6px' }} onClick={() => setCmd(null)}>Type instead</button></div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              <textarea
-                                value={draft}
-                                onChange={e => handleDraft(e.target.value)}
-                                onKeyDown={onDraftKeyDown}
-                                rows={draft.split('\n').length > 1 ? 2 : 1}
-                                placeholder={cmd === 'area' ? 'Search work area… (Enter to pick)' : cmd === 'assignee' ? 'Pick who it’s for…' : `Type a task for ${activeConversation.name}… (Press Enter to send, / for shortcuts)`}
-                                aria-label="New task"
-                                style={{ width: '100%', border: 'none', outline: 'none', padding: '.2rem 0', fontSize: '.86rem', resize: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', lineHeight: 1.45 }}
-                              />
-                            </div>
+                            <textarea
+                              value={draft}
+                              onChange={e => setDraft(e.target.value)}
+                              onKeyDown={onDraftKeyDown}
+                              rows={draft.split('\n').length > 1 ? 2 : 1}
+                              placeholder={`Type a task for ${activeConversation.name}… (Press Enter to send)`}
+                              aria-label="New task"
+                              style={{ width: '100%', border: 'none', outline: 'none', padding: '.2rem 0', fontSize: '.86rem', resize: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', lineHeight: 1.45 }}
+                            />
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '.35rem', paddingTop: '.35rem', borderTop: '1px solid color-mix(in srgb, var(--border) 60%, transparent)' }}>
                               <small style={{ fontSize: '.68rem', color: 'var(--muted)' }}>
-                                Press <b>Enter</b> to send, <b>Shift+Enter</b> for newline, <b>/</b> for area/assignee
+                                Press <b>Enter</b> to send, <b>Shift+Enter</b> for newline
                               </small>
                               <button className="btn primary small" type="submit" disabled={sending || !draft.trim()} style={{ height: 30, padding: '0 .9rem', display: 'inline-flex', alignItems: 'center', gap: '.35rem', fontWeight: 750, fontSize: '.76rem' }}>
                                 <Icon name="send" size={13} aria-hidden /> {sending ? 'Sending…' : 'Send'}
