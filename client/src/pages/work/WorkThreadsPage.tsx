@@ -6,6 +6,8 @@ import { isWorkItemClosed } from '../../utils/workStatus';
 import DatePicker from '../../components/DatePicker';
 import Icon from '../../components/Icons';
 import CustomSelect from '../../components/CustomSelect';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import { hasWorkPermission } from '../../utils/permissions';
 
 interface Member { _id: string; name: string; email?: string }
 
@@ -64,6 +66,8 @@ export default function WorkThreadsPage() {
   const [draftAssignee, setDraftAssignee] = useState('');
   const [sending, setSending] = useState(false);
   const [forwardItem, setForwardItem] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<WorkItem | null>(null);
+  const [deletingTask, setDeletingTask] = useState(false);
 
   // Bulk Multi-Task Creation state
   const [composerMode, setComposerMode] = useState<'single' | 'bulk'>('single');
@@ -388,6 +392,23 @@ export default function WorkThreadsPage() {
     }
   }
 
+  async function deleteTask() {
+    if (!deleteTarget) return;
+    const type = workTypeOf(deleteTarget)?.key || 'task';
+    try {
+      setDeletingTask(true);
+      setError('');
+      await workApi.delete(type, deleteTarget._id);
+      setDeleteTarget(null);
+      setSuccess(`Deleted "${deleteTarget.title}" and its subtasks.`);
+      await loadCenter();
+    } catch (err: any) {
+      setError(err.message || 'Could not delete this task. Check that your role has delete access.');
+    } finally {
+      setDeletingTask(false);
+    }
+  }
+
   const recipients = users.filter(u => String(u._id) !== String(user?._id));
 
   const areaOptions = useMemo(
@@ -683,6 +704,11 @@ export default function WorkThreadsPage() {
           <button className="btn small outline" onClick={() => { setSubOpen(subOpen === item._id ? null : item._id); setSubTitle(''); setSubAssignee(''); }} title="Add a sub-task" style={{ fontSize: '.68rem', padding: '3px 9px' }}>
             <Icon name="list-checks" size={12} aria-hidden /> + Sub-task
           </button>
+          {hasWorkPermission(user, wt, 'delete') && (
+            <button className="btn small danger" onClick={() => setDeleteTarget(item)} title="Delete this task" style={{ fontSize: '.68rem', padding: '3px 9px' }}>
+              <Icon name="trash-2" size={12} aria-hidden /> Delete
+            </button>
+          )}
           {statusMeta && <span style={{ fontSize: '.62rem', color: 'var(--muted)', marginLeft: 'auto' }}>{statusMeta.label}</span>}
         </div>
 
@@ -1183,6 +1209,16 @@ export default function WorkThreadsPage() {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Delete task"
+        message={deleteTarget ? `Delete "${deleteTarget.title}" permanently? Its subtasks will also be deleted. This cannot be undone.` : ''}
+        confirmText="Delete task"
+        variant="danger"
+        loading={deletingTask}
+        onConfirm={deleteTask}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

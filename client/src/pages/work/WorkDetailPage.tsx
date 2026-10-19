@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { workApi, WorkType, WorkItem, WorkSubtask } from '../../api/work';
 import { useAuth } from '../../contexts/AuthContext';
 import { isWorkItemClosed } from '../../utils/workStatus';
-import { canChangeWorkStatus } from '../../utils/permissions';
+import { canChangeWorkStatus, hasWorkPermission } from '../../utils/permissions';
 import Icon from '../../components/Icons';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import DatePicker from '../../components/DatePicker';
@@ -324,6 +324,12 @@ export default function WorkDetailPage() {
           <Link className="btn small" to={`/work/${type}`}>
             ← Back to {workType.name}
           </Link>
+          {hasWorkPermission(user, workType, 'delete') && (
+            <button type="button" className="btn small danger" onClick={() => setShowDeleteConfirm(true)}>
+              <Icon name="trash-2" size={14} />
+              <span>Delete task</span>
+            </button>
+          )}
           <button
             type="button"
             className="btn small"

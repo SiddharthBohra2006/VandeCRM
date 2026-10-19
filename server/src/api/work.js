@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const { requireApiAuth } = require('./middleware/auth');
 const { hasPermission, hasWorkPermission, isRestrictedUser, canEditWorkField, canChangeWorkStatus } = require('../config/roles');
 const { isClosed, isComplete, completionError } = require('../utils/workCompletion');
-const { assignableWorkUsers } = require('../utils/workAssignments');
+const { assignableWorkUsers, explainIneligibleWorkUser } = require('../utils/workAssignments');
 const { logAudit } = require('../utils/audit');
 const { runRecordAutomation } = require('../services/automation');
 const { parseCsv, rowsToObjects } = require('../utils/csv');
@@ -435,7 +435,7 @@ router.post('/:type', resolveWorkType, async (req, res, next) => {
     const assignedTo = (body.assignedTo && mayEditField('assignedTo')) ? body.assignedTo : req.user._id;
 
     if (!(await assignableWorkUsers(organization, activeWorkspace, req.workType)).some(user => String(user._id) === String(assignedTo))) {
-      return res.status(400).json({ ok: false, error: 'Choose an eligible team member.' });
+      return res.status(400).json({ ok: false, error: await explainIneligibleWorkUser(organization, activeWorkspace, req.workType, assignedTo) });
     }
 
     const collaborators = (body.collaborators && mayEditField('collaborators')) ? ids(body.collaborators) : [];
@@ -662,7 +662,7 @@ router.post('/:type/:id/delegate', resolveWorkType, async (req, res, next) => {
     const item = await CustomRecord.findOne(restrictToAssigned({ _id: req.params.id, organization, workspace, module: req.workType._id }, req.user));
     if (!item) return res.status(404).json({ ok: false, error: 'Record not found.' });
     const assignee = (await assignableWorkUsers(organization, workspace, req.workType)).find(user => String(user._id) === String(req.body.toUser || ''));
-    if (!assignee) return res.status(400).json({ ok: false, error: 'Choose an eligible team member.' });
+    if (!assignee) return res.status(400).json({ ok: false, error: await explainIneligibleWorkUser(organization, workspace, req.workType, req.body.toUser) });
     const fromUser = item.assignedTo || null;
     if (String(fromUser || '') === String(assignee._id)) return res.status(400).json({ ok: false, error: 'This task is already assigned to that person.' });
     const fromStatus = item.status;
@@ -693,7 +693,7 @@ router.post('/:type/bulk', resolveWorkType, async (req, res, next) => {
     const status = req.body.status || req.workType.statuses[0]?.key;
     if (!req.workType.statuses.some(item => item.key === status)) return res.status(400).json({ ok: false, error: 'Invalid status.' });
     const assignedTo = req.body.assignedTo || req.user._id;
-    if (!(await assignableWorkUsers(organization, workspace, req.workType)).some(user => String(user._id) === String(assignedTo))) return res.status(400).json({ ok: false, error: 'Choose an eligible team member.' });
+    if (!(await assignableWorkUsers(organization, workspace, req.workType)).some(user => String(user._id) === String(assignedTo))) return res.status(400).json({ ok: false, error: await explainIneligibleWorkUser(organization, workspace, req.workType, assignedTo) });
     const deadline = req.body.deadline ? new Date(req.body.deadline) : null;
     if (deadline && Number.isNaN(deadline.getTime())) return res.status(400).json({ ok: false, error: 'Choose a valid deadline.' });
     const records = await CustomRecord.create(titles.map(title => ({ organization, workspace, module: req.workType._id, title, status, assignedTo, priority: priorities.includes(req.body.priority) ? req.body.priority : 'medium', deadline, createdBy: req.user._id, workflowHistory: [{ event: 'created', actor: req.user._id, toUser: assignedTo, toStatus: status, note: `Created in a batch of ${titles.length} tasks.` }] })));
@@ -755,7 +755,7 @@ router.post('/:type/:id/subtasks', resolveWorkType, async (req, res, next) => {
     const assignedTo = isRestrictedUser(req.user) ? req.user._id : (req.body.assignedTo || null);
     if (assignedTo) {
       const eligible = await assignableWorkUsers(organization, workspace, req.workType);
-      if (!mongoose.isObjectIdOrHexString(assignedTo) || !eligible.some(user => String(user._id) === String(assignedTo))) return res.status(400).json({ ok: false, error: 'Choose an eligible team member.' });
+      if (!mongoose.isObjectIdOrHexString(assignedTo) || !eligible.some(user => String(user._id) === String(assignedTo))) return res.status(400).json({ ok: false, error: await explainIneligibleWorkUser(organization, workspace, req.workType, assignedTo) });
     }
     const deadline = req.body.deadline ? new Date(req.body.deadline) : null;
     if (deadline && Number.isNaN(deadline.getTime())) return res.status(400).json({ ok: false, error: 'Choose a valid subtask deadline.' });
