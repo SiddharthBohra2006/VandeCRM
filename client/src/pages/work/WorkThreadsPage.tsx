@@ -1028,11 +1028,14 @@ export default function WorkThreadsPage() {
                           <form onSubmit={sendTask} style={{ padding: '.55rem .85rem .6rem' }}>
                             <div style={{ position: 'relative' }}>
                               {cmd && (
-                                <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 20, overflow: 'hidden', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--panel)', boxShadow: '0 10px 30px rgba(0,0,0,.15)' }}>
-                                  <div style={{ padding: '.45rem .75rem .3rem', fontSize: '.64rem', fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
-                                    {cmd === 'area' ? 'Create task in…' : 'Assign to whom?'}
+                                <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 20, overflow: 'hidden', border: '1px solid var(--border)', borderRadius: 12, background: 'var(--panel)', boxShadow: '0 12px 32px rgba(0,0,0,.16)' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.75rem', padding: '.65rem .8rem .5rem', borderBottom: '1px solid var(--border)' }}>
+                                    <span style={{ fontSize: '.65rem', fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                                      {cmd === 'area' ? 'Choose work area' : 'Choose assignee'}
+                                    </span>
+                                    <span style={{ fontSize: '.65rem', color: 'var(--muted)' }}>↑ ↓ navigate · Enter select</span>
                                   </div>
-                                  <div style={{ maxHeight: 220, overflowY: 'auto', paddingBottom: '.3rem' }}>
+                                  <div style={{ maxHeight: 240, overflowY: 'auto', padding: '.35rem' }}>
                                     {(cmd === 'area' ? areaOptions : assigneeOptions).map((opt, i) => {
                                       const isArea = cmd === 'area';
                                       return (
@@ -1042,23 +1045,24 @@ export default function WorkThreadsPage() {
                                           onClick={() => { setCmdIndex(i); selectCmd(i); }}
                                           onMouseEnter={() => setCmdIndex(i)}
                                           style={{
-                                            display: 'flex', alignItems: 'center', gap: '.55rem', width: '100%', padding: '.45rem .75rem',
-                                            textAlign: 'left', border: 'none', background: i === cmdIndex ? 'color-mix(in srgb, var(--gold) 12%, var(--panel))' : 'transparent',
-                                            color: 'var(--text)', cursor: 'pointer',
+                                            display: 'flex', alignItems: 'center', gap: '.65rem', width: '100%', minHeight: 40, padding: '.45rem .65rem',
+                                            textAlign: 'left', border: i === cmdIndex ? '1px solid color-mix(in srgb, var(--gold) 45%, var(--border))' : '1px solid transparent',
+                                            borderRadius: 8, background: i === cmdIndex ? 'color-mix(in srgb, var(--gold) 12%, var(--panel))' : 'transparent',
+                                            color: 'var(--text)', cursor: 'pointer', transition: 'background .12s ease, border-color .12s ease',
                                           }}
                                         >
                                           {isArea ? (
                                             <>
-                                              <span style={{ width: 10, height: 10, minWidth: 10, borderRadius: '50%', background: (opt as any).color }} />
-                                              <b style={{ fontSize: '.78rem' }}>{(opt as WorkType).name}</b>
-                                              <small style={{ marginLeft: 'auto', color: 'var(--muted)', fontSize: '.62rem' }}>/{(opt as WorkType).key}</small>
+                                              <span aria-hidden="true" style={{ width: 9, height: 9, minWidth: 9, borderRadius: '50%', background: (opt as WorkType).color }} />
+                                              <b style={{ fontSize: '.8rem', fontWeight: 700 }}>{(opt as WorkType).name}</b>
+                                              <small style={{ marginLeft: 'auto', color: 'var(--muted)', fontSize: '.68rem', fontFamily: 'monospace', background: 'color-mix(in srgb, var(--bg) 65%, var(--panel))', border: '1px solid var(--border)', borderRadius: 5, padding: '.12rem .38rem' }}>/{(opt as WorkType).key}</small>
                                             </>
                                           ) : (
                                             <>
-                                              <span style={{ width: 22, height: 22, minWidth: 22, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 750, fontSize: '.58rem', background: avatarColor((opt as Member)._id) }}>
+                                              <span aria-hidden="true" style={{ width: 26, height: 26, minWidth: 26, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 750, fontSize: '.62rem', background: avatarColor((opt as Member)._id) }}>
                                                 {initialsOf((opt as Member).name)}
                                               </span>
-                                              <b style={{ fontSize: '.78rem' }}>{(opt as Member).name}</b>
+                                              <b style={{ fontSize: '.8rem', fontWeight: 700 }}>{(opt as Member).name}</b>
                                             </>
                                           )}
                                         </button>
