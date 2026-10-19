@@ -101,7 +101,7 @@ export interface WorkCenterResponse {
   ok: true;
   workTypes: WorkType[];
   items: WorkItem[];
-  users: { _id: string; name: string; email?: string }[];
+  users: { _id: string; name: string; email?: string; workTypeKeys: string[] }[];
   counts: {
     open: number;
     completed: number;

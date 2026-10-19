@@ -9,7 +9,7 @@ import CustomSelect from '../../components/CustomSelect';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { hasWorkPermission } from '../../utils/permissions';
 
-interface Member { _id: string; name: string; email?: string }
+interface Member { _id: string; name: string; email?: string; workTypeKeys?: string[] }
 
 const AVATAR_COLORS = ['#b45309', '#0f766e', '#475569', '#9a3412', '#4338ca', '#0369a1', '#701a75', '#3f6212', '#57534e', '#854d0e'];
 const initialsOf = (name: string) => name.split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
@@ -268,7 +268,6 @@ export default function WorkThreadsPage() {
   }
 
   function draftAssigneeId() {
-    if (draftAssignee === 'unassigned') return '';
     return draftAssignee || (currentActiveId !== 'unassigned' ? currentActiveId : '');
   }
 
@@ -419,6 +418,19 @@ export default function WorkThreadsPage() {
   );
   const assigneeOptions = users.filter(u => u.name.toLowerCase().includes(cmdFilter));
   const effAssignee = draftAssigneeId();
+  const selectedRecipient = users.find(member => member._id === effAssignee);
+  const availableDraftTypes = selectedRecipient?.workTypeKeys
+    ? workTypes.filter(type => selectedRecipient.workTypeKeys?.includes(type.key))
+    : workTypes;
+
+  useEffect(() => {
+    const targetId = draftAssignee || (currentActiveId !== 'unassigned' ? currentActiveId : '');
+    const member = users.find(candidate => candidate._id === targetId);
+    if (!member?.workTypeKeys?.length) return;
+    setDraftType(current => member.workTypeKeys!.includes(current)
+      ? current
+      : workTypes.find(type => member.workTypeKeys!.includes(type.key))?.key || current);
+  }, [currentActiveId, draftAssignee, users, workTypes]);
 
   function handleDraft(text: string) {
     if (cmd === null && text === '/') {
@@ -834,6 +846,21 @@ export default function WorkThreadsPage() {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem', flexShrink: 0 }}>
+                      {currentActiveId === 'unassigned' && (
+                        <div style={{ width: 150 }}>
+                          <CustomSelect
+                            value={draftAssignee}
+                            onChange={setDraftAssignee}
+                            placeholder="Assign who…"
+                            variant="compact"
+                            options={[
+                              { value: '', label: 'Assign who…' },
+                              ...users.map(member => ({ value: member._id, label: member.name })),
+                            ]}
+                          />
+                        </div>
+                      )}
+
                       {/* View Switcher: Chat Thread vs Person Task History */}
                       <div style={{ display: 'inline-flex', padding: 2, background: 'color-mix(in srgb, var(--bg) 60%, var(--panel))', border: '1px solid var(--border)', borderRadius: 8, gap: 2 }}>
                         <button
@@ -955,24 +982,12 @@ export default function WorkThreadsPage() {
 
                           {/* Quick Controls */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', flexWrap: 'wrap' }}>
-                            <div style={{ width: 155 }}>
-                              <CustomSelect
-                                value={effAssignee}
-                                onChange={value => setDraftAssignee(value || 'unassigned')}
-                                variant="compact"
-                                options={[
-                                  { value: '', label: 'Unassigned' },
-                                  ...users.map(member => ({ value: member._id, label: member.name })),
-                                ]}
-                                aria-label="Send task to"
-                              />
-                            </div>
                             <div style={{ width: 135 }}>
                               <CustomSelect
                                 value={draftType}
                                 onChange={setDraftType}
                                 variant="compact"
-                                options={workTypes.map(t => ({ value: t.key, label: t.name }))}
+                                options={availableDraftTypes.map(t => ({ value: t.key, label: t.name }))}
                               />
                             </div>
 

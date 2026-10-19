@@ -201,7 +201,14 @@ router.get('/', async (req, res, next) => {
     const overdueItems = items.filter(item => !isClosed(item) && item.deadline && new Date(item.deadline) < now);
 
     const userLists = await Promise.all(workTypes.map(type => assignableWorkUsers(organization, activeWorkspace, type)));
-    const users = [...new Map(userLists.flat().map(user => [String(user._id), user])).values()];
+    const usersById = new Map();
+    userLists.forEach((members, index) => members.forEach(member => {
+      const id = String(member._id);
+      const entry = usersById.get(id) || { ...member, workTypeKeys: [] };
+      entry.workTypeKeys.push(workTypes[index].key);
+      usersById.set(id, entry);
+    }));
+    const users = [...usersById.values()];
     res.json({
       ok: true,
       workTypes,
