@@ -8,6 +8,7 @@ import Icon from '../../components/Icons';
 import CustomSelect from '../../components/CustomSelect';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { hasWorkPermission } from '../../utils/permissions';
+import { getAvailableWorkTypes } from '../../utils/workTypeAccess';
 
 interface Member { _id: string; name: string; email?: string; workTypeKeys?: string[] }
 
@@ -412,16 +413,14 @@ export default function WorkThreadsPage() {
 
   const recipients = users.filter(u => String(u._id) !== String(user?._id));
 
-  const areaOptions = useMemo(
-    () => workTypes.filter(t => `${t.name} ${t.key}`.toLowerCase().includes(cmdFilter)),
-    [workTypes, cmdFilter]
-  );
-  const assigneeOptions = users.filter(u => u.name.toLowerCase().includes(cmdFilter));
   const effAssignee = draftAssigneeId();
   const selectedRecipient = users.find(member => member._id === effAssignee);
-  const availableDraftTypes = selectedRecipient?.workTypeKeys
-    ? workTypes.filter(type => selectedRecipient.workTypeKeys?.includes(type.key))
-    : workTypes;
+  const availableDraftTypes = getAvailableWorkTypes(workTypes, selectedRecipient);
+  const areaOptions = useMemo(
+    () => availableDraftTypes.filter(t => `${t.name} ${t.key}`.toLowerCase().includes(cmdFilter)),
+    [availableDraftTypes, cmdFilter]
+  );
+  const assigneeOptions = users.filter(u => u.name.toLowerCase().includes(cmdFilter));
 
   useEffect(() => {
     const targetId = draftAssignee || (currentActiveId !== 'unassigned' ? currentActiveId : '');
