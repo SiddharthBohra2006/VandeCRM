@@ -860,6 +860,41 @@ select option:checked {
 .portfolio-work-nav > span { font-size: .8rem; font-weight: 800; color: var(--muted); margin-right: 6px; }
 .portfolio-work-nav a { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border); font-size: .76rem; color: var(--text); text-decoration: none; background: var(--panel); }
 .portfolio-work-nav a.active { background: var(--gold); color: var(--accent-text); border-color: var(--gold); }
+
+/* Keep the Team Chat composer controls on one row when the pane has room. */
+.team-chat-composer-controls > div { min-width: 0; }
+.team-chat-composer-mode { max-width: 100%; }
+.team-chat-task-input { box-sizing: border-box; }
+.team-chat-task-input:focus-visible {
+  border-radius: 4px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue, #2563eb) 22%, transparent);
+}
+.team-chat-composer :is(button, .app-select-button, .date-input-wrap > input):focus-visible {
+  outline: 2px solid var(--blue, #2563eb);
+  outline-offset: 2px;
+  z-index: 1;
+}
+.team-chat-send:hover:not(:disabled) { filter: brightness(.94); }
+.team-chat-send:disabled { cursor: not-allowed; opacity: .58; }
+@media (max-width: 1080px) {
+  .team-chat-composer-toolbar { grid-template-columns: minmax(0, 1fr) !important; }
+  .team-chat-composer-controls { justify-content: flex-start !important; flex-wrap: wrap !important; }
+  .team-chat-composer-controls > div { flex: 1 1 145px !important; }
+}
+@media (max-width: 600px) {
+  .team-chat-composer { margin: .5rem .6rem .75rem !important; }
+  .team-chat-composer-toolbar { padding: .65rem !important; }
+  .team-chat-composer-mode { display: flex !important; width: 100%; }
+  .team-chat-composer-mode button { flex: 1 1 0; justify-content: center; padding-inline: .45rem !important; }
+  .team-chat-composer-controls { display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); width: 100%; }
+  .team-chat-composer-controls > div:first-child,
+  .team-chat-composer-controls > div:nth-child(2),
+  .team-chat-composer-controls > div:nth-child(3) { grid-column: 1 / -1; width: 100% !important; }
+  .team-chat-composer-controls > .team-chat-clear-date { grid-column: 1 / -1; justify-self: end; }
+  .team-chat-composer-footer { align-items: stretch !important; }
+  .team-chat-composer-footer .team-chat-send { justify-content: center; width: 100%; }
+  .team-chat-task-input { font-size: 1rem !important; }
+}
 .portfolio-work-nav a strong { font-weight: 800; }
 .portfolio-section-title { display: flex; align-items: flex-end; justify-content: space-between; padding: 0 4px 14px; }
 .portfolio-section-title h2 { margin: 0; font-size: 1.15rem; font-weight: 800; color: var(--text); }

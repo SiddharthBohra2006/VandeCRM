@@ -13,6 +13,7 @@ const Customer = require('../models/Customer');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
 const Notification = require('../models/Notification');
+const { getWonStageIds } = require('../services/crmStages');
 
 const router = express.Router();
 router.use(requireApiAuth);
@@ -221,6 +222,35 @@ router.get('/', async (req, res, next) => {
         total: items.length,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/work/linked-customers — Search clients and leads for task links.
+router.get('/linked-customers', async (req, res, next) => {
+  try {
+    if (!hasPermission(req.user, 'businesses.view')) return res.status(403).json({ ok: false, error: 'Access denied to clients and leads.' });
+    const activeWorkspace = workspace(req, res);
+    if (!activeWorkspace) return;
+    const kind = String(req.query.kind || '');
+    if (!['client', 'lead'].includes(kind)) return res.status(400).json({ ok: false, error: 'Choose clients or leads.' });
+
+    const organization = req.user.organization._id;
+    const wonStageIds = await getWonStageIds(organization, activeWorkspace);
+    const filter = {
+      organization,
+      clientCompany: activeWorkspace,
+      stage: kind === 'client' ? { $in: wonStageIds } : { $nin: wonStageIds },
+      ...(isRestrictedUser(req.user) ? { assignedTo: req.user._id } : {}),
+    };
+    const query = String(req.query.q || '').trim();
+    if (query) {
+      const escaped = query.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+      filter.$or = ['name', 'company', 'email'].map(field => ({ [field]: { $regex: escaped, $options: 'i' } }));
+    }
+    const data = await Customer.find(filter).select('name company').sort({ name: 1 }).limit(50).lean();
+    res.json({ ok: true, data });
   } catch (error) {
     next(error);
   }
@@ -438,7 +468,14 @@ router.post('/:type', resolveWorkType, async (req, res, next) => {
     const deadline = (body.deadline && mayEditField('deadline')) ? new Date(body.deadline) : null;
     const startDate = (body.startDate && mayEditField('startDate')) ? new Date(body.startDate) : null;
     const notes = (body.notes && mayEditField('notes')) ? String(body.notes).trim() : '';
-    const customer = (body.customer && mayEditField('customer')) ? body.customer : null;
+    let customer = null;
+    if (body.customer) {
+      if (!mayEditField('customer')) return res.status(403).json({ ok: false, error: 'You do not have permission to link a client or lead to this task.' });
+      if (!mongoose.isValidObjectId(body.customer)) return res.status(400).json({ ok: false, error: 'Choose a valid client or lead.' });
+      const linkedCustomer = await Customer.findOne({ _id: body.customer, organization, clientCompany: activeWorkspace }).select('_id').lean();
+      if (!linkedCustomer) return res.status(400).json({ ok: false, error: 'The selected client or lead is not available in this workspace.' });
+      customer = linkedCustomer._id;
+    }
     const assignedTo = (body.assignedTo && mayEditField('assignedTo')) ? body.assignedTo : req.user._id;
 
     if (!(await assignableWorkUsers(organization, activeWorkspace, req.workType)).some(user => String(user._id) === String(assignedTo))) {

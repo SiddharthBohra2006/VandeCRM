@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { workApi, WorkType, WorkItem } from '../../api/work';
+import { workApi, WorkType, WorkItem, WorkLinkedCustomer } from '../../api/work';
 import { useAuth } from '../../contexts/AuthContext';
 import { isWorkItemClosed } from '../../utils/workStatus';
 import DatePicker from '../../components/DatePicker';
 import Icon from '../../components/Icons';
 import CustomSelect from '../../components/CustomSelect';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import { hasWorkPermission } from '../../utils/permissions';
+import { hasPermission, hasWorkPermission } from '../../utils/permissions';
 import { getAvailableWorkTypes } from '../../utils/workTypeAccess';
 
 interface Member { _id: string; name: string; email?: string; workTypeKeys?: string[] }
@@ -71,6 +71,13 @@ export default function WorkThreadsPage() {
   const [draftPriority, setDraftPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [draftDeadline, setDraftDeadline] = useState('');
   const [draftAssignee, setDraftAssignee] = useState('');
+  const [linkedCustomer, setLinkedCustomer] = useState<(WorkLinkedCustomer & { kind: 'client' | 'lead' }) | null>(null);
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false);
+  const [linkPickerKind, setLinkPickerKind] = useState<'client' | 'lead'>('client');
+  const [linkPickerQuery, setLinkPickerQuery] = useState('');
+  const [linkPickerResults, setLinkPickerResults] = useState<WorkLinkedCustomer[]>([]);
+  const [linkPickerLoading, setLinkPickerLoading] = useState(false);
+  const [linkPickerError, setLinkPickerError] = useState('');
   const [sending, setSending] = useState(false);
   const [forwardItem, setForwardItem] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WorkItem | null>(null);
@@ -86,6 +93,34 @@ export default function WorkThreadsPage() {
   const [subAssignee, setSubAssignee] = useState('');
 
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const linkPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!linkPickerOpen) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !linkPickerRef.current?.contains(event.target)) setLinkPickerOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [linkPickerOpen]);
+
+  useEffect(() => {
+    if (!linkPickerOpen || !hasPermission(user, 'businesses.view')) return;
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setLinkPickerLoading(true);
+      setLinkPickerError('');
+      try {
+        const result = await workApi.searchLinkedCustomers(linkPickerKind, linkPickerQuery.trim());
+        if (active) setLinkPickerResults(result.data || []);
+      } catch (err: any) {
+        if (active) setLinkPickerError(err.message || 'Could not load clients and leads.');
+      } finally {
+        if (active) setLinkPickerLoading(false);
+      }
+    }, 180);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [linkPickerOpen, linkPickerKind, linkPickerQuery, user]);
 
   async function loadCenter() {
     try {
@@ -293,6 +328,7 @@ export default function WorkThreadsPage() {
           title: lines[0],
           priority: draftPriority,
           deadline: draftDeadline || undefined,
+          ...(linkedCustomer ? { customer: linkedCustomer._id } : {}),
           ...(assignee ? { assignedTo: assignee } : {}),
         });
       } else {
@@ -307,6 +343,8 @@ export default function WorkThreadsPage() {
       setDraft('');
       setDraftDeadline('');
       setDraftAssignee('');
+      setLinkedCustomer(null);
+      setLinkPickerOpen(false);
       setCmd(null);
       await loadCenter();
     } catch (err: any) {
@@ -501,7 +539,7 @@ export default function WorkThreadsPage() {
         <Link to={`/work/${wt?.key || 'task'}/${item._id}`} style={{ fontSize: '.88rem', fontWeight: 700, color: 'var(--text)', textDecoration: 'none', display: 'block', marginBottom: '.25rem' }}>
           {item.title}
         </Link>
-        {item.customer && <small style={{ color: 'var(--muted)', fontSize: '.7rem', display: 'block' }}>Client: {((item.customer as any).name) || 'Business'}</small>}
+        {item.customer && <small style={{ color: 'var(--muted)', fontSize: '.7rem', display: 'block' }}>Linked: {((item.customer as any).name) || 'Client / lead'}</small>}
 
         {/* ----------------- SUBTASK HIERARCHY / CHAIN ----------------- */}
         {(subs.length > 0 || subOpen === item._id) && (
@@ -872,18 +910,19 @@ export default function WorkThreadsPage() {
                       </div>
 
                       {/* SLEEK COMPACT INTEGRATED COMPOSER */}
-                      <div style={{ flexShrink: 0, margin: '0.65rem 1.15rem 1rem', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 18, boxShadow: '0 4px 18px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                      <div className="team-chat-composer" style={{ position: 'relative', zIndex: linkPickerOpen ? 30 : 1, flexShrink: 0, margin: '0.65rem 1.15rem 1rem', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 18, boxShadow: '0 4px 18px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', overflow: 'visible' }}>
                         {/* Composer Toolbar */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.75rem', padding: '.7rem .9rem', borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--panel) 82%, var(--bg, #faf6f0))' }}>
+                        <div className="team-chat-composer-toolbar" style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', alignItems: 'center', gap: '.75rem', padding: '.7rem .9rem', borderBottom: '1px solid var(--border)', borderRadius: '17px 17px 0 0', background: 'color-mix(in srgb, var(--panel) 82%, var(--bg, #faf6f0))' }}>
                           {/* Mode Switcher */}
-                          <div style={{ display: 'inline-flex', flexWrap: 'wrap', padding: 3, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 11, gap: 3 }}>
+                          <div className="team-chat-composer-mode" role="group" aria-label="Task creation mode" style={{ display: 'inline-flex', flexWrap: 'wrap', padding: 3, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10, gap: 3 }}>
                             <button
                               type="button"
                               onClick={() => setComposerMode('single')}
+                              aria-pressed={composerMode === 'single'}
                               style={{
                                 border: 'none',
-                                background: composerMode === 'single' ? 'var(--gold)' : 'transparent',
-                                color: composerMode === 'single' ? 'var(--accent-text, #111)' : 'var(--muted)',
+                                background: composerMode === 'single' ? 'var(--blue, #2563eb)' : 'transparent',
+                                color: composerMode === 'single' ? '#fff' : 'var(--muted)',
                                 padding: '.55rem .85rem',
                                 borderRadius: 8,
                                 fontSize: '.82rem',
@@ -901,10 +940,11 @@ export default function WorkThreadsPage() {
                             <button
                               type="button"
                               onClick={() => setComposerMode('bulk')}
+                              aria-pressed={composerMode === 'bulk'}
                               style={{
                                 border: 'none',
-                                background: composerMode === 'bulk' ? 'var(--gold)' : 'transparent',
-                                color: composerMode === 'bulk' ? 'var(--accent-text, #111)' : 'var(--muted)',
+                                background: composerMode === 'bulk' ? 'var(--blue, #2563eb)' : 'transparent',
+                                color: composerMode === 'bulk' ? '#fff' : 'var(--muted)',
                                 padding: '.55rem .85rem',
                                 borderRadius: 8,
                                 fontSize: '.82rem',
@@ -922,13 +962,13 @@ export default function WorkThreadsPage() {
                           </div>
 
                           {/* Quick Controls */}
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '.6rem', flexWrap: 'wrap' }}>
-                            <div style={{ width: 190, minWidth: 150 }}>
+                          <div className="team-chat-composer-controls" style={{ display: 'flex', minWidth: 0, alignItems: 'center', justifyContent: 'flex-end', gap: '.5rem', flexWrap: 'nowrap' }}>
+                            <div style={{ width: 160, minWidth: 0, flex: '0 1 160px' }}>
                               <CustomSelect
                                 value={draftType}
                                 onChange={setDraftType}
                                 variant="compact"
-                                aria-label="Work area"
+                                aria-label={`Work area: ${availableDraftTypes.find(type => type.key === draftType)?.name || 'Select'}`}
                                 style={{ width: '100%' }}
                                 buttonStyle={{ minHeight: 44, borderRadius: 10, padding: '0 .8rem', fontSize: '.84rem' }}
                                 buttonRenderer={selected => (
@@ -950,12 +990,12 @@ export default function WorkThreadsPage() {
                                   onClick={() => setDraftPriority(p)}
                                   aria-pressed={draftPriority === p}
                                   style={{
-                                    fontSize: '.8rem',
-                                    padding: '.45rem .7rem',
+                                    fontSize: '.78rem',
+                                    padding: '.4rem .55rem',
                                     textTransform: 'capitalize',
-                                    background: draftPriority === p ? 'var(--gold-dim)' : 'transparent',
-                                    color: draftPriority === p ? 'var(--gold)' : 'var(--muted)',
-                                    border: draftPriority === p ? '1px solid var(--gold-border)' : '1px solid transparent',
+                                    background: draftPriority === p ? 'color-mix(in srgb, var(--blue, #2563eb) 11%, var(--panel))' : 'transparent',
+                                    color: draftPriority === p ? 'var(--blue, #2563eb)' : 'var(--muted)',
+                                    border: draftPriority === p ? '1px solid color-mix(in srgb, var(--blue, #2563eb) 40%, var(--border))' : '1px solid transparent',
                                     borderRadius: 8,
                                     fontWeight: draftPriority === p ? 750 : 500,
                                     cursor: 'pointer',
@@ -966,11 +1006,11 @@ export default function WorkThreadsPage() {
                               ))}
                             </div>
 
-                            <div style={{ width: 165, minWidth: 145 }}>
+                            <div style={{ width: 145, minWidth: 0, flex: '0 1 145px' }}>
                               <DatePicker value={draftDeadline} onChange={setDraftDeadline} placeholder="Due date" style={{ width: '100%', fontSize: '.82rem', height: 44 }} aria-label="Deadline" />
                             </div>
                             {draftDeadline && (
-                              <button type="button" className="btn small outline" onClick={() => setDraftDeadline('')} aria-label="Clear due date" style={{ fontSize: '.75rem', padding: '0 .6rem', height: 38 }}>✕</button>
+                              <button type="button" className="btn small outline team-chat-clear-date" onClick={() => setDraftDeadline('')} aria-label="Clear due date" style={{ fontSize: '.75rem', padding: '0 .6rem', height: 38 }}>✕</button>
                             )}
                           </div>
                         </div>
@@ -979,6 +1019,7 @@ export default function WorkThreadsPage() {
                         {composerMode === 'single' ? (
                           <form onSubmit={sendTask} style={{ padding: '.75rem 1rem .85rem' }}>
                             <textarea
+                              className="team-chat-task-input"
                               value={draft}
                               onChange={e => setDraft(e.target.value)}
                               onKeyDown={onDraftKeyDown}
@@ -988,12 +1029,54 @@ export default function WorkThreadsPage() {
                               style={{ width: '100%', minHeight: 64, border: 'none', outline: 'none', padding: '.3rem 0 .7rem', fontSize: '.98rem', resize: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', lineHeight: 1.5 }}
                             />
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.75rem', marginTop: '.15rem', paddingTop: '.65rem', borderTop: '1px solid color-mix(in srgb, var(--border) 70%, transparent)' }}>
-                              <small style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '.35rem', fontSize: '.75rem', color: 'var(--muted)' }}>
-                                <kbd style={{ padding: '.15rem .4rem', borderRadius: 6, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--bg) 55%, var(--panel))', font: 'inherit', fontWeight: 700 }}>Enter</kbd> to send
-                                <kbd style={{ marginLeft: '.35rem', padding: '.15rem .4rem', borderRadius: 6, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--bg) 55%, var(--panel))', font: 'inherit', fontWeight: 700 }}>Shift + Enter</kbd> for newline
-                              </small>
-                              <button className="btn primary" type="submit" disabled={sending || !draft.trim()} style={{ minHeight: 44, padding: '0 1.1rem', display: 'inline-flex', alignItems: 'center', gap: '.5rem', fontWeight: 750, fontSize: '.88rem', borderRadius: 10 }}>
+                            <div className="team-chat-composer-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.75rem', marginTop: '.15rem', paddingTop: '.65rem', borderTop: '1px solid color-mix(in srgb, var(--border) 70%, transparent)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '.75rem' }}>
+                                {hasPermission(user, 'businesses.view') && (
+                                  <div ref={linkPickerRef} style={{ position: 'relative' }}>
+                                    {linkedCustomer ? (
+                                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '.4rem', border: '1px solid color-mix(in srgb, var(--blue, #2563eb) 35%, var(--border))', borderRadius: 8, padding: '.25rem .4rem', color: 'var(--text)', background: 'color-mix(in srgb, var(--blue, #2563eb) 6%, var(--panel))', fontSize: '.75rem', maxWidth: 300 }}>
+                                        <Icon name="link" size={13} aria-hidden />
+                                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${linkedCustomer.kind === 'client' ? 'Client' : 'Lead'}: ${linkedCustomer.name}`}>
+                                          {linkedCustomer.kind === 'client' ? 'Client' : 'Lead'}: {linkedCustomer.name}
+                                        </span>
+                                        <button type="button" onClick={() => setLinkPickerOpen(value => !value)} aria-label={`Change linked ${linkedCustomer.kind}`} aria-expanded={linkPickerOpen} aria-controls="team-chat-link-picker" style={{ border: 0, background: 'transparent', color: 'var(--blue, #2563eb)', cursor: 'pointer', padding: '.2rem', fontSize: '.7rem', fontWeight: 750, whiteSpace: 'nowrap' }}>Change</button>
+                                        <button type="button" onClick={() => setLinkedCustomer(null)} aria-label="Remove linked client or lead" title="Remove link" style={{ border: 0, background: 'transparent', color: 'var(--muted)', cursor: 'pointer', padding: 2, display: 'inline-flex' }}><Icon name="x" size={13} aria-hidden /></button>
+                                      </div>
+                                    ) : (
+                                      <button type="button" className="btn small outline" onClick={() => setLinkPickerOpen(value => !value)} aria-expanded={linkPickerOpen} aria-controls="team-chat-link-picker" style={{ height: 32, display: 'inline-flex', alignItems: 'center', gap: '.35rem', padding: '0 .65rem', fontSize: '.74rem', borderRadius: 8 }}>
+                                        <Icon name="link" size={14} aria-hidden /> Link client / lead
+                                      </button>
+                                    )}
+                                    {!linkedCustomer && <small style={{ marginLeft: '.35rem', fontSize: '.65rem', color: 'var(--muted)' }}>Optional</small>}
+                                    {linkPickerOpen && (
+                                      <div id="team-chat-link-picker" role="dialog" aria-label="Link a client or lead" onKeyDown={event => { if (event.key === 'Escape') setLinkPickerOpen(false); }} style={{ position: 'absolute', zIndex: 30, left: 0, bottom: 'calc(100% + .5rem)', width: 'min(360px, calc(100vw - 48px))', padding: '.65rem', border: '1px solid var(--border)', borderRadius: 12, background: 'var(--panel)', boxShadow: '0 12px 32px rgba(15, 23, 42, .16)' }}>
+                                        <div role="tablist" aria-label="Record type" style={{ display: 'flex', gap: '.35rem', marginBottom: '.55rem' }}>
+                                          {(['client', 'lead'] as const).map(kind => (
+                                            <button key={kind} type="button" role="tab" aria-selected={linkPickerKind === kind} onClick={() => setLinkPickerKind(kind)} style={{ flex: 1, padding: '.45rem', border: `1px solid ${linkPickerKind === kind ? 'var(--blue, #2563eb)' : 'var(--border)'}`, borderRadius: 8, background: linkPickerKind === kind ? 'color-mix(in srgb, var(--blue, #2563eb) 9%, var(--panel))' : 'transparent', color: linkPickerKind === kind ? 'var(--blue, #2563eb)' : 'var(--muted)', fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize' }}>{kind}s</button>
+                                          ))}
+                                        </div>
+                                        <input autoFocus value={linkPickerQuery} onChange={event => setLinkPickerQuery(event.target.value)} placeholder={`Search ${linkPickerKind}s...`} aria-label={`Search ${linkPickerKind}s`} style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--border)', borderRadius: 8, padding: '.55rem .65rem', background: 'var(--panel)', color: 'var(--text)', font: 'inherit', fontSize: '.82rem', outlineColor: 'var(--blue, #2563eb)' }} />
+                                        <div role="listbox" aria-label={`${linkPickerKind}s`} aria-busy={linkPickerLoading} style={{ maxHeight: 220, overflowY: 'auto', marginTop: '.45rem' }}>
+                                          {linkPickerLoading ? <div role="status" style={{ padding: '.75rem .5rem', color: 'var(--muted)', fontSize: '.78rem' }}>Searching…</div>
+                                            : linkPickerError ? <div role="alert" style={{ padding: '.65rem .5rem', color: 'var(--red)', fontSize: '.78rem' }}>{linkPickerError}</div>
+                                              : linkPickerResults.length ? linkPickerResults.map(record => (
+                                                <button key={record._id} type="button" role="option" aria-selected={linkedCustomer?._id === record._id} onClick={() => { setLinkedCustomer({ ...record, kind: linkPickerKind }); setLinkPickerOpen(false); setLinkPickerQuery(''); }} style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '.6rem', padding: '.55rem .5rem', border: 0, borderBottom: '1px solid var(--border)', background: linkedCustomer?._id === record._id ? 'color-mix(in srgb, var(--blue, #2563eb) 8%, var(--panel))' : 'transparent', color: 'var(--text)', cursor: 'pointer', borderRadius: 6 }}>
+                                                  <Icon name={linkPickerKind === 'client' ? 'building-2' : 'user-round'} size={15} aria-hidden />
+                                                  <span style={{ minWidth: 0, flex: 1 }}><strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '.8rem' }}>{record.name}</strong>{record.company && <small style={{ display: 'block', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '.68rem' }}>{record.company}</small>}</span>
+                                                  <small style={{ color: 'var(--blue, #2563eb)', fontSize: '.65rem' }}>{linkPickerKind === 'client' ? 'Client' : 'Lead'}</small>
+                                                </button>
+                                              )) : <div style={{ padding: '.75rem .5rem', color: 'var(--muted)', fontSize: '.78rem' }}>No {linkPickerKind}s found.</div>}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                <small style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '.3rem', fontSize: '.68rem', color: 'var(--muted)' }}>
+                                  <kbd style={{ padding: '.1rem .3rem', borderRadius: 5, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--bg) 55%, var(--panel))', font: 'inherit', fontWeight: 700 }}>Enter</kbd> to send
+                                  <kbd style={{ marginLeft: '.2rem', padding: '.1rem .3rem', borderRadius: 5, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--bg) 55%, var(--panel))', font: 'inherit', fontWeight: 700 }}>Shift + Enter</kbd> newline
+                                </small>
+                              </div>
+                              <button className="btn primary team-chat-send" type="submit" disabled={sending || !draft.trim()} style={{ minHeight: 44, padding: '0 1.1rem', display: 'inline-flex', alignItems: 'center', gap: '.5rem', fontWeight: 750, fontSize: '.88rem', borderRadius: 10, background: 'var(--blue, #2563eb)', borderColor: 'var(--blue, #2563eb)', color: '#fff' }}>
                                 <Icon name="send" size={16} aria-hidden /> {sending ? 'Sending…' : 'Send'}
                               </button>
                             </div>

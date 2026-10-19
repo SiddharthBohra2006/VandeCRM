@@ -110,6 +110,12 @@ export interface WorkCenterResponse {
   };
 }
 
+export interface WorkLinkedCustomer {
+  _id: string;
+  name: string;
+  company?: string;
+}
+
 export interface WorkListResponse {
   ok: true;
   workType: WorkType;
@@ -138,6 +144,10 @@ export interface WorkDetailResponse {
 
 export const workApi = {
   getCenter: () => api.get<WorkCenterResponse>('/work'),
+  searchLinkedCustomers: (kind: 'client' | 'lead', q: string) => {
+    const query = new URLSearchParams({ kind, q }).toString();
+    return api.get<{ ok: true; data: WorkLinkedCustomer[] }>(`/work/linked-customers?${query}`);
+  },
   list: (type: string, params: Record<string, string> = {}) => {
     const query = new URLSearchParams(params).toString();
     return api.get<WorkListResponse>(`/work/${type}${query ? `?${query}` : ''}`);
