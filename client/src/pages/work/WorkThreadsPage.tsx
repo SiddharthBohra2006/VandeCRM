@@ -27,6 +27,12 @@ const timeLabel = (iso: string | undefined) => {
   const sameDay = d.toDateString() === now.toDateString();
   return sameDay ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { day: 'numeric', month: 'short' });
 };
+const createdAtLabel = (iso: string | undefined) => {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+};
 const daySeparator = (iso: string | undefined) => {
   if (!iso) return '';
   const d = new Date(iso);
@@ -489,7 +495,7 @@ export default function WorkThreadsPage() {
               due {new Date(item.deadline).toLocaleDateString([], { day: 'numeric', month: 'short' })}
             </span>
           )}
-          <span style={{ marginLeft: 'auto', fontSize: '.62rem', color: 'var(--muted)' }}>{timeLabel(item.createdAt)}</span>
+          {item.createdAt && <time dateTime={item.createdAt} title={new Date(item.createdAt).toLocaleString()} style={{ marginLeft: 'auto', fontSize: '.62rem', color: 'var(--muted)' }}>{createdAtLabel(item.createdAt)}</time>}
         </div>
 
         <Link to={`/work/${wt?.key || 'task'}/${item._id}`} style={{ fontSize: '.88rem', fontWeight: 700, color: 'var(--text)', textDecoration: 'none', display: 'block', marginBottom: '.25rem' }}>
