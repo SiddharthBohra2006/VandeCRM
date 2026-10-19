@@ -866,11 +866,11 @@ export default function WorkThreadsPage() {
                       </div>
 
                       {/* SLEEK COMPACT INTEGRATED COMPOSER */}
-                      <div style={{ flexShrink: 0, margin: '0.65rem 1.15rem 1rem', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: '0 4px 18px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                      <div style={{ flexShrink: 0, margin: '0.65rem 1.15rem 1rem', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 18, boxShadow: '0 4px 18px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                         {/* Composer Toolbar */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.5rem', padding: '.45rem .75rem', borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--panel) 70%, var(--bg, #faf6f0))' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.75rem', padding: '.7rem .9rem', borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--panel) 82%, var(--bg, #faf6f0))' }}>
                           {/* Mode Switcher */}
-                          <div style={{ display: 'inline-flex', padding: 2, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 7, gap: 2 }}>
+                          <div style={{ display: 'inline-flex', flexWrap: 'wrap', padding: 3, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 11, gap: 3 }}>
                             <button
                               type="button"
                               onClick={() => setComposerMode('single')}
@@ -878,18 +878,18 @@ export default function WorkThreadsPage() {
                                 border: 'none',
                                 background: composerMode === 'single' ? 'var(--gold)' : 'transparent',
                                 color: composerMode === 'single' ? 'var(--accent-text, #111)' : 'var(--muted)',
-                                padding: '.25rem .6rem',
-                                borderRadius: 5,
-                                fontSize: '.72rem',
+                                padding: '.55rem .85rem',
+                                borderRadius: 8,
+                                fontSize: '.82rem',
                                 fontWeight: composerMode === 'single' ? 750 : 500,
                                 cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '.3rem',
+                                gap: '.45rem',
                                 transition: 'all 0.15s ease'
                               }}
                             >
-                              <Icon name="message-square" size={12} />
+                              <Icon name="message-square" size={16} />
                               <span>Single Task</span>
                             </button>
                             <button
@@ -899,34 +899,44 @@ export default function WorkThreadsPage() {
                                 border: 'none',
                                 background: composerMode === 'bulk' ? 'var(--gold)' : 'transparent',
                                 color: composerMode === 'bulk' ? 'var(--accent-text, #111)' : 'var(--muted)',
-                                padding: '.25rem .6rem',
-                                borderRadius: 5,
-                                fontSize: '.72rem',
+                                padding: '.55rem .85rem',
+                                borderRadius: 8,
+                                fontSize: '.82rem',
                                 fontWeight: composerMode === 'bulk' ? 750 : 500,
                                 cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '.3rem',
+                                gap: '.45rem',
                                 transition: 'all 0.15s ease'
                               }}
                             >
-                              <Icon name="zap" size={12} />
-                              <span>⚡ Multi-Task (Bulk)</span>
+                              <Icon name="zap" size={16} />
+                              <span>Multi-Task (Bulk)</span>
                             </button>
                           </div>
 
                           {/* Quick Controls */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', flexWrap: 'wrap' }}>
-                            <div style={{ width: 135 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '.6rem', flexWrap: 'wrap' }}>
+                            <div style={{ width: 190, minWidth: 150 }}>
                               <CustomSelect
                                 value={draftType}
                                 onChange={setDraftType}
                                 variant="compact"
+                                aria-label="Work area"
+                                style={{ width: '100%' }}
+                                buttonStyle={{ minHeight: 44, borderRadius: 10, padding: '0 .8rem', fontSize: '.84rem' }}
+                                buttonRenderer={selected => (
+                                  <span style={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: '.55rem' }}>
+                                    <Icon name="clipboard-list" size={17} style={{ flexShrink: 0, color: 'var(--muted)' }} />
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected?.label || 'Work area'}</span>
+                                    <Icon name="chevron-down" size={15} style={{ flexShrink: 0, marginLeft: 'auto', color: 'var(--muted)' }} />
+                                  </span>
+                                )}
                                 options={availableDraftTypes.map(t => ({ value: t.key, label: t.name }))}
                               />
                             </div>
 
-                            <div style={{ display: 'inline-flex', gap: '2px', background: 'var(--panel)', padding: '2px', borderRadius: 6, border: '1px solid var(--border)' }}>
+                            <div role="group" aria-label="Task priority" style={{ display: 'inline-flex', alignItems: 'center', gap: 2, minHeight: 44, background: 'var(--panel)', padding: 3, borderRadius: 10, border: '1px solid var(--border)' }}>
                               {(['low', 'medium', 'high'] as const).map(p => (
                                 <button
                                   key={p}
@@ -934,13 +944,13 @@ export default function WorkThreadsPage() {
                                   onClick={() => setDraftPriority(p)}
                                   aria-pressed={draftPriority === p}
                                   style={{
-                                    fontSize: '.65rem',
-                                    padding: '2px 7px',
+                                    fontSize: '.8rem',
+                                    padding: '.45rem .7rem',
                                     textTransform: 'capitalize',
-                                    background: draftPriority === p ? 'color-mix(in srgb, var(--gold) 20%, var(--panel))' : 'transparent',
+                                    background: draftPriority === p ? 'var(--gold-dim)' : 'transparent',
                                     color: draftPriority === p ? 'var(--gold)' : 'var(--muted)',
-                                    border: draftPriority === p ? '1px solid var(--gold)' : '1px solid transparent',
-                                    borderRadius: 4,
+                                    border: draftPriority === p ? '1px solid var(--gold-border)' : '1px solid transparent',
+                                    borderRadius: 8,
                                     fontWeight: draftPriority === p ? 750 : 500,
                                     cursor: 'pointer',
                                   }}
@@ -950,18 +960,18 @@ export default function WorkThreadsPage() {
                               ))}
                             </div>
 
-                            <div style={{ width: 120 }}>
-                              <DatePicker value={draftDeadline} onChange={setDraftDeadline} placeholder="Due date" style={{ fontSize: '.72rem', height: 28 }} aria-label="Deadline" />
+                            <div style={{ width: 165, minWidth: 145 }}>
+                              <DatePicker value={draftDeadline} onChange={setDraftDeadline} placeholder="Due date" style={{ width: '100%', fontSize: '.82rem', height: 44 }} aria-label="Deadline" />
                             </div>
                             {draftDeadline && (
-                              <button type="button" className="btn small outline" onClick={() => setDraftDeadline('')} style={{ fontSize: '.65rem', padding: '2px 6px', height: 28 }}>✕</button>
+                              <button type="button" className="btn small outline" onClick={() => setDraftDeadline('')} aria-label="Clear due date" style={{ fontSize: '.75rem', padding: '0 .6rem', height: 38 }}>✕</button>
                             )}
                           </div>
                         </div>
 
                         {/* MODE 1: SINGLE TASK */}
                         {composerMode === 'single' ? (
-                          <form onSubmit={sendTask} style={{ padding: '.55rem .85rem .6rem' }}>
+                          <form onSubmit={sendTask} style={{ padding: '.75rem 1rem .85rem' }}>
                             <textarea
                               value={draft}
                               onChange={e => setDraft(e.target.value)}
@@ -969,15 +979,16 @@ export default function WorkThreadsPage() {
                               rows={draft.split('\n').length > 1 ? 2 : 1}
                               placeholder={`Type a task for ${activeConversation.name}… (Press Enter to send)`}
                               aria-label="New task"
-                              style={{ width: '100%', border: 'none', outline: 'none', padding: '.2rem 0', fontSize: '.86rem', resize: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', lineHeight: 1.45 }}
+                              style={{ width: '100%', minHeight: 64, border: 'none', outline: 'none', padding: '.3rem 0 .7rem', fontSize: '.98rem', resize: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', lineHeight: 1.5 }}
                             />
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '.35rem', paddingTop: '.35rem', borderTop: '1px solid color-mix(in srgb, var(--border) 60%, transparent)' }}>
-                              <small style={{ fontSize: '.68rem', color: 'var(--muted)' }}>
-                                Press <b>Enter</b> to send, <b>Shift+Enter</b> for newline
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.75rem', marginTop: '.15rem', paddingTop: '.65rem', borderTop: '1px solid color-mix(in srgb, var(--border) 70%, transparent)' }}>
+                              <small style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '.35rem', fontSize: '.75rem', color: 'var(--muted)' }}>
+                                <kbd style={{ padding: '.15rem .4rem', borderRadius: 6, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--bg) 55%, var(--panel))', font: 'inherit', fontWeight: 700 }}>Enter</kbd> to send
+                                <kbd style={{ marginLeft: '.35rem', padding: '.15rem .4rem', borderRadius: 6, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--bg) 55%, var(--panel))', font: 'inherit', fontWeight: 700 }}>Shift + Enter</kbd> for newline
                               </small>
-                              <button className="btn primary small" type="submit" disabled={sending || !draft.trim()} style={{ height: 30, padding: '0 .9rem', display: 'inline-flex', alignItems: 'center', gap: '.35rem', fontWeight: 750, fontSize: '.76rem' }}>
-                                <Icon name="send" size={13} aria-hidden /> {sending ? 'Sending…' : 'Send'}
+                              <button className="btn primary" type="submit" disabled={sending || !draft.trim()} style={{ minHeight: 44, padding: '0 1.1rem', display: 'inline-flex', alignItems: 'center', gap: '.5rem', fontWeight: 750, fontSize: '.88rem', borderRadius: 10 }}>
+                                <Icon name="send" size={16} aria-hidden /> {sending ? 'Sending…' : 'Send'}
                               </button>
                             </div>
                           </form>
