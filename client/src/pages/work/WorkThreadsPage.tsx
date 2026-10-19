@@ -262,11 +262,13 @@ export default function WorkThreadsPage() {
   function selectPerson(id: string) {
     setActiveId(id);
     setSearchParams({ person: id }, { replace: true });
+    setDraftAssignee('');
     setSuccess('');
     setError('');
   }
 
   function draftAssigneeId() {
+    if (draftAssignee === 'unassigned') return '';
     return draftAssignee || (currentActiveId !== 'unassigned' ? currentActiveId : '');
   }
 
@@ -416,9 +418,7 @@ export default function WorkThreadsPage() {
     [workTypes, cmdFilter]
   );
   const assigneeOptions = users.filter(u => u.name.toLowerCase().includes(cmdFilter));
-  const effAssignee = draftAssignee || (currentActiveId !== 'unassigned' ? currentActiveId : '');
-  const effAssigneeName = users.find(u => u._id === effAssignee)?.name || '';
-  const draftWorkType = workTypes.find(t => t.key === draftType || t._id === draftType);
+  const effAssignee = draftAssigneeId();
 
   function handleDraft(text: string) {
     if (cmd === null && text === '/') {
@@ -834,21 +834,6 @@ export default function WorkThreadsPage() {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem', flexShrink: 0 }}>
-                      {currentActiveId === 'unassigned' && (
-                        <div style={{ width: 150 }}>
-                          <CustomSelect
-                            value={draftAssignee}
-                            onChange={setDraftAssignee}
-                            placeholder="Assign who…"
-                            variant="compact"
-                            options={[
-                              { value: '', label: 'Assign who…' },
-                              ...users.map(u => ({ value: u._id, label: u.name })),
-                            ]}
-                          />
-                        </div>
-                      )}
-
                       {/* View Switcher: Chat Thread vs Person Task History */}
                       <div style={{ display: 'inline-flex', padding: 2, background: 'color-mix(in srgb, var(--bg) 60%, var(--panel))', border: '1px solid var(--border)', borderRadius: 8, gap: 2 }}>
                         <button
@@ -970,6 +955,18 @@ export default function WorkThreadsPage() {
 
                           {/* Quick Controls */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', flexWrap: 'wrap' }}>
+                            <div style={{ width: 155 }}>
+                              <CustomSelect
+                                value={effAssignee}
+                                onChange={value => setDraftAssignee(value || 'unassigned')}
+                                variant="compact"
+                                options={[
+                                  { value: '', label: 'Unassigned' },
+                                  ...users.map(member => ({ value: member._id, label: member.name })),
+                                ]}
+                                aria-label="Send task to"
+                              />
+                            </div>
                             <div style={{ width: 135 }}>
                               <CustomSelect
                                 value={draftType}
