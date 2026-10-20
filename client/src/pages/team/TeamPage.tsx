@@ -12,6 +12,7 @@ import { teamApi, TeamMember, CustomRole, TeamSummary, TeamMemberInput, WorkType
 import { Company } from '../../api/companies';
 import { useAuth } from '../../contexts/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import AnimatedNumber from '../../components/AnimatedNumber';
 
 export default function TeamPage() {
   const { user } = useAuth();
@@ -585,11 +586,11 @@ export default function TeamPage() {
           <section className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
             <div className="metric" style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel)' }}>
               <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)' }}>Total Users</span>
-              <strong style={{ fontSize: '1.25rem' }}>{teamSummary.total}</strong>
+              <strong style={{ fontSize: '1.25rem' }}><AnimatedNumber value={teamSummary.total} /></strong>
             </div>
             <div className="metric" style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel)' }}>
               <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)' }}>Active Users</span>
-              <strong style={{ fontSize: '1.25rem', color: 'var(--teal)' }}>{teamSummary.active}</strong>
+              <strong style={{ fontSize: '1.25rem', color: 'var(--teal)' }}><AnimatedNumber value={teamSummary.active} /></strong>
             </div>
             <div className="metric danger" style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel)' }}>
               <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)' }}>Inactive</span>

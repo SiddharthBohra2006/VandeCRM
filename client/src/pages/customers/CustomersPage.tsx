@@ -9,6 +9,7 @@ import CustomSelect from '../../components/CustomSelect';
 import DatePicker from '../../components/DatePicker';
 import FilterModal from '../../components/FilterModal';
 import QuickActivityPrompt from '../../components/QuickActivityPrompt';
+import AnimatedNumber from '../../components/AnimatedNumber';
 import { TableSkeletonRows } from '../../components/SkeletonLoader';
 import { SCHEMA_OPTIONS, importFileToCsv, parseCsvRow, suggestTarget } from '../../utils/importCsv';
 
@@ -642,7 +643,7 @@ export default function CustomersPage() {
               <span className="lead-kpi-subtext">Last 7 days</span>
             </div>
             <div className="lead-kpi-num-stack">
-              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : leadStats.newLeads}</span>
+              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : <AnimatedNumber value={leadStats.newLeads} />}</span>
               <span className="lead-kpi-trend trend-up">↑ 12%</span>
             </div>
           </div>
@@ -659,7 +660,7 @@ export default function CustomersPage() {
               <span className="lead-kpi-subtext">Ready to close</span>
             </div>
             <div className="lead-kpi-num-stack">
-              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : leadStats.qualifiedLeads}</span>
+              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : <AnimatedNumber value={leadStats.qualifiedLeads} />}</span>
               <span className="lead-kpi-trend trend-up">↑ 8%</span>
             </div>
           </div>
@@ -676,7 +677,7 @@ export default function CustomersPage() {
               <span className="lead-kpi-subtext">Team-selected labels or HP stage</span>
             </div>
             <div className="lead-kpi-num-stack">
-              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : leadStats.hotLeads}</span>
+              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : <AnimatedNumber value={leadStats.hotLeads} />}</span>
               <span className="lead-kpi-trend trend-neutral">→ 0%</span>
             </div>
           </div>
@@ -693,7 +694,7 @@ export default function CustomersPage() {
               <span className="lead-kpi-subtext">Needs attention</span>
             </div>
             <div className="lead-kpi-num-stack">
-              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : leadStats.overdueLeads}</span>
+              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : <AnimatedNumber value={leadStats.overdueLeads} />}</span>
               <span className="lead-kpi-trend trend-neutral">→ 0%</span>
             </div>
           </div>

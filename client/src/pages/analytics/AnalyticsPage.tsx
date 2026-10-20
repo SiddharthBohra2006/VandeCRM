@@ -4,6 +4,7 @@ import { analyticsApi, AnalyticsResponse } from '../../api/analytics';
 import { useAuth } from '../../contexts/AuthContext';
 import CustomSelect from '../../components/CustomSelect';
 import DatePicker from '../../components/DatePicker';
+import AnimatedNumber from '../../components/AnimatedNumber';
 
 const CIRCUMFERENCE = 2 * Math.PI * 40;
 
@@ -200,7 +201,7 @@ export default function AnalyticsPage() {
           <div className="analytics-kpi-item">
             <span className="kpi-label">Total Ingestion</span>
             <div className="kpi-value-row">
-              <strong className="kpi-value">{stats.totalLeads}</strong>
+              <strong className="kpi-value"><AnimatedNumber value={stats.totalLeads} /></strong>
             </div>
             <span className="kpi-meta">All captured {recordPlural.toLowerCase()}</span>
           </div>
@@ -208,7 +209,7 @@ export default function AnalyticsPage() {
           <div className="analytics-kpi-item">
             <span className="kpi-label">Active {pipelineName}</span>
             <div className="kpi-value-row">
-              <strong className="kpi-value">{stats.activeCount}</strong>
+              <strong className="kpi-value"><AnimatedNumber value={stats.activeCount} /></strong>
             </div>
             <span className="kpi-meta">Open opportunities ({activePct}%)</span>
           </div>
@@ -216,7 +217,7 @@ export default function AnalyticsPage() {
           <div className="analytics-kpi-item">
             <span className="kpi-label">Won Deals</span>
             <div className="kpi-value-row">
-              <strong className="kpi-value kpi-won">{stats.wonCount}</strong>
+              <strong className="kpi-value kpi-won"><AnimatedNumber value={stats.wonCount} /></strong>
             </div>
             <span className="kpi-meta">Won conversions</span>
           </div>
@@ -224,7 +225,7 @@ export default function AnalyticsPage() {
           <div className="analytics-kpi-item">
             <span className="kpi-label">Lost Deals</span>
             <div className="kpi-value-row">
-              <strong className="kpi-value kpi-lost">{stats.lostCount}</strong>
+              <strong className="kpi-value kpi-lost"><AnimatedNumber value={stats.lostCount} /></strong>
             </div>
             <span className="kpi-meta">Closed lost</span>
           </div>

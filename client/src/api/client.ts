@@ -17,7 +17,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
+async function requestInner<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const { token: overrideToken, ...fetchOptions } = options;
   const token = overrideToken || getToken();
 
@@ -52,6 +52,22 @@ export async function request<T>(path: string, options: ApiOptions = {}): Promis
     throw new ApiError(data.error || `Request failed with status ${res.status}`, res.status);
   }
   return data;
+}
+
+// Motion layer: toggles <html class="mo-busy"> while API calls are in flight.
+let pendingRequests = 0;
+function trackBusy(delta: 1 | -1) {
+  pendingRequests = Math.max(0, pendingRequests + delta);
+  if (typeof document !== 'undefined') document.documentElement.classList.toggle('mo-busy', pendingRequests > 0);
+}
+export async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
+  const silent = path.startsWith('/notifications'); // 30-second poll must not flash the bar
+  if (!silent) trackBusy(1);
+  try {
+    return await requestInner<T>(path, options);
+  } finally {
+    if (!silent) trackBusy(-1);
+  }
 }
 
 interface CacheEntry<T> {

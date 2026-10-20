@@ -11,6 +11,7 @@ import {
 } from '../../api/clientDashboard';
 import CustomSelect from '../../components/CustomSelect';
 import DatePicker from '../../components/DatePicker';
+import AnimatedNumber from '../../components/AnimatedNumber';
 
 export default function ClientDashboardPage() {
   const { user, activeCompany, crmTerms } = useAuth();
@@ -179,32 +180,32 @@ export default function ClientDashboardPage() {
           <div className="stats-grid">
             <div className="stat-card">
               <p>Total {recordPlural}</p>
-              <strong>{metrics.totalLeads}</strong>
+              <strong><AnimatedNumber value={metrics.totalLeads} /></strong>
               <span>All-time ingested profiles</span>
             </div>
             <div className="stat-card">
               <p>Active Pipeline</p>
-              <strong>{metrics.activeCount}</strong>
+              <strong><AnimatedNumber value={metrics.activeCount} /></strong>
               <span>Open {recordPlural.toLowerCase()} in progress</span>
             </div>
             <div className="stat-card">
               <p>Conversion Rate</p>
-              <strong>{metrics.winRate}%</strong>
+              <strong><AnimatedNumber value={`${metrics.winRate}%`} /></strong>
               <span>Won {recordPlural.toLowerCase()} over total {recordPlural.toLowerCase()}</span>
             </div>
             <div className="stat-card">
               <p>Won Revenue</p>
-              <strong>Rs. {metrics.wonValue.toLocaleString('en-IN')}</strong>
+              <strong><AnimatedNumber value={`Rs. ${metrics.wonValue.toLocaleString('en-IN')}`} /></strong>
               <span>Accumulated converted value</span>
             </div>
             <div className="stat-card">
               <p>Ad Spend</p>
-              <strong>Rs. {metrics.spend.toLocaleString('en-IN')}</strong>
+              <strong><AnimatedNumber value={`Rs. ${metrics.spend.toLocaleString('en-IN')}`} /></strong>
               <span>Tracked campaign spend</span>
             </div>
             <div className="stat-card">
               <p>Cost per {recordSingular}</p>
-              <strong>Rs. {Math.round(metrics.costPerLead).toLocaleString('en-IN')}</strong>
+              <strong><AnimatedNumber value={`Rs. ${Math.round(metrics.costPerLead).toLocaleString('en-IN')}`} /></strong>
               <span>Spend divided by {recordPlural.toLowerCase()}</span>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { campaignsApi, Campaign, CampaignInput } from '../../api/campaigns';
 import { Company } from '../../api/companies';
 import { useAuth } from '../../contexts/AuthContext';
 import DatePicker from '../../components/DatePicker';
+import AnimatedNumber from '../../components/AnimatedNumber';
 
 export default function CampaignsPage() {
   const { user } = useAuth();
@@ -158,11 +159,11 @@ export default function CampaignsPage() {
       <section className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
         <div className="metric" style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel)' }}>
           <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)' }}>Campaigns</span>
-          <strong style={{ fontSize: '1.25rem' }}>{campaigns.length}</strong>
+          <strong style={{ fontSize: '1.25rem' }}><AnimatedNumber value={campaigns.length} /></strong>
         </div>
         <div className="metric" style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel)' }}>
           <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)' }}>Active</span>
-          <strong style={{ fontSize: '1.25rem' }}>{activeCount}</strong>
+          <strong style={{ fontSize: '1.25rem' }}><AnimatedNumber value={activeCount} /></strong>
         </div>
         <div className="metric" style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--panel)' }}>
           <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--muted)' }}>Total Budget</span>

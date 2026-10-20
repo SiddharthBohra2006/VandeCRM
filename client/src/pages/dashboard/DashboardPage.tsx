@@ -7,6 +7,7 @@ import CustomSelect from '../../components/CustomSelect';
 import { MetricCardSkeleton, KanbanSkeleton } from '../../components/SkeletonLoader';
 import { Customer, Stage } from '../../types';
 import QuickActivityPrompt from '../../components/QuickActivityPrompt';
+import AnimatedNumber from '../../components/AnimatedNumber';
 
 interface DashboardStats {
   totalLeads: number;
@@ -674,7 +675,7 @@ export default function DashboardPage() {
                   <Icon name={card.icon} size={20} />
                 </span>
                 <span className="dashboard-metric-copy">
-                  <strong>{card.value}</strong>
+                  <strong><AnimatedNumber value={card.value} /></strong>
                   <small>{card.label}</small>
                   {card.breakdown && <small className="metric-breakdown">{card.breakdown}</small>}
                 </span>

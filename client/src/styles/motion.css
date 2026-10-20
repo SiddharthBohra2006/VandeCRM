@@ -1,0 +1,315 @@
+/* =============================================================================
+   motion.css  —  VandeCRM motion layer (additive, removable, theme-aware)
+   -----------------------------------------------------------------------------
+   HOW THIS FILE STAYS SAFE (read before editing):
+   1. Imported LAST in main.tsx. It only ADDS `animation`, `translate`, `scale`,
+      `rotate`, `opacity` effects. It never sets colors, sizes, spacing, fonts.
+   2. Almost every selector is wrapped in :where(...) => specificity 0. Any
+      existing rule that already sets `animation` on the same element WINS.
+   3. Keyframes use ONLY the individual properties `translate` / `scale` /
+      `rotate` (never `transform`), so they compose with the `transform` values
+      the app already uses (hover lifts, centering, drag clones). Keyframes list
+      only the START state; the END state is the element's own real style, so
+      nothing "snaps" when an animation finishes.
+   4. Fill mode is `backwards` (never `forwards`): once an animation ends, no
+      transform/opacity is left behind, so `position: fixed` descendants
+      (modals, bulk bar, drag clones) are never trapped in a containing block.
+   5. All motion lives inside @media (prefers-reduced-motion: no-preference).
+   6. Accent colors always come from the live theme variables (--gold, --teal,
+      --red, --panel...) so presets AND custom colors are followed automatically.
+   7. Only opacity / translate / scale / rotate / clip-path are animated.
+      No width, height, margin, top/left, filter, or backdrop-filter.
+   TO DISABLE EVERYTHING: delete the `import './styles/motion.css'` line.
+   ============================================================================= */
+
+/* ---------- 0. Registered properties (typed so they can be animated) ---------- */
+@property --mo-i    { syntax: '<integer>'; inherits: false; initial-value: 0; }
+@property --mo-base { syntax: '<integer>'; inherits: false; initial-value: 0; }
+/* The Work-progress donut sets  style={{'--progress': 73}}  (a plain number).
+   Registering it as <number> lets the ring fill smoothly from 0 to its value. */
+@property --progress { syntax: '<number>'; inherits: true; initial-value: 0; }
+
+/* ---------- 1. Tokens ---------- */
+:root {
+  --mo-ease-out:    cubic-bezier(0.22, 1, 0.36, 1);   /* main entrance curve   */
+  --mo-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);   /* draws, sweeps         */
+  --mo-ease-spring: cubic-bezier(0.34, 1.45, 0.64, 1);/* tiny icons/badges only*/
+  --mo-fast: 140ms;
+  --mo-base-dur: 260ms;
+  --mo-slow: 420ms;
+  --mo-rise: 10px;     /* entrance travel distance */
+  --mo-step: 38ms;     /* stagger step between siblings */
+}
+@media (max-width: 768px) {
+  :root { --mo-rise: 8px; --mo-step: 26ms; --mo-slow: 340ms; }
+}
+
+/* Count-up numbers (see AnimatedNumber.tsx): keeps digit widths equal so the
+   number does not wobble while counting. The only non-motion rule in this file. */
+.mo-num { font-variant-numeric: tabular-nums; }
+
+/* ---------- 2. Keyframes (START state only; END = element's own style) ---------- */
+@keyframes mo-fade { from { opacity: 0; } }
+@keyframes mo-rise { from { opacity: 0; translate: 0 var(--mo-rise, 10px); } }
+@keyframes mo-rise-sm { from { opacity: 0; translate: 0 6px; } }
+@keyframes mo-drop { from { opacity: 0; translate: 0 -8px; } }
+@keyframes mo-slide-r { from { opacity: 0; translate: -14px 0; } }
+@keyframes mo-pop { from { opacity: 0; scale: 0.96; translate: 0 6px; } }
+@keyframes mo-dialog { from { opacity: 0; scale: 0.965; translate: 0 10px; } }
+@keyframes mo-icon-pop { 0% { scale: 0.7; } 60% { scale: 1.12; } }
+@keyframes mo-press { to { scale: 0.97; } }
+@keyframes mo-spin { to { rotate: 360deg; } }
+@keyframes mo-ping { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--red, #ef4444) 45%, transparent); } 100% { box-shadow: 0 0 0 8px transparent; } }
+@keyframes mo-twinkle { 50% { opacity: 0.35; scale: 0.7; } }
+@keyframes mo-shake { 0%, 100% { translate: 0 0; } 20% { translate: -6px 0; } 40% { translate: 5px 0; } 60% { translate: -3px 0; } 80% { translate: 2px 0; } }
+@keyframes mo-wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes mo-bar { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes mo-draw-line { from { stroke-dasharray: 800; stroke-dashoffset: 800; } to { stroke-dasharray: 800; stroke-dashoffset: 0; } }
+@keyframes mo-draw-auth { from { stroke-dasharray: 420; stroke-dashoffset: 420; } to { stroke-dasharray: 420; stroke-dashoffset: 0; } }
+@keyframes mo-gauge { from { stroke-dashoffset: 260; } }
+@keyframes mo-donut { from { --progress: 0; } }
+@keyframes mo-busy-slide { from { background-position: -40% 0; } to { background-position: 140% 0; } }
+
+/* ---------- 3. Everything below only runs when the user allows motion ---------- */
+@media (prefers-reduced-motion: no-preference) {
+
+/* Revives an animation that already exists in the code but was never defined:
+   ConfirmDialog.tsx and QuickActivityPrompt.tsx both set  animation: 'fadeIn 0.15s ease-out'
+   inline, but no @keyframes fadeIn existed, so those dialog cards never animated. */
+@keyframes fadeIn { from { opacity: 0; scale: 0.96; translate: 0 8px; } }
+
+/* ---------- 4. Stagger index: tells each child its position (0..7) ---------- */
+:where(.page-content > :not(.loading), .page-content, .stats-grid, .lead-kpi-grid, .dashboard-metrics, .dashboard-summary-grid, .follow-ups-metrics-grid, .analytics-kpi-strip, .analytics-grid-two-col, .work-kpi-stats-row, .report-grid, .report-choice-grid, .crms-grid, .client-dashboard-grid, .client-work-grid, .work-board, .crm-kpi-grid, .nav-sub-list, .notification-list, .crm-recent-list, .crm-top-results-list, .deadline-items-list, .pin-cards-col, .premium-subtask-list, .saved-views-row, .work-area-pills-list, .crm-suggestions-chips, .sidebar-nav, .topbar, tbody, .auth-minimal-form, .auth-features-list) > :nth-child(1) { --mo-i: 0; }
+:where(.page-content > :not(.loading), .page-content, .stats-grid, .lead-kpi-grid, .dashboard-metrics, .dashboard-summary-grid, .follow-ups-metrics-grid, .analytics-kpi-strip, .analytics-grid-two-col, .work-kpi-stats-row, .report-grid, .report-choice-grid, .crms-grid, .client-dashboard-grid, .client-work-grid, .work-board, .crm-kpi-grid, .nav-sub-list, .notification-list, .crm-recent-list, .crm-top-results-list, .deadline-items-list, .pin-cards-col, .premium-subtask-list, .saved-views-row, .work-area-pills-list, .crm-suggestions-chips, .sidebar-nav, .topbar, tbody, .auth-minimal-form, .auth-features-list) > :nth-child(2) { --mo-i: 1; }
+:where(.page-content > :not(.loading), .page-content, .stats-grid, .lead-kpi-grid, .dashboard-metrics, .dashboard-summary-grid, .follow-ups-metrics-grid, .analytics-kpi-strip, .analytics-grid-two-col, .work-kpi-stats-row, .report-grid, .report-choice-grid, .crms-grid, .client-dashboard-grid, .client-work-grid, .work-board, .crm-kpi-grid, .nav-sub-list, .notification-list, .crm-recent-list, .crm-top-results-list, .deadline-items-list, .pin-cards-col, .premium-subtask-list, .saved-views-row, .work-area-pills-list, .crm-suggestions-chips, .sidebar-nav, .topbar, tbody, .auth-minimal-form, .auth-features-list) > :nth-child(3) { --mo-i: 2; }
+:where(.page-content > :not(.loading), .page-content, .stats-grid, .lead-kpi-grid, .dashboard-metrics, .dashboard-summary-grid, .follow-ups-metrics-grid, .analytics-kpi-strip, .analytics-grid-two-col, .work-kpi-stats-row, .report-grid, .report-choice-grid, .crms-grid, .client-dashboard-grid, .client-work-grid, .work-board, .crm-kpi-grid, .nav-sub-list, .notification-list, .crm-recent-list, .crm-top-results-list, .deadline-items-list, .pin-cards-col, .premium-subtask-list, .saved-views-row, .work-area-pills-list, .crm-suggestions-chips, .sidebar-nav, .topbar, tbody, .auth-minimal-form, .auth-features-list) > :nth-child(4) { --mo-i: 3; }
+:where(.page-content > :not(.loading), .page-content, .stats-grid, .lead-kpi-grid, .dashboard-metrics, .dashboard-summary-grid, .follow-ups-metrics-grid, .analytics-kpi-strip, .analytics-grid-two-col, .work-kpi-stats-row, .report-grid, .report-choice-grid, .crms-grid, .client-dashboard-grid, .client-work-grid, .work-board, .crm-kpi-grid, .nav-sub-list, .notification-list, .crm-recent-list, .crm-top-results-list, .deadline-items-list, .pin-cards-col, .premium-subtask-list, .saved-views-row, .work-area-pills-list, .crm-suggestions-chips, .sidebar-nav, .topbar, tbody, .auth-minimal-form, .auth-features-list) > :nth-child(5) { --mo-i: 4; }
+:where(.page-content > :not(.loading), .page-content, .stats-grid, .lead-kpi-grid, .dashboard-metrics, .dashboard-summary-grid, .follow-ups-metrics-grid, .analytics-kpi-strip, .analytics-grid-two-col, .work-kpi-stats-row, .report-grid, .report-choice-grid, .crms-grid, .client-dashboard-grid, .client-work-grid, .work-board, .crm-kpi-grid, .nav-sub-list, .notification-list, .crm-recent-list, .crm-top-results-list, .deadline-items-list, .pin-cards-col, .premium-subtask-list, .saved-views-row, .work-area-pills-list, .crm-suggestions-chips, .sidebar-nav, .topbar, tbody, .auth-minimal-form, .auth-features-list) > :nth-child(6) { --mo-i: 5; }
+:where(.page-content > :not(.loading), .page-content, .stats-grid, .lead-kpi-grid, .dashboard-metrics, .dashboard-summary-grid, .follow-ups-metrics-grid, .analytics-kpi-strip, .analytics-grid-two-col, .work-kpi-stats-row, .report-grid, .report-choice-grid, .crms-grid, .client-dashboard-grid, .client-work-grid, .work-board, .crm-kpi-grid, .nav-sub-list, .notification-list, .crm-recent-list, .crm-top-results-list, .deadline-items-list, .pin-cards-col, .premium-subtask-list, .saved-views-row, .work-area-pills-list, .crm-suggestions-chips, .sidebar-nav, .topbar, tbody, .auth-minimal-form, .auth-features-list) > :nth-child(7) { --mo-i: 6; }
+:where(.page-content > :not(.loading), .page-content, .stats-grid, .lead-kpi-grid, .dashboard-metrics, .dashboard-summary-grid, .follow-ups-metrics-grid, .analytics-kpi-strip, .analytics-grid-two-col, .work-kpi-stats-row, .report-grid, .report-choice-grid, .crms-grid, .client-dashboard-grid, .client-work-grid, .work-board, .crm-kpi-grid, .nav-sub-list, .notification-list, .crm-recent-list, .crm-top-results-list, .deadline-items-list, .pin-cards-col, .premium-subtask-list, .saved-views-row, .work-area-pills-list, .crm-suggestions-chips, .sidebar-nav, .topbar, tbody, .auth-minimal-form, .auth-features-list) > :nth-child(8) { --mo-i: 7; }
+:where(.page-content > :not(.loading), .page-content, .stats-grid, .lead-kpi-grid, .dashboard-metrics, .dashboard-summary-grid, .follow-ups-metrics-grid, .analytics-kpi-strip, .analytics-grid-two-col, .work-kpi-stats-row, .report-grid, .report-choice-grid, .crms-grid, .client-dashboard-grid, .client-work-grid, .work-board, .crm-kpi-grid, .nav-sub-list, .notification-list, .crm-recent-list, .crm-top-results-list, .deadline-items-list, .pin-cards-col, .premium-subtask-list, .saved-views-row, .work-area-pills-list, .crm-suggestions-chips, .sidebar-nav, .topbar, tbody, .auth-minimal-form, .auth-features-list) > :nth-child(n+9) { --mo-i: 7; }
+
+/* ---------- 5. PAGE ENTRANCE (every route, zero JS) ----------
+   A route change mounts a new page root inside .page-content, so a plain CSS
+   animation fires by itself. Root = quick fade. Its direct children = rise + stagger.
+   Grid containers are skipped here because their CHILDREN (the cards) animate instead. */
+:where(.page-content > :not(.loading)) {
+  animation: mo-fade 200ms ease-out backwards;
+}
+:where(.page-content > :not(.loading)) > :where(:not(.stats-grid, .lead-kpi-grid, .dashboard-metrics, .dashboard-summary-grid, .follow-ups-metrics-grid, .analytics-kpi-strip, .analytics-grid-two-col, .work-kpi-stats-row, .report-grid, .report-choice-grid, .crms-grid, .client-dashboard-grid, .client-work-grid, .work-board, .crm-kpi-grid, .loading, script, style, dialog, [role="dialog"], [role="alertdialog"], [class*="modal"], [class*="overlay"], [class*="backdrop"], [class*="dialog"], [class*="popover"], [class*="dropdown"], [class*="drawer"], [class*="toast"], [class*="floating"])) {
+  animation: mo-rise var(--mo-slow) var(--mo-ease-out) backwards;
+  animation-delay: calc(var(--mo-i) * var(--mo-step));
+}
+/* Fragment pages (several roots side by side in .page-content) */
+:where(.page-content) > :where(:not(.loading, .loading, script, style, dialog, [role="dialog"], [role="alertdialog"], [class*="modal"], [class*="overlay"], [class*="backdrop"], [class*="dialog"], [class*="popover"], [class*="dropdown"], [class*="drawer"], [class*="toast"], [class*="floating"])) {
+  animation-delay: calc(var(--mo-i) * var(--mo-step));
+}
+
+/* ---------- 6. CARD GRIDS: KPI tiles, dashboard cards, report cards ---------- */
+:where(.stats-grid, .lead-kpi-grid, .dashboard-metrics, .dashboard-summary-grid, .follow-ups-metrics-grid, .analytics-kpi-strip, .analytics-grid-two-col, .work-kpi-stats-row, .report-grid, .report-choice-grid, .crms-grid, .client-dashboard-grid, .client-work-grid, .work-board, .crm-kpi-grid) > :where(:not(.loading, script, style, dialog, [role="dialog"], [role="alertdialog"], [class*="modal"], [class*="overlay"], [class*="backdrop"], [class*="dialog"], [class*="popover"], [class*="dropdown"], [class*="drawer"], [class*="toast"], [class*="floating"])) {
+  --mo-base: 1;
+  animation: mo-rise var(--mo-slow) var(--mo-ease-out) backwards;
+  animation-delay: calc((var(--mo-i) + var(--mo-base)) * var(--mo-step));
+}
+
+/* ---------- 7. SHORT LISTS: dropdown items, deadlines, subtasks, chips ---------- */
+:where(.nav-sub-list, .notification-list, .crm-recent-list, .crm-top-results-list, .deadline-items-list, .pin-cards-col, .premium-subtask-list, .saved-views-row, .work-area-pills-list, .crm-suggestions-chips) > :where(:not(.loading, script, style, dialog, [role="dialog"], [role="alertdialog"], [class*="modal"], [class*="overlay"], [class*="backdrop"], [class*="dialog"], [class*="popover"], [class*="dropdown"], [class*="drawer"], [class*="toast"], [class*="floating"])) {
+  animation: mo-rise-sm 300ms var(--mo-ease-out) backwards;
+  animation-delay: calc(var(--mo-i) * 28ms);
+}
+
+/* ---------- 8. TABLE ROWS: first 12 rows fade in (skeleton rows excluded) ---------- */
+:where(tbody > tr:nth-child(-n+12):not(.skeleton-table-tr)) {
+  animation: mo-fade 220ms ease-out backwards;
+  animation-delay: calc(var(--mo-i) * 18ms);
+}
+
+/* ---------- 9. KANBAN: columns come from section 6 (.work-board); cards fade in.
+   No stagger delay on cards on purpose: a card dropped into another column
+   re-mounts and must appear immediately. ---------- */
+:where(.work-column > .work-card) {
+  animation: mo-pop 240ms var(--mo-ease-out) backwards;
+}
+
+/* ---------- 10. SHELL: sidebar, top bar, active nav icon ---------- */
+:where(.sidebar-nav) > * {
+  animation: mo-slide-r 420ms var(--mo-ease-out) backwards;
+  animation-delay: calc(60ms + var(--mo-i) * 32ms);
+}
+:where(.topbar) > * {
+  animation: mo-drop 420ms var(--mo-ease-out) backwards;
+  animation-delay: calc(var(--mo-i) * 40ms);
+}
+:where(.nav-item.active svg, .nav-sub-item.active svg) {
+  animation: mo-icon-pop 420ms var(--mo-ease-spring) backwards;
+}
+:where(.bell-badge) {
+  animation: mo-ping 1.6s ease-out 2;
+}
+
+/* ---------- 11. FLOATING MENUS that had no entrance ---------- */
+:where(.notification-dropdown, .luxury-notification-dropdown) {
+  animation: mo-drop 200ms var(--mo-ease-out) backwards;
+  transform-origin: top right;
+}
+:where(.new-work-popover, .more-actions-menu) {
+  animation: mo-drop 180ms var(--mo-ease-out) backwards;
+}
+
+/* ---------- 12. MODALS / DIALOGS that had no entrance ----------
+   Backdrop fades, card pops. Existing modals (filter, search, columns, bulk bar,
+   workspace switcher, preferences drawer) keep their own animations because of :where(). */
+:where(.modal-overlay, .csv-modal-overlay, .auto-modal-overlay, .module-builder-dialog-overlay,
+       .invoice-payment-modal-backdrop, [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]) {
+  animation: mo-fade 200ms ease-out backwards;
+}
+:where(.modal-overlay, .csv-modal-overlay, .auto-modal-overlay, .module-builder-dialog-overlay,
+       .invoice-payment-modal-backdrop, [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]) > :first-child {
+  animation: mo-dialog 280ms var(--mo-ease-out) backwards;
+}
+:where(.cols-modal-box) {
+  animation: mo-dialog 280ms var(--mo-ease-out) backwards;
+}
+:where(dialog[open]) {
+  animation: mo-dialog 280ms var(--mo-ease-out) backwards;
+}
+:where(dialog[open])::backdrop {
+  animation: mo-fade 220ms ease-out backwards;
+}
+
+/* ---------- 13. NOTICES, ERRORS, EMPTY STATES, PANELS ---------- */
+:where(.notice, .alert, .crms-notice, .crms-error, .crms-success) {
+  animation: mo-drop var(--mo-base-dur) var(--mo-ease-out) backwards;
+}
+:where(.empty-state, .table-empty-state, .work-board-empty, .work-column-empty,
+       .notification-empty, .analytics-chart-empty, .crms-empty) {
+  animation: mo-fade 320ms ease-out 60ms backwards;
+}
+/* Tab content: when a tab switch mounts a panel, it fades in. */
+:where(.settings-panel, .profile-panel, .work-card-panel, .lead-overview-card) {
+  animation: mo-fade 240ms ease-out backwards;
+}
+
+/* ---------- 14. LOADING STATES (every page shows <div class="loading">) ----------
+   Fade in after 140ms so fast loads never flash the text, and add a theme-colored spinner. */
+:where(.loading, .loading-screen) {
+  animation: mo-fade 240ms ease-out 140ms backwards;
+}
+:where(.loading, .loading-screen)::before {
+  content: '';
+  display: inline-block;
+  flex: none;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin-right: 0.6rem;
+  vertical-align: middle;
+  border: 2px solid color-mix(in srgb, var(--gold, #f59e0b) 25%, transparent);
+  border-top-color: var(--gold, #f59e0b);
+  border-radius: 50%;
+  animation: mo-spin 700ms linear infinite;
+}
+
+/* ---------- 15. PRESS FEEDBACK on buttons (composes with hover transforms) ---------- */
+:where(.btn, [class^="btn-"], [class*=" btn-"], .work-page-btn, .page-btn, .crms-button):where(:active:not(:disabled, [aria-disabled="true"])) {
+  animation: mo-press 90ms var(--mo-ease-out) forwards;
+}
+
+/* ---------- 16. PROGRESS + CHARTS ---------- */
+:where(.donut-progress, .dashboard-progress-ring) {
+  animation: mo-donut 1000ms var(--mo-ease-out) 150ms backwards;
+}
+:where(.task-progress > span, .client-work-progress > span) {
+  animation: mo-bar 800ms var(--mo-ease-out) 200ms backwards;
+}
+:where(.analytics-chart-container svg path[stroke="var(--gold)"]) {
+  animation: mo-draw-line 1300ms var(--mo-ease-in-out) 250ms backwards;
+}
+:where(.analytics-chart-container svg path[fill="url(#areaGrad)"]) {
+  animation: mo-fade 700ms ease-out 550ms backwards;
+}
+:where(.analytics-chart-container svg circle) {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mo-icon-pop 420ms var(--mo-ease-spring) 800ms backwards;
+}
+:where(.conversion-gauge-wrap svg circle:last-child) {
+  animation: mo-gauge 1000ms var(--mo-ease-out) 250ms backwards;
+}
+
+/* ---------- 17. DRAG & DROP feedback (class already toggled by WorkListPage.tsx) ---------- */
+:where(.work-column.is-drop-target) {
+  animation: mo-fade 160ms ease-out backwards;
+}
+
+/* ---------- 18. LOGIN / SIGN-UP (layouts/AuthLayout.tsx + styles/auth.css) ---------- */
+:where(.auth-hero-title)        { animation: mo-rise 700ms var(--mo-ease-out) 80ms backwards; }
+:where(.auth-hero-desc)         { animation: mo-rise 700ms var(--mo-ease-out) 180ms backwards; }
+:where(.brush-underline)        { animation: mo-wipe 700ms var(--mo-ease-out) 900ms backwards; }
+:where(.auth-features-list) > :where(.auth-feature-item) {
+  animation: mo-slide-r 560ms var(--mo-ease-out) backwards;
+  animation-delay: calc(260ms + var(--mo-i) * 90ms);
+}
+:where(.auth-continuous-svg > path) {
+  animation: mo-draw-auth 1300ms var(--mo-ease-in-out) 300ms backwards;
+}
+:where(.auth-continuous-svg > circle) {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mo-icon-pop 420ms var(--mo-ease-spring) backwards;
+}
+:where(.auth-continuous-svg > circle:nth-of-type(1)) { animation-delay: 420ms; }
+:where(.auth-continuous-svg > circle:nth-of-type(2)) { animation-delay: 760ms; }
+:where(.auth-continuous-svg > circle:nth-of-type(3)) { animation-delay: 1100ms; }
+:where(.auth-continuous-svg > circle:nth-of-type(4)) { animation-delay: 1440ms; }
+:where(.pipeline-node-card) { animation: mo-pop 560ms var(--mo-ease-out) backwards; }
+:where(.pipeline-node-card.card-new-lead)  { animation-delay: 460ms; }
+:where(.pipeline-node-card.card-qualified) { animation-delay: 800ms; }
+:where(.pipeline-node-card.card-proposal)  { animation-delay: 1140ms; }
+:where(.pipeline-node-card.card-won)       { animation-delay: 1480ms; }
+:where(.pipeline-sparks span) {
+  animation: mo-twinkle 2.6s ease-in-out infinite;
+}
+:where(.pipeline-sparks span:nth-child(2)) { animation-delay: 0.4s; }
+:where(.pipeline-sparks span:nth-child(3)) { animation-delay: 0.8s; }
+:where(.auth-form-card) {
+  animation: mo-rise 600ms var(--mo-ease-out) 120ms backwards;
+}
+:where(.auth-minimal-form) > :where(*) {
+  animation: mo-rise-sm 460ms var(--mo-ease-out) backwards;
+  animation-delay: calc(220ms + var(--mo-i) * 60ms);
+}
+:where(.auth-error-banner) {
+  animation: mo-shake 420ms ease-in-out backwards;
+}
+@media (max-width: 768px) {
+  :where(.pipeline-sparks span) { animation: none; }
+}
+
+}  /* end @media (prefers-reduced-motion: no-preference) */
+
+/* ---------- 19. GLOBAL NETWORK BAR (optional; needs the 6-line api/client.ts patch) ----------
+   <html class="mo-busy"> is toggled by request() while any API call is in flight.
+   The 250ms delay means cached / instant responses never show it. Also covers Render
+   free-tier cold starts, where the first request can take 30-60 s. */
+@media (prefers-reduced-motion: no-preference) {
+  html.mo-busy::before {
+    content: '';
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: 2px;
+    z-index: 100100;
+    pointer-events: none;
+    background-image: linear-gradient(90deg, transparent, var(--gold, #f59e0b), var(--teal, #06b6d4), transparent);
+    background-size: 40% 100%;
+    background-repeat: no-repeat;
+    animation:
+      mo-fade 200ms ease-out 250ms backwards,
+      mo-busy-slide 1.1s var(--mo-ease-in-out) infinite;
+  }
+}
+
+/* ---------- 20. Safety nets ---------- */
+@media print { *, *::before, *::after { animation: none !important; } }
+/* Escape hatch: add class="no-motion" to any element whose subtree flickers or misbehaves. */
+.no-motion, .no-motion *, .no-motion *::before, .no-motion *::after { animation: none !important; }

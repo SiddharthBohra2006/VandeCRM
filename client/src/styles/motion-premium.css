@@ -1,0 +1,194 @@
+/* =============================================================================
+   motion-premium.css  v3 — VandeCRM premium motion layer (additive, removable)
+   -----------------------------------------------------------------------------
+   Load order in main.tsx:
+     index.css → experience.css → motion.css → motion-premium.css
+   Depends on motion.css (re-uses its keyframes, tokens and --mo-i stagger index).
+
+   Same safety rules as motion.css: :where() (specificity 0), fill-mode backwards,
+   only opacity / translate / scale / rotate / clip-path, no transition shorthand,
+   no transform/filter/will-change, theme colours only via var(--…), all inside
+   prefers-reduced-motion: no-preference.
+   The ONLY !important rules live in section 13 and only touch ".mo-ghost" clones
+   (the exit-animation copies made by utils/motionExit.ts), never real UI.
+
+   KILL SWITCH: delete the import line (and initMotionExit() if you added it).
+   ============================================================================= */
+
+/* ---------- 0. Keyframes ---------- */
+@keyframes mo-title-wipe {
+  from { clip-path: inset(-0.2em 100% -0.2em -0.2em); opacity: 0; }
+  to   { clip-path: inset(-0.2em -0.2em -0.2em -0.2em); }
+}
+@keyframes mo-grow-up { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0 0 0 0); } }
+/* Rows enter from ABOVE (negative translate never extends a scroll container's scrollable area) */
+@keyframes mo-row-in   { from { opacity: 0; translate: 0 -4px; } }
+/* Scale-only entrance for items inside scrollers (kanban, pipeline): cannot create scrollbars */
+@keyframes mo-soft-in  { from { opacity: 0; scale: 0.97; } }
+@keyframes mo-breathe  { 50% { scale: 1.14; } }
+@keyframes mo-badge-in { 0% { scale: 0; opacity: 0; } 70% { scale: 1.18; } }
+/* Exit keyframes (used only by .mo-ghost clones) */
+@keyframes mo-out      { to { opacity: 0; } }
+@keyframes mo-out-card { to { opacity: 0; scale: 0.97; translate: 0 8px; } }
+@keyframes mo-out-pop  { to { opacity: 0; translate: 0 -6px; } }
+
+@media (prefers-reduced-motion: no-preference) {
+
+/* ---------- 1. Retune the whole system with tokens ----------
+   Expo-out: fast start, long silky settle. Slightly longer travel + wider stagger so
+   cascades read as choreography instead of a simultaneous pop. */
+:root {
+  --mo-ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --mo-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --mo-slow: 480ms;
+  --mo-rise: 14px;
+  --mo-step: 42ms;
+}
+@media (max-width: 768px) {
+  :root { --mo-rise: 10px; --mo-step: 28ms; --mo-slow: 380ms; }
+}
+
+/* ---------- 2. Scroller safety: columns/cards inside horizontally scrolling boards ----------
+   motion.css rises these by translateY, which can flash a scrollbar inside overflow:auto
+   containers. Same stagger, same timing, but scale+fade only. */
+:where(.work-board, .pipeline) > :where(.work-column, .stage-column) { animation-name: mo-soft-in; }
+:where(.work-column > .work-card)  { animation-name: mo-soft-in; }
+:where(.stage-list > .deal-card)   { animation: mo-soft-in 240ms var(--mo-ease-out) backwards; }
+:where(.pipeline) > :where(.stage-column) {
+  animation: mo-soft-in var(--mo-slow) var(--mo-ease-out) backwards;
+  animation-delay: calc((var(--mo-i) + 1) * var(--mo-step));
+}
+
+/* ---------- 3. Page titles wipe in ---------- */
+:where(.page-head h1, .leads-page-head h1) {
+  animation: mo-title-wipe 640ms var(--mo-ease-out) 60ms backwards;
+}
+
+/* ---------- 4. KPI tiles: icon springs in after the card, trend slides up last ---------- */
+:where(.lead-kpi-icon-wrap, .dashboard-metric-icon) {
+  animation: mo-icon-pop 560ms var(--mo-ease-spring) 240ms backwards;
+}
+:where(.lead-kpi-trend) {
+  animation: mo-rise-sm 420ms var(--mo-ease-out) 520ms backwards;
+}
+
+/* ---------- 5. Sidebar: the active item's highlight wipes in on every route change ---------- */
+:where(.sidebar-nav > .nav-item.active, .nav-sub-list > .nav-sub-item.active) {
+  animation:
+    mo-slide-r 420ms var(--mo-ease-out) calc(60ms + var(--mo-i) * 32ms) backwards,
+    mo-wipe 480ms var(--mo-ease-out) backwards;
+}
+
+/* ---------- 6. Table rows: fade + 4px drop-in (first 12, skeleton rows excluded) ---------- */
+:where(tbody > tr:nth-child(-n+12):not(.skeleton-table-tr)) {
+  animation: mo-row-in 360ms var(--mo-ease-out) backwards;
+  animation-delay: calc(var(--mo-i) * 22ms);
+}
+
+/* ---------- 7. Bell badge: pops in, then pings twice ---------- */
+:where(.bell-badge) {
+  animation:
+    mo-badge-in 420ms var(--mo-ease-spring) backwards,
+    mo-ping 1.6s ease-out 420ms 2;
+}
+
+/* ---------- 8. Bars & progress grow from their baseline ---------- */
+:where(.weekly-bar-chart .bar-fill, .bar-col .bar-fill) {
+  animation: mo-grow-up 700ms var(--mo-ease-out) 200ms backwards;
+}
+:where(.bar-col:nth-child(2) .bar-fill) { animation-delay: 250ms; }
+:where(.bar-col:nth-child(3) .bar-fill) { animation-delay: 300ms; }
+:where(.bar-col:nth-child(4) .bar-fill) { animation-delay: 350ms; }
+:where(.bar-col:nth-child(5) .bar-fill) { animation-delay: 400ms; }
+:where(.bar-col:nth-child(6) .bar-fill) { animation-delay: 450ms; }
+:where(.bar-col:nth-child(7) .bar-fill) { animation-delay: 500ms; }
+:where(.invoice-progress-track > *)     { animation: mo-bar 800ms var(--mo-ease-out) 220ms backwards; }
+
+/* ---------- 9. Empty-state icons spring in ---------- */
+:where(.empty-state, .table-empty-state, .work-board-empty, .analytics-chart-empty, .stage-empty) > :where(svg) {
+  animation: mo-icon-pop 600ms var(--mo-ease-spring) 140ms backwards;
+}
+
+/* ---------- 10. Network bar glow ---------- */
+html.mo-busy::before {
+  box-shadow: 0 0 10px color-mix(in srgb, var(--gold, #f59e0b) 55%, transparent);
+}
+
+/* ---------- 11. Tabs: the tab that gains .active wipes in ---------- */
+:where(.work-view-tab.active, .tab-nav-btn.active, .team-tabs a.active, .lead-view-tabs a.active) {
+  animation: mo-wipe 360ms var(--mo-ease-out) backwards;
+}
+
+/* ---------- 12. NEW containers: stagger index + entrances ----------
+   Grids/cards: rise after the header (base 1). Lists: small 6px rise, 28ms step. */
+:where(.portfolio-grid, .duplicate-card-grid, .report-metric-grid, .assignment-overview-grid, .integration-setup-grid, .invoice-list, .duplicate-review-list, .mail-workspace-list, .crm-switcher-list, .pipeline, .timeline) > :nth-child(1) { --mo-i: 0; }
+:where(.portfolio-grid, .duplicate-card-grid, .report-metric-grid, .assignment-overview-grid, .integration-setup-grid, .invoice-list, .duplicate-review-list, .mail-workspace-list, .crm-switcher-list, .pipeline, .timeline) > :nth-child(2) { --mo-i: 1; }
+:where(.portfolio-grid, .duplicate-card-grid, .report-metric-grid, .assignment-overview-grid, .integration-setup-grid, .invoice-list, .duplicate-review-list, .mail-workspace-list, .crm-switcher-list, .pipeline, .timeline) > :nth-child(3) { --mo-i: 2; }
+:where(.portfolio-grid, .duplicate-card-grid, .report-metric-grid, .assignment-overview-grid, .integration-setup-grid, .invoice-list, .duplicate-review-list, .mail-workspace-list, .crm-switcher-list, .pipeline, .timeline) > :nth-child(4) { --mo-i: 3; }
+:where(.portfolio-grid, .duplicate-card-grid, .report-metric-grid, .assignment-overview-grid, .integration-setup-grid, .invoice-list, .duplicate-review-list, .mail-workspace-list, .crm-switcher-list, .pipeline, .timeline) > :nth-child(5) { --mo-i: 4; }
+:where(.portfolio-grid, .duplicate-card-grid, .report-metric-grid, .assignment-overview-grid, .integration-setup-grid, .invoice-list, .duplicate-review-list, .mail-workspace-list, .crm-switcher-list, .pipeline, .timeline) > :nth-child(6) { --mo-i: 5; }
+:where(.portfolio-grid, .duplicate-card-grid, .report-metric-grid, .assignment-overview-grid, .integration-setup-grid, .invoice-list, .duplicate-review-list, .mail-workspace-list, .crm-switcher-list, .pipeline, .timeline) > :nth-child(7) { --mo-i: 6; }
+:where(.portfolio-grid, .duplicate-card-grid, .report-metric-grid, .assignment-overview-grid, .integration-setup-grid, .invoice-list, .duplicate-review-list, .mail-workspace-list, .crm-switcher-list, .pipeline, .timeline) > :nth-child(n+8) { --mo-i: 7; }
+
+:where(.portfolio-grid, .duplicate-card-grid, .report-metric-grid, .assignment-overview-grid, .integration-setup-grid) > :where(:not(script, style, dialog, [role="dialog"], [class*="modal"], [class*="overlay"], [class*="backdrop"], [class*="popover"], [class*="dropdown"], [class*="drawer"])) {
+  animation: mo-rise var(--mo-slow) var(--mo-ease-out) backwards;
+  animation-delay: calc((var(--mo-i) + 1) * var(--mo-step));
+}
+:where(.invoice-list, .duplicate-review-list, .mail-workspace-list, .crm-switcher-list, .timeline) > :where(:not(script, style, dialog, [role="dialog"], [class*="modal"], [class*="overlay"], [class*="backdrop"], [class*="popover"], [class*="dropdown"], [class*="drawer"])) {
+  animation: mo-rise-sm 360ms var(--mo-ease-out) backwards;
+  animation-delay: calc(var(--mo-i) * 30ms);
+}
+
+/* Popovers / overlays that had no entrance at all */
+:where(.follow-ups-date-popover, .weekly-day-popover, .icon-library-popover) {
+  animation: mo-drop 180ms var(--mo-ease-out) backwards;
+}
+:where(.sidebar-preferences-overlay) { animation: mo-fade 200ms ease-out backwards; }
+:where(.auto-modal-card)             { animation: mo-dialog 280ms var(--mo-ease-out) backwards; }
+
+/* ---------- 12b. Login: the four pipeline nodes breathe after the build-in (desktop only) ---------- */
+@media (min-width: 769px) {
+  :where(.auth-continuous-svg > circle:nth-of-type(1)) { animation: mo-icon-pop 420ms var(--mo-ease-spring) 420ms backwards,  mo-breathe 3.2s ease-in-out 2200ms infinite; }
+  :where(.auth-continuous-svg > circle:nth-of-type(2)) { animation: mo-icon-pop 420ms var(--mo-ease-spring) 760ms backwards,  mo-breathe 3.2s ease-in-out 2600ms infinite; }
+  :where(.auth-continuous-svg > circle:nth-of-type(3)) { animation: mo-icon-pop 420ms var(--mo-ease-spring) 1100ms backwards, mo-breathe 3.2s ease-in-out 3000ms infinite; }
+  :where(.auth-continuous-svg > circle:nth-of-type(4)) { animation: mo-icon-pop 420ms var(--mo-ease-spring) 1440ms backwards, mo-breathe 3.2s ease-in-out 3400ms infinite; }
+}
+
+/* ---------- 13. EXIT ANIMATIONS (needs utils/motionExit.ts) ----------
+   When a modal/popover is unmounted, motionExit.ts re-inserts an inert, non-interactive
+   copy with class .mo-ghost at the same DOM position. These rules fade it out and the
+   script deletes it afterwards. Real UI is never touched; if motionExit.ts is not
+   installed these rules are simply never used. */
+.mo-ghost, .mo-ghost * {
+  animation: none !important;
+  transition: none !important;
+  pointer-events: none !important;
+}
+.mo-ghost.mo-ghost { animation: mo-out 170ms ease-in forwards !important; }
+.mo-ghost.mo-ghost:is(.modal-overlay, .csv-modal-overlay, .auto-modal-overlay, .module-builder-dialog-overlay, .invoice-payment-modal-backdrop, .filter-modal-backdrop, .crm-search-modal-backdrop, .sidebar-preferences-overlay, [role="dialog"]) > :first-child {
+  animation: mo-out-card 190ms ease-in forwards !important;
+}
+.mo-ghost.mo-ghost:is(.notification-dropdown, .new-work-popover, .more-actions-menu, .follow-ups-date-popover, .weekly-day-popover, .icon-library-popover, .crm-switcher-popover, .app-select-menu) {
+  animation: mo-out-pop 120ms ease-in forwards !important;
+}
+
+/* ---------- 14. BUSY BUTTONS (needs utils/motionBusy.ts) ----------
+   motionBusy.ts adds .mo-busy-btn to a disabled button whose text reads "Saving…",
+   "Creating…", "Signing in…" etc. The spinner uses currentColor, so it matches the
+   button's own text colour in every preset and custom theme. */
+:where(button.mo-busy-btn)::before {
+  content: '';
+  display: inline-block;
+  box-sizing: border-box;
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 0.5em;
+  vertical-align: -0.1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  opacity: 0.85;
+  animation: mo-spin 700ms linear infinite;
+}
+
+}  /* end @media (prefers-reduced-motion: no-preference) */

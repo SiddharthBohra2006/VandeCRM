@@ -7,6 +7,7 @@ import { isWorkItemClosed } from '../../utils/workStatus';
 import CustomSelect from '../../components/CustomSelect';
 import BulkCreateModal from '../../components/work/BulkCreateModal';
 import Icon from '../../components/Icons';
+import AnimatedNumber from '../../components/AnimatedNumber';
 
 export default function WorkCenterPage() {
   const { user } = useAuth();
@@ -703,25 +704,25 @@ export default function WorkCenterPage() {
         <div className="work-kpi-stats-row">
           <div className="work-kpi-stat-item">
             <span className="work-kpi-stat-icon"><Icon name="file-text" size={16} color="var(--text)" /></span>
-            <span className="work-kpi-stat-num">{kpis.open}</span>
+            <span className="work-kpi-stat-num"><AnimatedNumber value={kpis.open} /></span>
             <span className="work-kpi-stat-label">Open</span>
           </div>
 
           <div className="work-kpi-stat-item">
             <span className="work-kpi-stat-icon"><Icon name="calendar" size={16} color="var(--gold)" /></span>
-            <span className="work-kpi-stat-num">{kpis.dueToday}</span>
+            <span className="work-kpi-stat-num"><AnimatedNumber value={kpis.dueToday} /></span>
             <span className="work-kpi-stat-label">Due today</span>
           </div>
 
           <div className="work-kpi-stat-item">
             <span className="work-kpi-stat-icon"><Icon name="alert-triangle" size={16} color="#dc2626" /></span>
-            <span className="work-kpi-stat-num">{kpis.overdue}</span>
+            <span className="work-kpi-stat-num"><AnimatedNumber value={kpis.overdue} /></span>
             <span className="work-kpi-stat-label">Overdue</span>
           </div>
 
           <div className="work-kpi-stat-item">
             <span className="work-kpi-stat-icon"><Icon name="users" size={16} color="#3b82f6" /></span>
-            <span className="work-kpi-stat-num">{kpis.unassigned}</span>
+            <span className="work-kpi-stat-num"><AnimatedNumber value={kpis.unassigned} /></span>
             <span className="work-kpi-stat-label">Unassigned</span>
           </div>
         </div>

@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import Icon from '../../components/Icons';
 import CustomSelect from '../../components/CustomSelect';
 import DatePicker from '../../components/DatePicker';
+import AnimatedNumber from '../../components/AnimatedNumber';
 
 const AVATAR_PALETTES = [
   { bg: '#eff6ff', color: '#2563eb' },
@@ -408,7 +409,7 @@ export default function FollowUpsPage() {
             </div>
             <Icon name="chevron-right" size={13} className="follow-ups-metric-chevron" />
           </div>
-          <div className="follow-ups-metric-count">{stats.today}</div>
+          <div className="follow-ups-metric-count"><AnimatedNumber value={stats.today} /></div>
           <div className="follow-ups-metric-sub">Scheduled for today</div>
         </div>
 
@@ -426,7 +427,7 @@ export default function FollowUpsPage() {
             </div>
             <Icon name="chevron-right" size={13} className="follow-ups-metric-chevron" />
           </div>
-          <div className="follow-ups-metric-count">{stats.upcoming}</div>
+          <div className="follow-ups-metric-count"><AnimatedNumber value={stats.upcoming} /></div>
           <div className="follow-ups-metric-sub">Next 7 days</div>
         </div>
 
@@ -443,7 +444,7 @@ export default function FollowUpsPage() {
               <span className="follow-ups-metric-title">Completed (This Week)</span>
             </div>
           </div>
-          <div className="follow-ups-metric-count">{stats.completed}</div>
+          <div className="follow-ups-metric-count"><AnimatedNumber value={stats.completed} /></div>
           <div className="follow-ups-metric-sub">Follow-ups completed</div>
         </div>
 
@@ -462,7 +463,7 @@ export default function FollowUpsPage() {
             <Icon name="chevron-right" size={13} className="follow-ups-metric-chevron" />
           </div>
           <div className="follow-ups-metric-count">
-            {stats.overdue}
+            <AnimatedNumber value={stats.overdue} />
           </div>
           <div className="follow-ups-metric-sub">Action required</div>
         </div>

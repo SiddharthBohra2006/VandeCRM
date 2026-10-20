@@ -10,6 +10,7 @@ import CustomSelect from '../../components/CustomSelect';
 import DatePicker from '../../components/DatePicker';
 import FilterModal from '../../components/FilterModal';
 import { TableSkeletonRows } from '../../components/SkeletonLoader';
+import AnimatedNumber from '../../components/AnimatedNumber';
 
 const CLIENT_COLUMNS: ColumnDefinition[] = [
   { key: 'name', label: 'Client', icon: 'user', defaultVisible: true },
@@ -398,7 +399,7 @@ export default function ClientsPage() {
               <span className="lead-kpi-subtext">Won in last 7 days</span>
             </div>
             <div className="lead-kpi-num-stack">
-              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : clientStats.newClients}</span>
+              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : <AnimatedNumber value={clientStats.newClients} />}</span>
               <span className="lead-kpi-trend trend-up">↑ {clientStats.newClients}</span>
             </div>
           </div>
@@ -415,7 +416,7 @@ export default function ClientsPage() {
               <span className="lead-kpi-subtext">Active relationships</span>
             </div>
             <div className="lead-kpi-num-stack">
-              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : clientStats.totalClients}</span>
+              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : <AnimatedNumber value={clientStats.totalClients} />}</span>
             </div>
           </div>
         </a>
@@ -431,7 +432,7 @@ export default function ClientsPage() {
               <span className="lead-kpi-subtext">Converted client value</span>
             </div>
             <div className="lead-kpi-num-stack">
-              <span className="lead-kpi-number" style={{ fontSize: '1.15rem' }}>{loading ? <div className="skeleton-box" style={{ width: 80, height: 26, borderRadius: 6, display: 'inline-block' }} /> : `Rs. ${(clientStats.totalValue || 0).toLocaleString('en-IN')}`}</span>
+              <span className="lead-kpi-number" style={{ fontSize: '1.15rem' }}>{loading ? <div className="skeleton-box" style={{ width: 80, height: 26, borderRadius: 6, display: 'inline-block' }} /> : <AnimatedNumber value={`Rs. ${(clientStats.totalValue || 0).toLocaleString('en-IN')}`} />}</span>
             </div>
           </div>
         </a>
@@ -447,7 +448,7 @@ export default function ClientsPage() {
               <span className="lead-kpi-subtext">VIP accounts</span>
             </div>
             <div className="lead-kpi-num-stack">
-              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : (clientStats.highPriorityCount || 0)}</span>
+              <span className="lead-kpi-number">{loading ? <div className="skeleton-box" style={{ width: 44, height: 26, borderRadius: 6, display: 'inline-block' }} /> : <AnimatedNumber value={clientStats.highPriorityCount || 0} />}</span>
             </div>
           </div>
         </a>

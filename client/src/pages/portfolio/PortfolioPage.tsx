@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { portfolioApi, PortfolioResponse } from '../../api/portfolio';
 import { useAuth } from '../../contexts/AuthContext';
+import AnimatedNumber from '../../components/AnimatedNumber';
 
 function formatIn(value: number) {
   return Number(value || 0).toLocaleString('en-IN');
@@ -85,7 +86,7 @@ export default function PortfolioPage() {
             className={`portfolio-kpi ${kpi.active ? 'active' : ''}`}
           >
             <span>{kpi.label}</span>
-            <strong>{kpi.currency ? `₹${formatIn(kpi.value)}` : formatIn(kpi.value)}</strong>
+            <strong><AnimatedNumber value={kpi.currency ? `₹${formatIn(kpi.value)}` : formatIn(kpi.value)} /></strong>
             <small>{kpi.sub}</small>
           </Link>
         ))}

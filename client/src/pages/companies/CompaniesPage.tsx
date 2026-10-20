@@ -7,6 +7,7 @@ import { hasPermission } from '../../utils/permissions';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import CustomSelect from '../../components/CustomSelect';
 import '../../styles/companies.css';
+import AnimatedNumber from '../../components/AnimatedNumber';
 
 const BUSINESS_TYPES = { service: 'Service', consumer: 'Consumer', commerce: 'Commerce', other: 'Other' };
 const COLORS = ['#2563eb', '#7c3aed', '#059669', '#c2410c'];
@@ -249,8 +250,8 @@ export default function CompaniesPage() {
           <div className="crms-badges"><span className={`crms-badge ${archived ? '' : 'active'}`}>{archived ? 'Archived' : company.status === 'onboarding' ? 'Onboarding' : 'Active'}</span>
             {current && <span className="crms-badge current">Current workspace</span>}{company.isMain && <span className="crms-badge">Main CRM</span>}</div>
           </div>
-          <div className="crms-metrics"><div><strong>{company.leadCount || 0}</strong><span>Leads</span></div><div><strong>{company.campaignCount || 0}</strong><span>Active campaigns</span></div>
-            <div><strong>{members.length}</strong><span>Team members</span></div></div>
+          <div className="crms-metrics"><div><strong><AnimatedNumber value={company.leadCount || 0} /></strong><span>Leads</span></div><div><strong><AnimatedNumber value={company.campaignCount || 0} /></strong><span>Active campaigns</span></div>
+            <div><strong><AnimatedNumber value={members.length} /></strong><span>Team members</span></div></div>
           <div className="crms-card-actions">
             {!archived && <button className="crms-primary" disabled={!!opening} onClick={() => void openCompany(company)}>{opening === company._id ? 'Opening…' : 'Open CRM'}<ArrowRight size={15} /></button>}
             <Link className="crms-button" to={`/companies/${company._id}`}>Details</Link>
